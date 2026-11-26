@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
 import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal } from 'lucide-react';
 import { useStore } from '../lib/store';
@@ -275,6 +275,35 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
           <>
             <h2 className="text-[26px] font-semibold leading-tight">{active.title}</h2>
             <p className="text-[13px] text-muted">Training läuft · {active.exercises.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0)} Sätze erledigt</p>
+            <ul className="flex flex-col gap-1.5">
+              {active.exercises.map((e) => {
+                const ex = exMap.get(e.exerciseId);
+                if (!ex) return null;
+                const cur = active.exercises.find((x) => !x.skipped && x.sets.some((y) => !y.done))?.uid === e.uid;
+                const d = e.sets.filter((x) => x.done).length;
+                const fin = d === e.sets.length && d > 0;
+                return (
+                  <li
+                    key={e.uid}
+                    className={cn(
+                      'flex items-center gap-3 rounded-2xl px-2 py-1.5 transition',
+                      cur && 'bg-rec-green/[0.08] shadow-[0_0_0_1px_rgb(var(--rec-green)/0.45),0_0_22px_rgb(var(--rec-green)/0.25)]',
+                      e.skipped && 'opacity-40',
+                    )}
+                  >
+                    <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={40} />
+                    <span className={cn('min-w-0 flex-1 truncate text-[14px]', cur ? 'font-semibold' : fin ? 'text-muted line-through decoration-muted/50' : '')}>{ex.name}</span>
+                    {cur ? (
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase text-rec-green">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rec-green" /> Jetzt
+                      </span>
+                    ) : (
+                      <span className={cn('tnum shrink-0 text-[12px]', fin ? 'text-rec-green' : 'text-muted')}>{fin ? '✓' : `${d}/${e.sets.length}`}</span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
             <Button variant="primary" size="lg" className="h-14" onClick={() => go('training')}>
               <Play size={16} /> Fortsetzen
             </Button>
@@ -361,7 +390,9 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
             {why && <PlanReasons s={planned} />}
             <div className="flex items-center gap-2">
               {isToday ? (
-                <SwipeToStart onComplete={() => start(planned)} />
+                <div data-noswipe className="flex min-w-0 flex-1">
+                  <SwipeToStart onComplete={() => start(planned)} />
+                </div>
               ) : (
                 <div className="flex-1 text-[12.5px] text-muted">Wird automatisch neu berechnet, wenn sich Training oder Verfügbarkeit ändern.</div>
               )}
@@ -800,5 +831,70 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
         </div>
       </div>
     </section>
+  );
+}
+
+/** Heute-Karte zum Wischen: links = nächster Tag, rechts = vorheriger Tag */
+export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay: (d: string) => void }) {
+  const today = dateKey();
+  const days = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(today, i));
+  const idx = Math.max(0, days.indexOf(day));
+  const start = useRef<{ x: number; y: number; t: number } | null>(null);
+  const [dx, setDx] = useState(0);
+  const [dir, setDir] = useState<1 | -1>(1);
+  const go = (i: number) => {
+    if (i < 0 || i >= days.length || i === idx) return;
+    setDir(i > idx ? 1 : -1);
+    onDay(days[i]);
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className="touch-pan-y"
+        onTouchStart={(e) => {
+          if ((e.target as HTMLElement).closest('[data-noswipe]')) return;
+          start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+        }}
+        onTouchMove={(e) => {
+          if (!start.current) return;
+          const ddx = e.touches[0].clientX - start.current.x;
+          const ddy = e.touches[0].clientY - start.current.y;
+          if (Math.abs(ddx) > Math.abs(ddy)) setDx(Math.max(-90, Math.min(90, ddx * 0.6)));
+        }}
+        onTouchEnd={(e) => {
+          if (!start.current) return;
+          const ddx = e.changedTouches[0].clientX - start.current.x;
+          const ddy = e.changedTouches[0].clientY - start.current.y;
+          start.current = null;
+          setDx(0);
+          if (Math.abs(ddx) > 60 && Math.abs(ddx) > Math.abs(ddy) * 1.3) go(idx + (ddx < 0 ? 1 : -1));
+        }}
+        style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? 'none' : 'transform .25s ease-out' }}
+      >
+        <div key={day} className={dir > 0 ? 'animate-slide-in-r' : 'animate-slide-in-l'}>
+          <DayHero plan={plan} day={day} onNext={onDay} />
+        </div>
+      </div>
+      <div className="flex items-center justify-center gap-1.5">
+        <button aria-label="Vorheriger Tag" disabled={idx === 0} onClick={() => go(idx - 1)} className="grid h-8 w-8 place-items-center rounded-full text-muted disabled:opacity-25">
+          <ChevronRight size={16} className="rotate-180" />
+        </button>
+        {days.map((d, i) => {
+          const p = plan.sessions.find((x) => x.date === d);
+          return (
+            <button
+              key={d}
+              onClick={() => go(i)}
+              aria-label={relDayLabel(d)}
+              className={cn('h-2 rounded-full transition-all', i === idx ? 'w-6 bg-fg' : p ? 'w-2 bg-accent/70' : 'w-2 bg-line/20')}
+            />
+          );
+        })}
+        <button aria-label="Nächster Tag" disabled={idx === days.length - 1} onClick={() => go(idx + 1)} className="grid h-8 w-8 place-items-center rounded-full text-muted disabled:opacity-25">
+          <ChevronRight size={16} />
+        </button>
+      </div>
+      <p className="-mt-2 text-center text-[11px] text-muted">Wischen für die nächsten Tage</p>
+    </div>
   );
 }

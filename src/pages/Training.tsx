@@ -336,6 +336,7 @@ function ExerciseCard({
   const complete = doneN === se.sets.length && se.sets.length > 0;
   const muscles = Object.entries(ex.muscles).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
   const partner = se.superset ? session.exercises.find((e) => e.superset === se.superset && e.uid !== se.uid) : undefined;
+  const isCurrent = session.exercises.find((e) => !e.skipped && e.sets.some((x) => !x.done))?.uid === se.uid;
 
   const completeSet = (setId: string, idx: number) => {
     unlockAudio();
@@ -382,7 +383,15 @@ function ExerciseCard({
   };
 
   return (
-    <Card id={`ex-${se.uid}`} className={cn('scroll-mt-24 p-0 sm:p-0', se.skipped && 'opacity-50', open && 'ring-1 ring-line/10')}>
+    <Card
+      id={`ex-${se.uid}`}
+      className={cn(
+        'scroll-mt-24 p-0 transition-shadow sm:p-0',
+        se.skipped && 'opacity-50',
+        open && !isCurrent && 'ring-1 ring-line/10',
+        isCurrent && 'border-rec-green/50 shadow-[0_0_0_1px_rgb(var(--rec-green)/0.35),0_0_24px_rgb(var(--rec-green)/0.28)]',
+      )}
+    >
       <button onClick={onToggle} className="flex w-full items-center gap-3 p-4 text-left">
         <div className="relative shrink-0">
           <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={48} />
@@ -398,6 +407,11 @@ function ExerciseCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-[15px] font-semibold">{ex.name}</span>
+            {isCurrent && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rec-green/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-rec-green">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rec-green shadow-[0_0_6px_rgb(var(--rec-green))]" /> Jetzt
+              </span>
+            )}
             {se.superset && <Badge tone="accent">{se.superset}</Badge>}
           </div>
           <div className="tnum text-[12px] text-muted">
