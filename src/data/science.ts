@@ -49,12 +49,13 @@ export const TOPICS: Topic[] = [
     title: 'Trainingsfrequenz & Volumen pro Einheit',
     evidence: 'moderat belegt',
     finding:
-      'Bei gleichem Wochenvolumen hat die Frequenz nur einen kleinen, unsicheren Einfluss auf Hypertrophie (für Kraft ist er deutlicher). Frequenz ist vor allem ein Werkzeug, um Volumen sinnvoll zu verteilen. Sehr viele Sätze in einer einzigen Einheit liefern vermutlich abnehmenden Zusatznutzen.',
-    practice: 'Prioritätsmuskeln idealerweise 2× pro Woche reizen, pro Einheit etwa 6–10 fraktionale Sätze pro Muskel nicht deutlich überschreiten.',
+      'Bei gleichem Wochenvolumen hat die Frequenz nur einen kleinen, unsicheren Einfluss auf Hypertrophie (für Kraft ist er deutlicher). Frequenz ist vor allem ein Werkzeug, um Volumen sinnvoll zu verteilen. Pro Einheit flacht der Nutzen ab: Eine Meta-Regression (Preprint, noch nicht begutachtet) fand ab ca. 11 fraktionalen Sätzen pro Muskel und Einheit keinen sicher erkennbaren Zusatznutzen mehr – bei dünner Datenlage für sehr hohe Satzzahlen.',
+    practice: 'Prioritätsmuskeln idealerweise 2× pro Woche reizen; pro Einheit und Muskel eher 6–10 fraktionale Sätze, nicht deutlich über ~11.',
     app: 'Obergrenzen pro Einheit (Prioritätsmuskeln 9, Rücken/Beine 6–7, Bauch/Waden 4). Bei 1 Einheit/Woche sinkt das Wochenziel automatisch auf ein realistisches Niveau (Faktor 0,55), bei 2 Einheiten auf 0,8.',
     refs: [
       { label: 'Pelland et al. (2025/26), Sports Medicine', url: 'https://doi.org/10.1007/s40279-025-02344-w' },
-      { label: 'Remmert et al., SportRxiv-Preprint – Volumen pro Einheit (nicht begutachtet)', url: 'https://sportrxiv.org/index.php/server/preprint/view/537' },
+      { label: 'Remmert et al. (2025), SportRxiv-Preprint – Volumen pro Einheit, Plateau ~11 fraktionale Sätze (nicht begutachtet)', url: 'https://sportrxiv.org/index.php/server/preprint/view/537' },
+      { label: 'Schoenfeld et al. (2019), J Sports Sci – Frequenz-Meta-Analyse (volumengleich kein Unterschied)', url: 'https://pubmed.ncbi.nlm.nih.gov/30558493/' },
     ],
   },
   {
@@ -69,6 +70,7 @@ export const TOPICS: Topic[] = [
       { label: 'Robinson et al. (2024), Sports Medicine – Proximity to Failure Meta-Regressions', url: 'https://rke.abertay.ac.uk/en/publications/exploring-the-dose-response-relationship-between-estimated-resist/' },
       { label: 'Refalo et al. (2023), Sports Medicine – Failure vs. Non-Failure Meta-Analyse', url: 'https://pubmed.ncbi.nlm.nih.gov/36334240/' },
       { label: 'Refalo et al. (2024), J Sports Sci – Versagen vs. 1–2 RIR bei Trainierten', url: 'https://pubmed.ncbi.nlm.nih.gov/38393985/' },
+      { label: 'Refalo et al. (2025), Med Sci Sports Exerc – Einzelsätze bis Versagen vs. RIR (leichter Vorteil Versagen)', url: 'https://pubmed.ncbi.nlm.nih.gov/40249908/' },
     ],
   },
   {
@@ -86,15 +88,30 @@ export const TOPICS: Topic[] = [
     title: 'Belastung in gedehnter Position',
     evidence: 'moderat belegt',
     finding:
-      'Training mit Betonung längerer Muskellängen scheint gegenüber kürzeren Muskellängen für Hypertrophie überlegen oder mindestens gleichwertig. Beispiele: Überkopf-Trizepsstrecken > Pushdowns für den Trizeps, sitzender > liegender Beinbeuger. Neuere Studien an Trainierten fanden aber auch ähnliche Ergebnisse zwischen „lengthened partials“ und voller Bewegungsamplitude.',
-    practice: 'Übungen bevorzugen, die den Zielmuskel unter Last dehnen, und die gedehnte Position kontrolliert durchlaufen. Volle Amplitude bleibt ein sicherer Standard.',
-    app: 'Jede Übung hat einen Dehnungswert (0–2), der bis zu +12 % Auswahlbonus gibt – kein Ausschlusskriterium.',
+      'Einzelne gut gemachte Studien zeigen Vorteile für Übungen mit Last in gedehnter Position: Überkopf-Trizepsstrecken > Pushdowns (Maeo 2023), sitzender > liegender Beinbeuger (+14 % vs. +9 % Volumen, Maeo 2021). Teilwiederholungen im gedehnten Bereich schlagen solche im verkürzten Bereich leicht (Meta-Analyse 2026). Im Vergleich zur vollen Bewegungsamplitude zeigen Meta-Analysen und Studien an Trainierten aber meist ähnliche Ergebnisse, und ein Effekt auf regionales Wachstum ist höchstens klein.',
+    practice: 'Volle Bewegungsamplitude mit kontrollierter, tiefer Dehnung als Standard. Bei gleichwertigen Übungen die mit mehr Dehnungsbelastung wählen – das ist ein kleiner Vorteil, kein Muss.',
+    app: 'Jede Übung hat einen Dehnungswert (0–2), der bis zu +12 % Auswahlbonus gibt – bewusst klein gehalten und kein Ausschlusskriterium.',
     refs: [
       { label: 'Maeo et al. (2023), Eur J Sport Sci – Trizeps überkopf vs. neutral', url: 'https://pubmed.ncbi.nlm.nih.gov/35819335/' },
-      { label: 'Maeo et al. (2021), Med Sci Sports Exerc – Beinbeuger sitzend vs. liegend', url: pm('Maeo 2021 hamstrings hypertrophy seated lying leg curl') },
-      { label: 'Wolf et al. (2023), Int J Strength Cond – Partial vs. Full ROM Meta-Analyse', url: pm('Wolf 2023 partial versus full range of motion resistance training meta-analysis') },
+      { label: 'Maeo et al. (2021), Med Sci Sports Exerc – Beinbeuger sitzend vs. liegend', url: 'https://pubmed.ncbi.nlm.nih.gov/33009197/' },
+      { label: 'Wolf et al. (2023), Int J Strength Cond – Partial vs. Full ROM Meta-Analyse (23 RCTs, meist ähnlich)', url: 'https://doaj.org/article/99e86b317bec40f5abc2f0008358737e' },
+      { label: 'Strey et al. (2026), Sport Sci Health – Teilwiederholungen lang vs. kurz, Meta-Analyse', url: 'https://link.springer.com/article/10.1007/s11332-025-01586-5' },
+      { label: 'Varović et al. (2025), Meta-Analyse – Muskellänge & regionale Hypertrophie (Effekt höchstens klein)', url: 'https://sportrxiv.org/index.php/server/preprint/view/464' },
       { label: 'Wolf et al. (2025), Systematic Review – längere Muskellänge', url: 'https://journal.hep.com.cn/smhs/EN/1255452794816139817' },
       { label: 'PeerJ (2025) – Lengthened Partials vs. volle ROM bei Trainierten', url: 'https://peerj.com/articles/18904' },
+    ],
+  },
+  {
+    id: 'variation',
+    title: 'Übungsauswahl & Variation',
+    evidence: 'moderat belegt',
+    finding:
+      'Ein systematischer Review fand: Gezielte Variation – verschiedene Übungen für unterschiedliche Muskelanteile – kann regionales Wachstum und Kraft verbessern; zufälliges, ständiges Wechseln kann dagegen schaden. Neuere Einzelstudien zeigen bei konstanter vs. variierter Übungsauswahl oft ähnliche Ergebnisse.',
+    practice: 'Wenige, gut gewählte Übungen konstant nutzen (für messbare Progression). Für Prioritätsmuskeln zwei sich ergänzende Übungen (z. B. Bizeps: Preacher + Hammer Curls; Trizeps: Überkopf + Pushdown), aber keine fast identischen Varianten in derselben Einheit.',
+    app: 'Max. 4 Sätze pro Übung (5 nur bei Seitheben und Waden). Braucht ein Muskel mehr, kommt eine 2. Übung mit anderer Bewegung dazu; Übungen derselben Bewegungsfamilie (z. B. Seitheben Kabel + Kurzhantel, zwei Ruder-Varianten) werden nicht kombiniert. Bekannte Übungen bekommen einen kleinen Bonus, damit Fortschritt vergleichbar bleibt.',
+    refs: [
+      { label: 'Kassiano et al. (2022), J Strength Cond Res – Variation von Übungen, systematischer Review', url: 'https://pubmed.ncbi.nlm.nih.gov/35438660/' },
+      { label: 'Remmert et al. (2025), Preprint – Volumen pro Einheit', url: 'https://sportrxiv.org/index.php/server/preprint/view/537' },
     ],
   },
   {
@@ -110,13 +127,13 @@ export const TOPICS: Topic[] = [
   {
     id: 'progression',
     title: 'Progressive Overload & doppelte Progression',
-    evidence: 'praktische Empfehlung',
+    evidence: 'moderat belegt',
     finding:
-      'Fortlaufende Steigerung von Last oder Wiederholungen ist Grundlage langfristiger Anpassung. Eine Studie fand ähnliche Hypertrophie, egal ob primär die Last oder die Wiederholungen gesteigert wurden.',
+      'Fortlaufende Steigerung von Last oder Wiederholungen ist Grundlage langfristiger Anpassung. Eine randomisierte Studie mit 43 Trainierten fand ähnliche Hypertrophie, egal ob die Last oder die Wiederholungen gesteigert wurden; Kraft profitierte minimal mehr von Laststeigerung.',
     practice:
       'Doppelte Progression: Gewicht halten, bis alle Sätze das obere Ende des Wiederholungsbereichs bei Ziel-RIR erreichen, dann zur nächsten verfügbaren Stufe wechseln.',
     app: 'Steigerung, sobald alle Arbeitssätze ≥ obere Grenze bei Ø RIR ≤ Ziel+1. Ist der nächste Sprung > 12 % (z. B. 8 → 10 kg Kurzhantel), wird erst bis obere Grenze +2 gesteigert. Zweimal unter der unteren Grenze → eine Stufe zurück. Gewichtsstufen je Gerät/Kurzhantel sind einstellbar.',
-    refs: [{ label: 'Plotkin et al. (2022), PeerJ – Progression über Last vs. Wiederholungen', url: pm('Plotkin 2022 progressive overload without progressing load PeerJ') }],
+    refs: [{ label: 'Plotkin et al. (2022), PeerJ – Last- vs. Wiederholungs-Progression, 43 Trainierte: beide wirksam', url: 'https://peerj.com/articles/14142' }],
   },
   {
     id: 'stagnation',
@@ -132,10 +149,10 @@ export const TOPICS: Topic[] = [
     title: 'Regeneration, Ermüdung & Muskelkater',
     evidence: 'praktische Empfehlung',
     finding:
-      'Die Erholungszeit hängt von Volumen, Nähe zum Versagen, Übungsauswahl, Muskelgruppe und individuellen Faktoren ab. Muskelkater ist nur ein schwacher Marker für Regeneration. Schlafmangel kann die Muskelproteinsynthese beeinträchtigen.',
+      'Die Erholungszeit hängt von Volumen, Nähe zum Versagen, Übungsauswahl, Muskelgruppe und individuellen Faktoren ab. Muskelkater ist nur ein schwacher Marker für Regeneration. Schon eine Nacht ohne Schlaf senkte in einer kleinen Studie die Muskelproteinsynthese um ~18 %.',
     practice: 'Ein Muskel ist meist nach 48–72 h wieder belastbar; große Muskeln und hohe Volumina eher länger.',
     app: 'Ermüdungsmodell: Summe der effektiven Sätze, exponentiell abklingend mit muskelspezifischer Zeitkonstante (z. B. Seitl. Schulter 30 h, Bizeps 34 h, Brust 40 h, Beine 46–50 h). Muskelkater aus dem Check-in addiert 1,2 Punkte pro Stufe. Grün < 1,5 · Gelb ≥ 1,5 · Orange ≥ 3 · Rot ≥ 5 · Grau = > 10 Tage kein Reiz. Alles Schätzungen, keine Messwerte.',
-    refs: [{ label: 'Lamon et al. (2021), Physiol Rep – Schlafentzug & Muskelproteinsynthese', url: pm('Lamon 2021 acute sleep deprivation skeletal muscle protein synthesis') }],
+    refs: [{ label: 'Lamon et al. (2021), Physiol Rep – Schlafentzug & Muskelproteinsynthese', url: 'https://pubmed.ncbi.nlm.nih.gov/33400856/' }],
   },
   {
     id: 'superset',

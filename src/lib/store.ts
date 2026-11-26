@@ -132,7 +132,7 @@ export function migrate(raw: Partial<AppData>): AppData {
   for (const e of DEFAULT_EXERCISES) {
     const ex = d.exercises.find((x) => x.id === e.id);
     if (!ex) d.exercises.push({ ...e });
-    else if (!ex.benefit && e.benefit) d.exercises = d.exercises.map((x) => (x.id === e.id ? { ...x, benefit: e.benefit } : x));
+    else if (e.benefit && ex.benefit !== e.benefit && !ex.custom) d.exercises = d.exercises.map((x) => (x.id === e.id ? { ...x, benefit: e.benefit } : x));
   }
   return d;
 }
