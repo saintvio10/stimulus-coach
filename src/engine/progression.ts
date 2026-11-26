@@ -8,6 +8,8 @@ export interface Exposure {
   repMin: number;
   repMax: number;
   targetRir: number;
+  feedback?: 'easy' | 'ok' | 'hard';
+  decision?: 'accepted' | 'declined';
 }
 
 /** Vergangene Durchgänge einer Übung, neueste zuerst */
@@ -19,7 +21,7 @@ export function exposures(exerciseId: string, sessions: Session[]): Exposure[] {
       if (se.exerciseId !== exerciseId || se.skipped) continue;
       const sets = se.sets.filter((x) => x.done && x.weight != null && x.reps != null && x.reps > 0);
       if (!sets.length) continue;
-      out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir });
+      out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir, feedback: se.feedback, decision: se.decision });
     }
   }
   return out.sort((a, b) => b.t - a.t);
@@ -82,15 +84,41 @@ export function adviseExercise(
   const next = nextWeight(w, ex, ctx.settings);
   const jump = w > 0 ? (next - w) / w : 0;
   const bigJump = jump > 0.12;
-  const topReps = bigJump ? repMax + 2 : repMax;
-  const rirOk = avgRir == null || avgRir <= targetRir + 1;
-  const tooEasy = avgRir != null && avgRir >= targetRir + 3;
+  // Lernen aus deinem Feedback:
+  // „zu schwer“ → erst Wiederholungen festigen (+1 Wdh. über dem oberen Ende), „zu leicht“ → 1 Wdh. früher steigern,
+  // zweimal Steigerung abgelehnt → die App wartet eine Wiederholung länger.
+  const fb = last.feedback;
+  const declined = hist.slice(0, 3).filter((h) => h.decision === 'declined').length;
+  let adj = 0;
+  const learn: string[] = [];
+  if (fb === 'hard') {
+    adj += 1;
+    learn.push('du es zuletzt als zu schwer bewertet hast');
+  }
+  if (fb === 'easy') {
+    adj -= 1;
+    learn.push('du es zuletzt als zu leicht bewertet hast');
+  }
+  if (declined >= 2) {
+    adj += 1;
+    learn.push(`du die Steigerung ${declined}× abgelehnt hast`);
+  }
+  const topReps = (bigJump ? repMax + 2 : repMax) + adj;
+  const rirOk = avgRir == null || avgRir <= targetRir + 1 || fb === 'easy';
+  const tooEasy = fb !== 'hard' && ((avgRir != null && avgRir >= targetRir + 3) || (fb === 'easy' && reps.every((r) => r >= repMin)));
+  const learnTxt = learn.length ? ` (Angepasst, weil ${learn.join(' und ')}.)` : '';
 
-  if (atW.length >= 1 && reps.every((r) => r >= topReps) && rirOk && next > w) {
+  if (fb === 'hard' && reps.some((r) => r < repMin) && w > 0) {
+    const lower = prevWeight(w, ex, ctx.settings);
+    res.type = 'decrease';
+    res.weight = lower;
+    res.repTarget = repMin + 2;
+    res.text = `Letztes Mal zu schwer und unter ${repMin} Wdh. → heute ${fmtNum(lower)} kg und sauber im Bereich aufbauen.`;
+  } else if (atW.length >= 1 && reps.every((r) => r >= topReps) && rirOk && next > w) {
     res.type = 'increase';
     res.weight = next;
     res.repTarget = repMin + (bigJump ? 0 : 1);
-    res.text = `Alle Sätze bei ${fmtNum(w)} kg am oberen Ende (${reps.join('/')} Wdh.)${avgRir != null ? ` mit Ø ${fmtNum(avgRir)} RIR` : ''} → nächste Stufe ${fmtNum(next)} kg, Ziel ${res.repTarget}+ Wdh.`;
+    res.text = `Alle Sätze bei ${fmtNum(w)} kg am oberen Ende (${reps.join('/')} Wdh.)${avgRir != null ? ` mit Ø ${fmtNum(avgRir)} RIR` : ''} → nächste Stufe ${fmtNum(next)} kg, Ziel ${res.repTarget}+ Wdh.${learnTxt}`;
   } else if (reps.every((r) => r >= repMax) && rirOk && bigJump) {
     res.type = 'extend';
     res.repTarget = Math.min(topReps, Math.max(...reps) + 1);
@@ -99,7 +127,7 @@ export function adviseExercise(
     res.type = 'increase';
     res.weight = next;
     res.repTarget = repMin + 1;
-    res.text = `Letztes Mal Ø ${fmtNum(avgRir!)} RIR – deutlich leichter als Ziel-RIR ${targetRir}. Gewicht auf ${fmtNum(next)} kg erhöhen.`;
+    res.text = fb === 'easy' ? `Du hast ${fmtNum(w)} kg zuletzt als zu leicht bewertet → heute ${fmtNum(next)} kg.` : `Letztes Mal Ø ${fmtNum(avgRir!)} RIR – deutlich leichter als Ziel-RIR ${targetRir}. Gewicht auf ${fmtNum(next)} kg erhöhen.`;
   } else if (reps.some((r) => r < repMin)) {
     const prevBelow = hist[1] && workingWeight(hist[1].sets) === w && hist[1].sets.some((s) => (s.reps ?? 0) < repMin);
     if (prevBelow) {
@@ -117,7 +145,7 @@ export function adviseExercise(
     res.type = 'hold';
     const target = Math.min(repMax, Math.min(...reps) + 1);
     res.repTarget = target;
-    res.text = `Doppelte Progression: ${fmtNum(w)} kg halten und Wdh. steigern (letztes Mal ${reps.join('/')}). Ziel: ${target}+ pro Satz, bis alle Sätze ${repMax} erreichen.`;
+    res.text = `Doppelte Progression: ${fmtNum(w)} kg halten und Wdh. steigern (letztes Mal ${reps.join('/')}). Ziel: ${target}+ pro Satz, bis alle Sätze ${topReps} erreichen.${learnTxt}`;
   }
 
   // Stagnations- und Leistungsabfall-Erkennung über e1RM

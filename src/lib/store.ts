@@ -252,6 +252,8 @@ export const useStore = create<Store>()(
                 adviceText: p.advice.text,
                 setsReason: p.setsReason,
                 why: p.why,
+                adviceType: p.advice.type,
+                lastWeight: p.advice.lastWeight,
               })),
           };
           mutate((d) => {

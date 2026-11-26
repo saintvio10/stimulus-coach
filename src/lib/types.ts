@@ -115,6 +115,14 @@ export interface SessionExercise {
   adviceText?: string;
   setsReason?: string;
   why?: string;
+  /** Empfehlungstyp beim Start (z. B. 'increase') */
+  adviceType?: AdviceType;
+  /** Gewicht der letzten Einheit (beim Start) */
+  lastWeight?: number | null;
+  /** Entscheidung zur vorgeschlagenen Steigerung */
+  decision?: 'accepted' | 'declined';
+  /** Bewertung nach der Übung */
+  feedback?: 'easy' | 'ok' | 'hard';
 }
 
 export interface Session {

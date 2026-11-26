@@ -11,6 +11,7 @@ import { MUSCLE } from '../lib/muscles';
 import { cn, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
+import { WeightFeedback } from './WeightFeedback';
 import { GlowProgress } from './ui';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
@@ -28,6 +29,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const setIndex = se ? se.sets.findIndex((x) => !x.done) : -1;
   const cur = se && setIndex >= 0 ? se.sets[setIndex] : null;
   const rec = se?.recWeight ?? advice?.weight ?? null;
+  const lastW = se?.lastWeight ?? advice?.lastWeight ?? null;
 
   // Eingabe für den aktuellen Satz
   const [w, setW] = useState<number | null>(null);
@@ -141,6 +143,36 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           </div>
         </div>
 
+        {/* Letztes Mal & Steigerung */}
+        {lastW != null && (
+          <div className="tnum -mt-2 text-[13px] text-white/60">
+            Letztes Mal: <span className="font-semibold text-white/85">{fmtNum(lastW)} kg</span>
+            {advice?.lastReps?.length ? ` × ${advice.lastReps.join(' / ')}` : ''}
+          </div>
+        )}
+        {(se.adviceType ?? advice?.type) === 'increase' && lastW != null && rec != null && rec > lastW && !se.decision && setIndex === 0 && (
+          <div className="flex flex-col gap-2.5 rounded-[20px] border border-rec-green/30 bg-rec-green/10 p-3.5">
+            <div className="tnum text-[15px] font-semibold">
+              ↑ Zeit für mehr Gewicht: {fmtNum(lastW)} → {fmtNum(rec)} kg
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button className="h-10 rounded-full bg-white text-[13.5px] font-semibold text-black" onClick={() => s.patchExercise(session.id, se.uid, { decision: 'accepted' })}>
+                Übernehmen
+              </button>
+              <button
+                className="h-10 rounded-full bg-white/10 text-[13.5px] font-semibold"
+                onClick={() => {
+                  if (cur) s.setWeightFrom(session.id, se.uid, cur.id, lastW);
+                  setW(lastW);
+                  s.patchExercise(session.id, se.uid, { decision: 'declined' });
+                }}
+              >
+                Bei {fmtNum(lastW)} kg bleiben
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Satz erfassen */}
         {cur ? (
           <div className="flex flex-col gap-3 rounded-[24px] bg-white/[0.06] p-4">
@@ -185,8 +217,11 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             </div>
           </div>
         ) : (
-          <div className="rounded-[24px] bg-rec-green/10 p-4 text-[14px] text-rec-green">
-            Übung abgeschlossen.{idx < list.length - 1 ? ' Weiter zur nächsten Übung.' : ' Letzte Übung – beende das Training in der Übersicht.'}
+          <div className="flex flex-col gap-3">
+            <div className="rounded-[24px] bg-rec-green/10 p-4 text-[14px] text-rec-green">
+              Übung abgeschlossen.{idx < list.length - 1 ? ' Weiter zur nächsten Übung.' : ' Letzte Übung – beende das Training in der Übersicht.'}
+            </div>
+            <WeightFeedback dark value={se.feedback} onChange={(f) => s.patchExercise(session.id, se.uid, { feedback: f })} />
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExerciseVisual } from '../components/ExerciseVisual';
+import { WeightFeedback } from '../components/WeightFeedback';
 import {
   ArrowDown,
   ArrowUp,
@@ -17,6 +18,8 @@ import {
   Zap,
   Maximize2,
   Minus,
+  History,
+  TrendingUp,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useNow, useRouter, useToast } from '../lib/hooks';
@@ -325,6 +328,8 @@ function ExerciseCard({
     [ex, prior, s.settings, s.checkIns, se.repMin, se.repMax, se.targetRir],
   );
   const rec = se.recWeight ?? advice.weight;
+  const incAdvice = (se.adviceType ?? advice.type) === 'increase';
+  const lastW = se.lastWeight ?? advice.lastWeight;
   const doneN = se.sets.filter((x) => x.done).length;
   const complete = doneN === se.sets.length && se.sets.length > 0;
   const muscles = Object.entries(ex.muscles).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
@@ -427,7 +432,7 @@ function ExerciseCard({
           </div>
           <div className="flex flex-col gap-1 text-[12.5px] text-muted">
             <span>
-              Ziel-RIR {se.targetRir} · {last ? `Letztes Mal ${fmtNum(last.sets[0].weight)} kg × ${last.sets.map((x) => x.reps).join('/')} (${fmtShortDay(last.date)})` : 'Erstes Mal – Gewicht frei wählen'}
+              Ziel-RIR {se.targetRir}{last ? '' : ' · Erstes Mal – Gewicht frei wählen'}
             </span>
             {se.why && (
               <span className="rounded-xl bg-raised px-3 py-2 text-[12.5px] leading-relaxed text-fg/85">
@@ -438,12 +443,69 @@ function ExerciseCard({
             {se.setsReason && <span>{se.setsReason}</span>}
           </div>
 
+          {!(incAdvice && lastW != null && rec != null && rec > lastW && !se.decision && doneN === 0) && (
           <div className={cn('rounded-xl px-3 py-2.5 text-[13px]', advice.type === 'increase' ? 'bg-rec-green/10 text-rec-green' : advice.type === 'deload' || advice.type === 'decrease' ? 'bg-rec-orange/10 text-rec-orange' : 'bg-raised text-fg/85')}>
             <span className="flex gap-2">
               <Zap size={14} className="mt-0.5 shrink-0" />
               <span>{se.adviceText ?? advice.text}</span>
             </span>
           </div>
+          )}
+
+          {/* Letztes Mal & Steigerungsvorschlag */}
+          {last && (
+            <div className="flex items-center gap-3 rounded-2xl bg-raised px-3.5 py-3">
+              <History size={17} className="shrink-0 text-muted" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Letztes Mal · {fmtShortDay(last.date)}</div>
+                <div className="tnum mt-0.5 text-[15px] font-semibold">
+                  {fmtNum(last.sets[0].weight)} kg <span className="font-normal text-muted">× {last.sets.map((x) => x.reps).join(' / ')} Wdh.</span>
+                </div>
+              </div>
+              {last.feedback && (
+                <span className={cn('shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium', last.feedback === 'hard' ? 'bg-rec-orange/15 text-rec-orange' : last.feedback === 'easy' ? 'bg-accent/15 text-accent' : 'bg-rec-green/15 text-rec-green')}>
+                  {last.feedback === 'hard' ? 'war zu schwer' : last.feedback === 'easy' ? 'war zu leicht' : 'war passend'}
+                </span>
+              )}
+            </div>
+          )}
+          {incAdvice && lastW != null && rec != null && rec > lastW && !se.decision && doneN === 0 && (
+            <div className="flex flex-col gap-3 rounded-2xl border border-rec-green/30 bg-rec-green/[0.08] p-3.5">
+              <div className="flex items-start gap-2.5">
+                <TrendingUp size={18} className="mt-0.5 shrink-0 text-rec-green" />
+                <div>
+                  <div className="tnum text-[15px] font-semibold">
+                    Zeit für mehr Gewicht: {fmtNum(lastW)} → {fmtNum(rec)} kg
+                  </div>
+                  <div className="mt-0.5 text-[12.5px] text-muted">{se.adviceText ?? advice.text}</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button size="sm" variant="primary" onClick={() => s.patchExercise(session.id, se.uid, { decision: 'accepted' })}>
+                  <Check size={14} /> Übernehmen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => {
+                    const first = se.sets.find((x) => !x.done);
+                    if (first) s.setWeightFrom(session.id, se.uid, first.id, lastW);
+                    s.patchExercise(session.id, se.uid, { decision: 'declined' });
+                  }}
+                >
+                  Bei {fmtNum(lastW)} kg bleiben
+                </Button>
+              </div>
+            </div>
+          )}
+          {se.decision && (
+            <div className="text-[12.5px] text-muted">
+              {se.decision === 'accepted' ? `✓ Steigerung auf ${fmtNum(rec)} kg übernommen.` : `Steigerung abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Lehnst du öfter ab, wartet die App künftig eine Wiederholung länger.`}{' '}
+              <button className="text-accent" onClick={() => s.patchExercise(session.id, se.uid, { decision: undefined })}>
+                ändern
+              </button>
+            </div>
+          )}
 
           {/* Sätze – für iPhone: große Stepper */}
           <div className="flex flex-col gap-2">
@@ -552,6 +614,9 @@ function ExerciseCard({
             <div className="flex items-center gap-2 rounded-xl bg-rec-green/10 px-3 py-2.5 text-[13px] text-rec-green">
               <Check size={15} className="shrink-0" /> Optimale Satzzahl erreicht ({se.sets.length}). Weitere Sätze bringen heute kaum Zusatznutzen – weiter zur nächsten Übung.
             </div>
+          )}
+          {doneN > 0 && (complete || !se.sets.some((x) => !x.done)) && (
+            <WeightFeedback value={se.feedback} onChange={(f) => s.patchExercise(session.id, se.uid, { feedback: f })} />
           )}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={complete ? 'ghost' : 'secondary'} onClick={() => s.addSet(session.id, se.uid)} title="Zusätzlicher Satz (über der Empfehlung)">
