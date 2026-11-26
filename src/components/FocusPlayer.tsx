@@ -33,6 +33,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
 
   // Eingabe für den aktuellen Satz
   const [w, setW] = useState<number | null>(null);
+  const [noWeight, setNoWeight] = useState(false);
   const [reps, setReps] = useState<number>(10);
   const [rir, setRir] = useState<number>(1);
   useEffect(() => {
@@ -77,6 +78,12 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   };
   const completeSet = () => {
     if (!cur) return;
+    if (ex.equipment !== 'bodyweight' && (w == null || !(w > 0))) {
+      setNoWeight(true);
+      return;
+    }
+    if (!(reps > 0)) return;
+    setNoWeight(false);
     unlockAudio();
     s.setWeightFrom(session.id, se.uid, cur.id, w);
     s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps, rir, failure: rir === 0 ? cur.failure : false });
@@ -190,6 +197,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
                 ))}
               </div>
             </div>
+            {noWeight && <p className="text-center text-[13px] font-medium text-rec-red">Bitte zuerst ein Gewicht einstellen (mit + oder −).</p>}
             <button onClick={completeSet} className="flex h-14 items-center justify-center gap-2 rounded-full bg-white text-[16px] font-semibold text-black active:scale-[0.98]">
               <Check size={18} /> Satz {setIndex + 1} erledigt
             </button>

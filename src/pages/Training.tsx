@@ -321,6 +321,8 @@ function ExerciseCard({
   const s = useStore();
   const [showCues, setShowCues] = useState(false);
   const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [missing, setMissing] = useState<string | null>(null);
+  const toast = useToast((t) => t.show);
   const prior = useMemo(() => s.sessions.filter((x) => x.id !== session.id), [s.sessions, session.id]);
   const last = useMemo(() => exposures(ex.id, prior)[0], [prior, ex.id]);
   const advice = useMemo(
@@ -342,12 +344,26 @@ function ExerciseCard({
       s.updateSet(session.id, se.uid, setId, { done: false });
       return;
     }
+    const weight = st.weight ?? rec ?? null;
+    const bodyweight = ex.equipment === 'bodyweight';
+    if (!bodyweight && (weight == null || !(weight > 0))) {
+      toast('Bitte zuerst das Gewicht eintragen');
+      setMissing(setId);
+      setTimeout(() => document.getElementById(`w-${setId}`)?.focus(), 50);
+      return;
+    }
+    if (st.reps != null && !(st.reps > 0)) {
+      toast('Bitte die Wiederholungen eintragen');
+      setTimeout(() => document.getElementById(`r-${setId}`)?.focus(), 50);
+      return;
+    }
+    setMissing(null);
     const doneReps = st.reps ?? advice.repTarget;
     const doneRir = st.rir ?? se.targetRir;
     const rest = restAfterSet(se, doneReps, doneRir, st.failure);
     s.updateSet(session.id, se.uid, setId, {
       done: true,
-      weight: st.weight ?? rec ?? null,
+      weight,
       reps: doneReps,
       rir: doneRir,
     });
@@ -530,6 +546,7 @@ function ExerciseCard({
                       {st.note ? <MessageSquare size={14} className="mx-auto text-accent" /> : i + 1}
                     </button>
                     <NumStepper
+                      invalid={missing === st.id && (st.weight == null || !(st.weight > 0))}
                       id={`w-${st.id}`}
                       value={st.weight}
                       placeholder={rec != null ? fmtNum(rec) : 'kg'}
@@ -782,6 +799,7 @@ function Big({ label, value, unit, accent }: { label: string; value: string; uni
 }
 
 function NumStepper({
+  invalid,
   id,
   value,
   placeholder,
@@ -799,6 +817,7 @@ function NumStepper({
   onChange: (v: number | null) => void;
   onStep: (d: 1 | -1) => void;
   label: string;
+  invalid?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? (value == null ? '' : decimal ? String(value).replace('.', ',') : String(value));
@@ -811,7 +830,7 @@ function NumStepper({
     onStep(d);
   };
   return (
-    <div className={cn('flex h-12 min-w-0 items-center overflow-hidden rounded-xl bg-bg', disabled && 'opacity-70')}>
+    <div className={cn('flex h-12 min-w-0 items-center overflow-hidden rounded-xl bg-bg', disabled && 'opacity-70', invalid && 'ring-2 ring-rec-red/70')}>
       <button type="button" disabled={disabled} onClick={() => tap(-1)} className="grid h-full w-9 shrink-0 place-items-center text-muted active:bg-raised disabled:opacity-40" aria-label={`${label} verringern`}>
         <Minus size={16} />
       </button>
