@@ -1,0 +1,13 @@
+import { defaultData } from '../src/lib/store';
+import { generateDemo } from '../src/lib/demo';
+import { computeVolumeAdjust, calibrateTime } from '../src/engine/adapt';
+import { personalTarget } from '../src/engine/planner';
+const d = generateDemo(defaultData());
+const { map, changes } = computeVolumeAdjust(d);
+for (const [m, a] of Object.entries(map)) console.log(m.padEnd(11), a!.factor, a!.trend, a!.reason);
+console.log('changes', changes);
+d.volumeAdjust = map;
+console.log('biceps target', personalTarget(d, 'biceps', 2));
+const s = { ...d.sessions[d.sessions.length - 1], estMinutes: 60, plannedSets: 20 };
+s.endedAt = s.startedAt + 75 * 60000;
+console.log('calib', calibrateTime(s, 1, 0, s.endedAt), 'sets', s.exercises.reduce((a, e) => a + e.sets.length, 0));

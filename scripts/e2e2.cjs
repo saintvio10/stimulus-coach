@@ -1,0 +1,48 @@
+const { chromium } = require('playwright');
+const OUT = '/tmp/claude-0/-home-user/77587700-1482-5af7-9d38-099b28ee21ee/scratchpad/shots/';
+(async () => {
+  const b = await chromium.launch();
+  const p = await b.newPage({ viewport: { width: 390, height: 844 } });
+  const errs = [];
+  p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
+  p.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
+  await p.goto('http://localhost:4173/'); await p.waitForTimeout(1200);
+  await p.screenshot({ path: OUT + 'a1-welcome.png' });
+  await p.getByRole('button', { name: /Mit Beispieldaten/ }).click(); await p.waitForTimeout(800);
+  // Heute: Zeit, morgen: Keine Zeit
+  await p.getByRole('button', { name: /^Heute \d/ }).click();
+  await p.getByRole('button', { name: /^Samstag \d/ }).first().click();
+  await p.waitForTimeout(400);
+  await p.screenshot({ path: OUT + 'a2-avail.png' });
+  await p.getByRole('button', { name: /Zum heutigen Plan/ }).click(); await p.waitForTimeout(800);
+  console.log('after plan:', await p.evaluate(() => location.hash));
+  await p.screenshot({ path: OUT + 'a3-today.png' });
+  await p.goto('http://localhost:4173/#uebersicht'); await p.waitForTimeout(600);
+  await p.getByRole('button', { name: /^Morgen:/ }).first().click(); await p.waitForTimeout(300);
+  await p.getByRole('button', { name: /^Sonntag/ }).first().click(); await p.waitForTimeout(200); await p.getByRole('button', { name: /^Sonntag/ }).first().click(); await p.waitForTimeout(500);
+  await p.screenshot({ path: OUT + 'a3c-week.png' });
+  await p.getByRole('button', { name: /^Heute:/ }).click(); await p.waitForTimeout(200); await p.getByRole('button', { name: /^Heute:/ }).click(); await p.waitForTimeout(500);
+  await p.screenshot({ path: OUT + 'a3b-home-top.png' });
+  // Swipe to start
+  const thumb = p.getByRole('button', { name: 'Training starten' }).first();
+  await thumb.evaluate((el) => el.scrollIntoView({ block: 'center' })); await p.waitForTimeout(300);
+  const box = await thumb.boundingBox();
+  await p.mouse.move(box.x + 20, box.y + 20); await p.mouse.down();
+  await p.mouse.move(box.x + 330, box.y + 20, { steps: 12 }); await p.mouse.up();
+  await p.waitForTimeout(900);
+  console.log('route', await p.evaluate(() => location.hash));
+  await p.waitForTimeout(600); await p.screenshot({ path: OUT + 'a4a-start.png' }); await p.screenshot({ path: OUT + 'a4b-start-full.png', fullPage: true });
+  await p.getByRole('button', { name: 'Gewicht erhöhen' }).first().click(); await p.getByRole('button', { name: 'Wiederholungen verringern' }).first().click(); await p.waitForTimeout(200);
+  console.log('first weight', await p.locator('input[aria-label=Gewicht]').first().inputValue(), 'reps', await p.locator('input[aria-label=Wiederholungen]').first().inputValue());
+  await p.getByRole('button', { name: /Fokus/ }).first().click(); await p.waitForTimeout(800);
+  await p.getByRole('button', { name: /Satz 1 erledigt/ }).click(); await p.waitForTimeout(1500);
+  await p.screenshot({ path: OUT + 'a4-focus.png' });
+  await p.getByRole('button', { name: 'Fokusmodus schließen' }).click(); await p.waitForTimeout(400);
+  await p.screenshot({ path: OUT + 'a5-workout.png' });
+  await p.goto('http://localhost:4173/#uebersicht'); await p.waitForTimeout(600);
+  await p.getByRole('button', { name: 'Suchen' }).click(); await p.waitForTimeout(300);
+  await p.fill('#search-q', 'trizeps'); await p.waitForTimeout(300);
+  await p.screenshot({ path: OUT + 'a6-search.png' });
+  console.log('ERRORS', errs.slice(0, 8));
+  await b.close();
+})();

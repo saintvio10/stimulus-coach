@@ -1,0 +1,35 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        bg: 'rgb(var(--bg) / <alpha-value>)',
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        raised: 'rgb(var(--raised) / <alpha-value>)',
+        line: 'rgb(var(--line) / <alpha-value>)',
+        fg: 'rgb(var(--fg) / <alpha-value>)',
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
+        rec: {
+          gray: 'rgb(var(--rec-gray) / <alpha-value>)',
+          green: 'rgb(var(--rec-green) / <alpha-value>)',
+          yellow: 'rgb(var(--rec-yellow) / <alpha-value>)',
+          orange: 'rgb(var(--rec-orange) / <alpha-value>)',
+          red: 'rgb(var(--rec-red) / <alpha-value>)',
+        },
+      },
+      fontFamily: {
+        sans: ['"Geist Variable"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        mono: ['"Geist Mono Variable"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+      },
+      borderRadius: { xl2: '1.25rem' },
+      keyframes: {
+        'fade-up': { from: { opacity: '0.001', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'none' } },
+        'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'none' } },
+      },
+      animation: { 'fade-up': 'fade-up .35s cubic-bezier(.2,.8,.2,1) both', 'sheet-up': 'sheet-up .32s cubic-bezier(.2,.8,.2,1) both' },
+    },
+  },
+  plugins: [],
+};
