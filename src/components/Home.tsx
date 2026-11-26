@@ -664,6 +664,9 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">~{p.estMinutes} Min</span>
                     <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">{p.exercises.length} Übungen</span>
+                    {p.exercises.some((x) => x.why?.startsWith('Nachholen') || x.why?.includes(' Nachholen:')) && (
+                      <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur">↺ Nachholen</span>
+                    )}
                   </div>
                 </div>
                 <div>

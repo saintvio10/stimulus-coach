@@ -172,6 +172,8 @@ interface Store extends AppData {
   addSet: (sessionId: string, exUid: string) => void;
   removeSet: (sessionId: string, exUid: string, setId: string) => void;
   patchExercise: (sessionId: string, exUid: string, patch: Partial<SessionExercise>) => void;
+  /** Übung im Training entfernen (nicht geschafft) bzw. wiederherstellen */
+  missExercise: (sessionId: string, exUid: string, undo?: boolean) => void;
   addExerciseToSession: (sessionId: string, exercise: Exercise, afterUid?: string) => void;
   swapExercise: (sessionId: string, exUid: string, exercise: Exercise) => void;
   moveExercise: (sessionId: string, exUid: string, dir: -1 | 1) => void;
@@ -298,6 +300,25 @@ export const useStore = create<Store>()(
           mutSession(sid, (s) => {
             const se = s.exercises.find((e) => e.uid === xu);
             if (se) Object.assign(se, patch);
+          }),
+        missExercise: (sid, xu, undo) =>
+          mutSession(sid, (s) => {
+            const se = s.exercises.find((e) => e.uid === xu);
+            if (!se) return;
+            if (undo) {
+              const n = se.missed ?? 0;
+              const last = se.sets[se.sets.length - 1];
+              for (let i = 0; i < n; i++)
+                se.sets.push({ id: uid(), weight: last?.weight ?? se.recWeight, reps: last?.reps ?? null, rir: last?.rir ?? se.targetRir, failure: false, done: false, note: '' });
+              se.missed = undefined;
+              se.skipped = false;
+              return;
+            }
+            const open = se.sets.filter((x) => !x.done);
+            if (!open.length) return;
+            se.missed = open.length;
+            if (se.sets.some((x) => x.done)) se.sets = se.sets.filter((x) => x.done);
+            else se.skipped = true;
           }),
         addExerciseToSession: (sid, exercise, afterUid) =>
           {

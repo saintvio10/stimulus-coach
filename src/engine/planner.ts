@@ -1,6 +1,6 @@
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL } from '../lib/muscles';
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
-import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf } from '../lib/utils';
+import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
 import { adviseExercise } from './progression';
@@ -219,6 +219,17 @@ export function buildSession(o: BuildOpts): PlannedSession {
     }
   }
 
+  // Im Training per Wischen entfernte Übungen (nicht geschafft) → in den nächsten 10 Tagen bevorzugt nachholen,
+  // solange die Übung seitdem nicht wieder gemacht wurde.
+  const missed = new Map<string, { date: string; sets: number }>();
+  for (const s of [...data.sessions].sort((a, b) => a.startedAt - b.startedAt)) {
+    if (at - s.startedAt > 10 * 24 * HOUR || s.startedAt > at) continue;
+    for (const se of s.exercises) {
+      if (se.missed && !se.sets.some((x) => x.done)) missed.set(se.exerciseId, { date: s.date, sets: se.missed });
+      else if (se.sets.some((x) => x.done)) missed.delete(se.exerciseId);
+    }
+  }
+
   const sSets: Record<MuscleId, number> = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 0])) as Record<MuscleId, number>;
 
   const isFull = templateId === 'full';
@@ -233,7 +244,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
   };
 
   const exMult = (ex: Exercise) =>
-    (1 + 0.06 * ex.stretch) * (ex.favorite ? 1.08 : 1) * (history.has(ex.id) ? 1.04 : 1) * (recent.has(ex.id) ? 0.85 : 1);
+    (1 + 0.06 * ex.stretch) * (ex.favorite ? 1.08 : 1) * (history.has(ex.id) ? 1.04 : 1) * (recent.has(ex.id) ? 0.85 : 1) * (missed.has(ex.id) ? 1.2 : 1);
 
   const valueOfSets = (ex: Exercise, k: number) => {
     const local = { ...sSets };
@@ -354,6 +365,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
       whyParts.push(`${MUSCLE[pm].label} (${rankTxt})${sec.length ? ` + nebenbei ${sec.join(', ')}` : ''} – viel Reiz pro Minute.`);
     } else whyParts.push(`Gezielt für ${MUSCLE[pm].label} (${rankTxt}, diese Woche ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätze).`);
     if (it.ex.benefit) whyParts.push(it.ex.benefit);
+    const mi = missed.get(it.ex.id);
+    if (mi) whyParts.push(`Nachholen: am ${fmtDate(mi.date)} im Training entfernt (${mi.sets} Sätze nicht gemacht).`);
     if (sc.neglect > 0.2) whyParts.push(`Seit ${sc.daysSince == null ? 'langem' : Math.round(sc.daysSince) + ' Tagen'} kein direkter Reiz – wird nachgeholt.`);
     else if (history.has(it.ex.id)) whyParts.push('Bekannte Übung – dein Fortschritt bleibt direkt vergleichbar.');
     return {
@@ -559,7 +572,9 @@ export interface PlanOpts {
 export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}): Plan {
   const today = dateKey(now);
   const doneSessions = data.sessions.filter((s) => s.status === 'done');
-  const trainedToday = doneSessions.some((s) => s.date === today);
+  // Laufendes Training zählt als heutige Einheit: die Folgetage rechnen mit seinen erledigten + noch offenen Sätzen
+  const activeToday = data.sessions.find((s) => s.status === 'active' && s.date === today);
+  const trainedToday = doneSessions.some((s) => s.date === today) || !!activeToday;
   const start = trainedToday && !opts.forceToday ? addDays(today, 1) : today;
   // Planungsfenster: die nächsten PLAN_DAYS Tage – kurz genug, um verlässlich zu sein; danach rollierend neu
   const horizon = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(start, i));
@@ -675,6 +690,16 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   const spw = clamp(opts.forceToday ? data.settings.sessionsPerWeek : dates.length || data.settings.sessionsPerWeek, 1, 3);
 
   let events = allEvents(data);
+  if (activeToday) {
+    const exById0 = new Map(data.exercises.map((e) => [e.id, e]));
+    for (const se of activeToday.exercises) {
+      const open = se.skipped ? 0 : se.sets.filter((x) => !x.done).length;
+      const ex = exById0.get(se.exerciseId);
+      if (!open || !ex) continue;
+      for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][])
+        events = events.concat({ t: now + HOUR, muscle: m, sets: c * open, fatigue: c * open, direct: c >= 0.75, load: 0, virtual: true });
+    }
+  }
   const exById = new Map(data.exercises.map((e) => [e.id, e]));
   const sessions: PlannedSession[] = [];
   // Letztes echtes Training (≤ 3 Tage) zählt für die Split-Rotation mit, damit nicht dauernd derselbe Split kommt

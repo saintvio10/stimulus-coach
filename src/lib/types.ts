@@ -121,6 +121,8 @@ export interface SessionExercise {
   lastWeight?: number | null;
   /** Entscheidung zur vorgeschlagenen Steigerung */
   decision?: 'accepted' | 'declined';
+  /** Im Training per Wischen entfernt (nicht geschafft) – Anzahl nicht gemachter Sätze; wird in den nächsten Tagen nachgeholt */
+  missed?: number;
   /** Bewertung nach der Übung */
   feedback?: 'easy' | 'ok' | 'hard';
 }

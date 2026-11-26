@@ -32,6 +32,7 @@ import { Badge, Button, Card, Confirm, GlowProgress, Input, PageHeader, Sheet } 
 import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Coach';
 import { ExerciseAnimation, ExerciseIcon } from '../components/ExerciseAnimation';
 import { FocusPlayer } from '../components/FocusPlayer';
+import { SwipeRow } from '../components/SwipeRow';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
 import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight } from '../lib/utils';
@@ -184,6 +185,7 @@ function Workout({ session }: { session: Session }) {
         </Card>
       )}
 
+      {session.exercises.length > 0 && <p className="-mb-1 px-1 text-[11.5px] text-muted">Tipp: Übung nach links wischen, um sie zu entfernen, wenn du sie nicht schaffst.</p>}
       {session.exercises.map((se, i) => {
         const ex = exMap.get(se.exerciseId);
         if (!ex) return null;
@@ -390,7 +392,15 @@ function ExerciseCard({
     if (isLast && !partner) setTimeout(onNext, 300);
   };
 
+  const remove = () => {
+    const open = se.sets.filter((x) => !x.done).length;
+    s.missExercise(session.id, se.uid);
+    toast(doneN ? `${ex.name}: ${open} ${open === 1 ? 'Satz' : 'Sätze'} entfernt – wird nachgeholt` : `${ex.name} entfernt – wird in den nächsten Tagen nachgeholt`);
+    if (isCurrent) setTimeout(onNext, 250);
+  };
+
   return (
+    <SwipeRow onAction={remove} disabled={se.skipped || complete} label="Entfernen">
     <Card
       id={`ex-${se.uid}`}
       className={cn(
@@ -423,11 +433,26 @@ function ExerciseCard({
             {se.superset && <Badge tone="accent">{se.superset}</Badge>}
           </div>
           <div className="tnum text-[12px] text-muted">
-            {se.skipped ? 'Übersprungen' : `${doneN}/${se.sets.length} Sätze · ${se.repMin}–${se.repMax} Wdh. · RIR ${se.targetRir}${rec != null ? ` · ${fmtNum(rec)} kg` : ''}`}
+            {se.skipped && se.missed ? 'Nicht gemacht · wird nachgeholt' : se.skipped ? 'Übersprungen' : `${doneN}/${se.sets.length} Sätze${se.missed ? ` (${se.missed} entfernt)` : ''} · ${se.repMin}–${se.repMax} Wdh. · RIR ${se.targetRir}${rec != null ? ` · ${fmtNum(rec)} kg` : ''}`}
           </div>
         </div>
         <ChevronDown size={18} className={cn('shrink-0 text-muted transition', open && 'rotate-180')} />
       </button>
+      {!!se.missed && (
+        <div className="-mt-2 flex items-center justify-between gap-2 px-4 pb-3 text-[12px] text-muted">
+          <span>Entfernt – der Planer holt {se.skipped ? 'die Übung' : 'die Sätze'} in den nächsten Tagen nach.</span>
+          <button
+            data-noswiperow
+            onClick={() => {
+              s.missExercise(session.id, se.uid, true);
+              toast('Wiederhergestellt');
+            }}
+            className="shrink-0 rounded-full bg-raised px-3 py-1 font-semibold text-fg"
+          >
+            Rückgängig
+          </button>
+        </div>
+      )}
 
       {open && (
         <div className="flex flex-col gap-4 px-3 pb-4 sm:px-4">
@@ -731,6 +756,7 @@ function ExerciseCard({
         </div>
       )}
     </Card>
+    </SwipeRow>
   );
 }
 
