@@ -4,7 +4,7 @@ import { ArrowRight, Flame, Play, Trophy, TrendingUp, AlertTriangle, Moon } from
 import { useStore } from '../lib/store';
 import { useMuscleStates, useNow, usePlan, useRouter } from '../lib/hooks';
 import { Badge, Bar, Button, Card, Ring, SectionTitle, Stat } from '../components/ui';
-import { DayHero, DayPicker, HomeHeader, MoreAvailability, QuickStart, UpcomingDays } from '../components/Home';
+import { DayHero, DayPicker, HomeHeader, MoreAvailability, QuickStart, UpcomingDays, WeeklyNeed } from '../components/Home';
 import { MUSCLE, MUSCLES, RECOVERY_COLORS, minDose14, weeklyTarget } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
 import { avgDurationMin, doneSessions, exerciseSeries, personalRecords, sessionSets, weekStreak } from '../engine/stats';
@@ -72,6 +72,7 @@ export default function Dashboard() {
       </div>
       <DayHero plan={plan} day={day} onNext={setDay} />
       <UpcomingDays plan={plan} />
+      <WeeklyNeed plan={plan} />
       <QuickStart />
 
       {/* Kennzahlen */}

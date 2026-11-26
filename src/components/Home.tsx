@@ -5,7 +5,10 @@ import { useStore } from '../lib/store';
 import { useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability } from '../lib/types';
 import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
-import { planTemplate, planToday, PLAN_DAYS } from '../engine/planner';
+import { planTemplate, planToday, PLAN_DAYS, personalTarget } from '../engine/planner';
+import { MUSCLES } from '../lib/muscles';
+import type { MuscleId } from '../lib/types';
+import { useMuscleStates } from '../lib/hooks';
 import { MUSCLE } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
 import { addDays, cn, dateKey, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, WEEKDAYS_LONG, MONTHS } from '../lib/utils';
@@ -675,6 +678,127 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
           </div>
         )}
       </Sheet>
+    </section>
+  );
+}
+
+/** Wochenbilanz je Muskel: erledigt (rollierende 7 Tage) + geplant (nächste Tage) vs. persönliches Wochenziel */
+export function WeeklyNeed({ plan }: { plan: Plan }) {
+  const s = useStore();
+  const data = s as unknown as AppData;
+  const { states } = useMuscleStates();
+  const [open, setOpen] = useState<MuscleId | null>(null);
+  const spw = Math.max(1, Math.min(3, plan.sessions.length || s.settings.sessionsPerWeek));
+  const today = dateKey();
+  const rows = s.profile.priorities
+    .flatMap((g) => MUSCLES.filter((m) => m.group === g))
+    .map((m) => {
+      const target = personalTarget(data, m.id, spw);
+      const done = states[m.id].vol7;
+      const days = plan.sessions
+        .map((p) => ({ date: p.date, sets: p.decisions.find((d) => d.muscle === m.id)?.sets ?? 0, label: p.label }))
+        .filter((x) => x.sets >= 1);
+      const planned = days.reduce((a, x) => a + x.sets, 0);
+      const gap = Math.max(0, target - done - planned);
+      const status: 'reached' | 'covered' | 'gap' = done >= target * 0.95 ? 'reached' : done + planned >= target * 0.9 ? 'covered' : 'gap';
+      return { m, target, done, planned, gap, days, status };
+    });
+  const reached = rows.filter((r) => r.status === 'reached').length;
+  const covered = rows.filter((r) => r.status === 'covered').length;
+  const dayLbl = (d: string) => (d === today ? 'heute' : d === addDays(today, 1) ? 'morgen' : WEEKDAYS_SHORT[weekdayOf(d)]);
+  return (
+    <section>
+      <div className="mb-1 flex items-baseline justify-between">
+        <h2 className="text-[19px] font-semibold tracking-tight">Wochenbilanz</h2>
+        <span className="tnum text-[12px] text-muted">
+          {reached} erreicht · {covered} geplant · {rows.length - reached - covered} offen
+        </span>
+      </div>
+      <p className="mb-4 text-[12px] text-muted">Sätze pro Muskel in den letzten 7 Tagen plus Plan der nächsten Tage – gemessen an deinem Wochenziel.</p>
+      <div className="card flex flex-col gap-0.5 p-2">
+        {rows.map((r) => {
+          const max = Math.max(r.target, r.done + r.planned) || 1;
+          const pct = (x: number) => `${(Math.min(x, max) / max) * 100}%`;
+          const isOpen = open === r.m.id;
+          return (
+            <div key={r.m.id}>
+              <button onClick={() => setOpen(isOpen ? null : r.m.id)} className="flex w-full flex-col gap-1.5 rounded-xl px-2.5 py-2 text-left transition hover:bg-raised" aria-expanded={isOpen}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-[13.5px] font-medium">{r.m.label}</span>
+                  <span
+                    className={cn(
+                      'tnum shrink-0 text-[12px] font-medium',
+                      r.status === 'reached' ? 'text-rec-green' : r.status === 'covered' ? 'text-accent' : 'text-muted',
+                    )}
+                  >
+                    {r.status === 'reached'
+                      ? 'Ziel erreicht ✓'
+                      : r.status === 'covered'
+                        ? `Abgedeckt: ${r.days.map((d) => dayLbl(d.date)).join(', ')}`
+                        : `Fehlen noch ~${fmtNum(Math.ceil(r.gap))} Sätze`}
+                  </span>
+                </div>
+                <div className="relative flex h-2.5 w-full overflow-hidden rounded-full bg-raised">
+                  <span className="h-full bg-rec-green transition-all" style={{ width: pct(r.done) }} />
+                  <span
+                    className="h-full bg-accent/70 transition-all"
+                    style={{ width: pct(Math.min(r.planned, Math.max(0, max - r.done))), backgroundImage: 'repeating-linear-gradient(45deg, transparent 0 4px, rgb(255 255 255 / 0.18) 4px 7px)' }}
+                  />
+                  <span className="absolute inset-y-0 w-0.5 bg-fg/60" style={{ left: `calc(${(r.target / max) * 100}% - 1px)` }} title="Wochenziel" />
+                </div>
+              </button>
+              {isOpen && (
+                <div className="mx-2.5 mb-2 rounded-xl bg-raised px-3 py-2.5 text-[12.5px]">
+                  <div className="tnum grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <div className="text-[15px] font-semibold text-rec-green">{fmtNum(r.done)}</div>
+                      <div className="text-muted">erledigt</div>
+                    </div>
+                    <div>
+                      <div className="text-[15px] font-semibold text-accent">{fmtNum(r.planned)}</div>
+                      <div className="text-muted">geplant</div>
+                    </div>
+                    <div>
+                      <div className="text-[15px] font-semibold">{fmtNum(r.target)}</div>
+                      <div className="text-muted">Wochenziel</div>
+                    </div>
+                  </div>
+                  {r.days.length > 0 && (
+                    <ul className="mt-2 flex flex-col gap-0.5 text-muted">
+                      {r.days.map((d) => (
+                        <li key={d.date}>
+                          {relDayLabel(d.date)}: <span className="text-fg/85">{d.label}</span> · {fmtNum(d.sets)} Sätze
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mt-2 text-muted">
+                    {r.status === 'reached'
+                      ? 'Genug Reiz diese Woche – weitere Sätze bringen kaum Zusatznutzen, der Plan setzt andere Schwerpunkte.'
+                      : r.status === 'covered'
+                        ? 'Die geplanten Einheiten bringen den Muskel ins Ziel.'
+                        : r.days.length
+                          ? 'Trotz Plan bleibt eine Lücke – ein zusätzlicher Tag mit Zeit oder etwas mehr Zeit pro Einheit würde sie schließen. Sonst gleicht die App sie in der Folgewoche aus.'
+                          : 'Aktuell keine Einheit mit diesem Muskel geplant – markiere einen weiteren Tag mit „Zeit“, dann plant die App ihn ein. Sonst wird er nächste Woche bevorzugt.'}
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 px-2.5 pb-1.5 pt-2 text-[11px] text-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-3 rounded-full bg-rec-green" /> erledigt
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-3 rounded-full bg-accent/70" /> geplant
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-0.5 bg-fg/60" /> Wochenziel
+          </span>
+          <span>Antippen für Details</span>
+        </div>
+      </div>
     </section>
   );
 }
