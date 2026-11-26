@@ -421,6 +421,12 @@ function ExerciseCard({
             <span>
               Ziel-RIR {se.targetRir} · {last ? `Letztes Mal ${fmtNum(last.sets[0].weight)} kg × ${last.sets.map((x) => x.reps).join('/')} (${fmtShortDay(last.date)})` : 'Erstes Mal – Gewicht frei wählen'}
             </span>
+            {se.why && (
+              <span className="rounded-xl bg-raised px-3 py-2 text-[12.5px] leading-relaxed text-fg/85">
+                <span className="font-semibold">Warum diese Übung? </span>
+                {se.why}
+              </span>
+            )}
             {se.setsReason && <span>{se.setsReason}</span>}
           </div>
 

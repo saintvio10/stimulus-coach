@@ -432,4 +432,32 @@ const defs: Def[] = [
   },
 ];
 
-export const DEFAULT_EXERCISES: Exercise[] = defs.map((d) => ({ ...d, locked: d.locked ?? false, favorite: d.favorite ?? false }));
+const BENEFIT: Record<string, string> = {
+ "preacher-curl": "Bizeps in gedehnter Position, Oberarm fixiert – kaum Schwung möglich.",
+ "hammer-curl": "Neutraler Griff trifft zusätzlich Brachialis und Unterarm – macht den Oberarm dicker.",
+ "bayesian-curl": "Arm hinter dem Körper: Bizeps maximal gedehnt, konstante Kabelspannung.",
+ "db-curl": "Klassischer Curl mit Supination – voller Bewegungsweg für den Bizeps.",
+ "overhead-ext": "Arm über Kopf dehnt den langen Trizepskopf – in Studien deutlich mehr Wachstum als Pushdowns.",
+ "pushdown": "Betont den äußeren Trizepskopf, gelenkschonend und leicht zu steigern.",
+ "dip-machine": "Schwere Druckübung für den Trizeps, Brust und vordere Schulter helfen mit.",
+ "incline-press": "Obere Brust plus Trizeps und vordere Schulter in einer Übung.",
+ "chest-press": "Schwere, stabil geführte Brustübung – ideal für messbare Progression.",
+ "butterfly": "Brust isoliert mit starker Dehnung, ohne den Trizeps zu ermüden.",
+ "lat-pulldown": "Latissimus in voller Dehnung oben, Bizeps arbeitet mit.",
+ "chest-supported-row": "Oberer Rücken ohne Belastung des unteren Rückens – sauber bis ans Limit.",
+ "cable-row": "Rücken mit konstanter Kabelspannung und guter Dehnung vorne.",
+ "cable-lateral": "Kabel spannt die seitliche Schulter auch unten in der Dehnung – mehr Reiz als Kurzhanteln.",
+ "db-lateral": "Seitliche Schulter mit Spannung vor allem oben – einfach und überall machbar.",
+ "reverse-cable-fly": "Hintere Schulter isoliert – runde, „3D“-Schultern und bessere Haltung.",
+ "shoulder-press": "Vordere Schulter und Trizeps; die vordere Schulter bekommt über Brustdrücken aber schon viel ab.",
+ "leg-press": "Viel Quadrizeps-Volumen bei wenig Belastung für den Rücken.",
+ "seated-leg-curl": "Sitzend sind die Beinbeuger länger gedehnt – laut Studie mehr Wachstum als liegend.",
+ "leg-extension": "Quadrizeps isoliert inkl. Rectus femoris – ergänzt die Beinpresse.",
+ "rdl": "Beinbeuger und Gesäß in tiefer Dehnung, starke Hüftstreckung.",
+ "calf-raise": "Waden mit Pause in der Dehnung – dort wachsen sie am besten.",
+ "cable-crunch": "Bauch mit steigerbarer Last statt endloser Wiederholungen.",
+ "ab-machine": "Geführter Bauchtrainer, einfach zu steigern.",
+ "reverse-butterfly": "Im Studio nicht verfügbar."
+};
+
+export const DEFAULT_EXERCISES: Exercise[] = defs.map((d) => ({ ...d, benefit: BENEFIT[d.id], locked: d.locked ?? false, favorite: d.favorite ?? false }));

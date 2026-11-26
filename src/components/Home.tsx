@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
-import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Layers, Moon, Play, Search, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability } from '../lib/types';
@@ -198,6 +198,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   const toast = useToast((t) => t.show);
   const [why, setWhy] = useState(false);
   const [all, setAll] = useState(false);
+  const [whyOpen, setWhyOpen] = useState<string | null>(null);
   const today = dateKey();
   const isToday = day === today;
   const active = s.sessions.find((x) => x.status === 'active');
@@ -314,7 +315,8 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                 const ex = exMap.get(p.exerciseId);
                 if (!ex) return null;
                 return (
-                  <li key={p.exerciseId} className="flex items-center gap-3 rounded-2xl px-1 py-1.5">
+                  <li key={p.exerciseId}>
+                    <button className="flex w-full items-center gap-3 rounded-2xl px-1 py-1.5 text-left" onClick={() => setWhyOpen(whyOpen === p.exerciseId ? null : p.exerciseId)} aria-expanded={whyOpen === p.exerciseId}>
                     <div className="relative">
                       <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={46} />
                       <span className="tnum absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-bg text-[10px] font-semibold text-muted ring-1 ring-line/10">{i + 1}</span>
@@ -331,6 +333,14 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                         {p.advice.type === 'deload' && <span className="ml-1 text-rec-orange">↓</span>}
                       </div>
                     </div>
+                    <Info size={15} className={cn('shrink-0 transition', whyOpen === p.exerciseId ? 'text-accent' : 'text-muted/60')} />
+                    </button>
+                    {whyOpen === p.exerciseId && (
+                      <div className="mb-1 ml-[58px] mr-1 animate-fade-up rounded-xl bg-fg/[0.06] px-3 py-2 text-[12.5px] leading-relaxed text-fg/85">
+                        <span className="font-semibold">Warum? </span>
+                        {p.why}
+                      </div>
+                    )}
                   </li>
                 );
               })}
@@ -342,7 +352,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                 </button>
               )}
               <button className="text-muted hover:text-fg" onClick={() => setWhy(!why)}>
-                Warum diese Auswahl?
+                Alle Details
               </button>
             </div>
             {why && <PlanReasons s={planned} />}

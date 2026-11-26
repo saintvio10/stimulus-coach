@@ -129,7 +129,11 @@ export function migrate(raw: Partial<AppData>): AppData {
   // Bestehende Nutzer nicht erneut durch das Onboarding schicken
   if (raw.settings && raw.settings.onboarded === undefined && (raw.sessions?.length ?? 0) > 0) d.settings.onboarded = true;
   // neue Standardübungen ergänzen, falls sie fehlen
-  for (const e of DEFAULT_EXERCISES) if (!d.exercises.some((x) => x.id === e.id)) d.exercises.push({ ...e });
+  for (const e of DEFAULT_EXERCISES) {
+    const ex = d.exercises.find((x) => x.id === e.id);
+    if (!ex) d.exercises.push({ ...e });
+    else if (!ex.benefit && e.benefit) d.exercises = d.exercises.map((x) => (x.id === e.id ? { ...x, benefit: e.benefit } : x));
+  }
   return d;
 }
 
@@ -231,6 +235,7 @@ export const useStore = create<Store>()(
                 reason: p.reason,
                 adviceText: p.advice.text,
                 setsReason: p.setsReason,
+                why: p.why,
               })),
           };
           mutate((d) => {

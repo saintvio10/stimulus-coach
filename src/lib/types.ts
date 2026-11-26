@@ -61,6 +61,8 @@ export interface Exercise {
   /** Systemische Ermüdung 1–3 */
   fatigue: 1 | 2 | 3;
   cues: string[];
+  /** Kurz: was diese Übung besonders macht */
+  benefit?: string;
   /** Eigene Gewichtsstufen (überschreibt Geräte-Standard) */
   weights?: number[];
   /** Eigene Steigerung in kg (überschreibt Geräte-Standard) */
@@ -112,6 +114,7 @@ export interface SessionExercise {
   reason?: string;
   adviceText?: string;
   setsReason?: string;
+  why?: string;
 }
 
 export interface Session {

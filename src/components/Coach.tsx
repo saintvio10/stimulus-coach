@@ -134,6 +134,7 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
   const exercises = useStore((st) => st.exercises);
   const exMap = new Map(exercises.map((e) => [e.id, e]));
   const [open, setOpen] = useState(false);
+  const [whyOpen, setWhyOpen] = useState<string | null>(null);
   const focus = s.decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets);
   return (
     <div className="flex flex-col gap-4">
@@ -149,7 +150,8 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
           const ex = exMap.get(p.exerciseId);
           if (!ex) return null;
           return (
-            <li key={p.exerciseId} className="flex items-center gap-3 py-2.5">
+            <li key={p.exerciseId} className="py-1">
+              <button className="flex w-full items-center gap-3 py-1.5 text-left" onClick={() => setWhyOpen(whyOpen === p.exerciseId ? null : p.exerciseId)} aria-expanded={whyOpen === p.exerciseId}>
               <div className="relative">
                 <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={44} />
                 <span className="tnum absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-bg text-[10px] font-semibold text-muted ring-1 ring-line/10">{i + 1}</span>
@@ -166,6 +168,14 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
                   {p.advice.type === 'deload' && <span className="ml-1 text-rec-orange">↓</span>}
                 </div>
               </div>
+              <Info size={15} className={cn('shrink-0', whyOpen === p.exerciseId ? 'text-accent' : 'text-muted/60')} />
+              </button>
+              {whyOpen === p.exerciseId && (
+                <div className="mb-1 ml-[56px] rounded-xl bg-raised px-3 py-2 text-[12.5px] leading-relaxed">
+                  <span className="font-semibold">Warum? </span>
+                  {p.why}
+                </div>
+              )}
             </li>
           );
         })}
@@ -173,7 +183,7 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
       {showReasons && (
         <div>
           <button className="flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-fg" onClick={() => setOpen(!open)}>
-            <Info size={14} /> Warum diese Auswahl?
+            <Info size={14} /> Alle Details zur Auswahl
             <ChevronDown size={14} className={cn('transition', open && 'rotate-180')} />
           </button>
           {open && <PlanReasons s={s} />}
@@ -221,6 +231,7 @@ export function PlanReasons({ s }: { s: PlannedSession }) {
           {s.exercises.map((p) => (
             <li key={p.exerciseId}>
               <div className="font-medium">{exMap.get(p.exerciseId)?.name}</div>
+              <div className="text-fg/85">{p.why}</div>
               <div className="text-muted">{p.reason}</div>
               <div className="text-muted">{p.advice.text}</div>
             </li>

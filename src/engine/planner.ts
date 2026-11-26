@@ -75,6 +75,8 @@ export interface PlannedExercise {
   advice: ProgressionAdvice;
   reason: string;
   setsReason: string;
+  /** kurze Begründung „Warum diese Übung?“ */
+  why: string;
   superset?: string;
   minutes: number;
 }
@@ -123,6 +125,9 @@ export const PLAN_DAYS = 7;
 const WARMUP_MIN = 7;
 const MAX_EXERCISES = 9;
 const MAX_SETS_PER_EXERCISE = 4;
+/** Bewegungsfamilien: zwei Übungen derselben Familie für denselben Muskel in einer Einheit sind redundant */
+const FAMILY: Partial<Record<string, string>> = { row: 'row', cableRow: 'row', chestPress: 'press', inclinePress: 'press', lateralRaise: 'lateral' };
+const familyOf = (ex: Exercise) => FAMILY[ex.pattern] ?? ex.pattern;
 const MIN_SET_VALUE = 0.06;
 
 function setMinutes(ex: Exercise, short: boolean): number {
@@ -257,7 +262,9 @@ export function buildSession(o: BuildOpts): PlannedSession {
   for (let iter = 0; iter < 60; iter++) {
     let best: { ratio: number; apply: () => void } | null = null;
     for (const it of items) {
-      if (it.sets >= maxSets) continue;
+      // Prioritätsmuskeln (Rang 1–3) dürfen bei Isolationsübungen 5 Sätze bekommen, statt eine fast gleiche 2. Variante zu nehmen
+      const top = !it.ex.compound && !short && MUSCLE[it.ex.primary].group != null && data.profile.priorities.indexOf(MUSCLE[it.ex.primary].group!) < 3;
+      if (it.sets >= (top && !isFull ? maxSets + 1 : maxSets)) continue;
       const t = setMinutes(it.ex, short) * tf;
       if (used + t > budget) continue;
       const v = valueOfSets(it.ex, 1);
@@ -279,12 +286,14 @@ export function buildSession(o: BuildOpts): PlannedSession {
         const samePrimary = items.filter((i) => i.ex.primary === ex.primary);
         if (samePrimary.length >= 2) continue;
         if (samePrimary.length === 1 && samePrimary[0].sets < 3) continue;
+        // keine fast identische Variante (z. B. Seitheben Kabel + Kurzhantel, zwei Ruder-Varianten)
+        if (samePrimary.some((i) => familyOf(i.ex) === familyOf(ex))) continue;
         const t = (startSets * setMinutes(ex, short) + setupMinutes(ex)) * tf;
         if (used + t > budget) continue;
         const v = valueOfSets(ex, startSets);
         if (v / startSets < MIN_SET_VALUE) continue;
         // Bevorzugt Abwechslung bei zweiter Übung für denselben Muskel (andere Dehnungsposition)
-        const varietyBonus = samePrimary.length === 1 && samePrimary[0].ex.stretch !== ex.stretch ? 1.05 : 1;
+        const varietyBonus = samePrimary.length === 1 && (samePrimary[0].ex.stretch !== ex.stretch || samePrimary[0].ex.compound !== ex.compound) ? 1.08 : 1;
         const ratio = (v / t) * varietyBonus;
         if (!best || ratio > best.ratio)
           best = {
@@ -328,7 +337,25 @@ export function buildSession(o: BuildOpts): PlannedSession {
     if (it.ex.stretch === 2) parts.push('hohe Belastung in gedehnter Position');
     if (it.ex.compound && !MUSCLE[it.ex.primary].indirectOnly) parts.push('deckt mehrere Muskeln effizient ab');
     if (sc.neglect > 0.2) parts.push(`seit ${sc.daysSince == null ? 'langem' : Math.round(sc.daysSince) + ' Tagen'} kein direkter Reiz`);
+    // Kurze, verständliche Begründung „Warum genau diese Übung?“
+    const mates = items.filter((x) => x.ex.primary === it.ex.primary);
+    const pos = mates.indexOf(it);
+    const rankTxt = MUSCLE[pm].group ? `Priorität ${data.profile.priorities.indexOf(MUSCLE[pm].group!) + 1}` : '';
+    const whyParts: string[] = [];
+    if (MUSCLE[pm].indirectOnly) whyParts.push('Mehrgelenksübung, die mehrere Muskeln gleichzeitig trifft.');
+    else if (pos === 1) {
+      const other = mates[0].ex;
+      const diff = other.compound !== it.ex.compound ? (it.ex.compound ? 'schwere Grundübung' : 'Isolation nach der Grundübung') : it.ex.stretch !== other.stretch ? (it.ex.stretch > other.stretch ? 'mehr Dehnung' : 'anderer Kraftverlauf') : 'anderer Winkel';
+      whyParts.push(`2. Übung für ${MUSCLE[pm].label} (${rankTxt}): ergänzt ${other.name} – ${diff}. So kommt der Muskel heute auf ~${fmtNum(sSets[pm])} Sätze, ohne eine Übung zu überladen.`);
+    } else if (it.ex.compound) {
+      const sec = Object.entries(it.ex.muscles).filter(([m, c]) => m !== pm && (c ?? 0) >= 0.5).map(([m]) => MUSCLE[m as MuscleId].short);
+      whyParts.push(`${MUSCLE[pm].label} (${rankTxt})${sec.length ? ` + nebenbei ${sec.join(', ')}` : ''} – viel Reiz pro Minute.`);
+    } else whyParts.push(`Gezielt für ${MUSCLE[pm].label} (${rankTxt}, diese Woche ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätze).`);
+    if (it.ex.benefit) whyParts.push(it.ex.benefit);
+    if (sc.neglect > 0.2) whyParts.push(`Seit ${sc.daysSince == null ? 'langem' : Math.round(sc.daysSince) + ' Tagen'} kein direkter Reiz – wird nachgeholt.`);
+    else if (history.has(it.ex.id)) whyParts.push('Bekannte Übung – dein Fortschritt bleibt direkt vergleichbar.');
     return {
+      why: whyParts.join(' '),
       exerciseId: it.ex.id,
       sets,
       repMin: it.ex.repMin,
@@ -647,7 +674,10 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   let events = eventsFromSessions(doneSessions.concat(data.sessions.filter((s) => s.status === 'active')), data.exercises);
   const exById = new Map(data.exercises.map((e) => [e.id, e]));
   const sessions: PlannedSession[] = [];
-  const usedTemplates: TemplateId[] = [];
+  // Letztes echtes Training (≤ 3 Tage) zählt für die Split-Rotation mit, damit nicht dauernd derselbe Split kommt
+  const lastReal = doneSessions[doneSessions.length - 1];
+  const usedTemplates: TemplateId[] =
+    lastReal && lastReal.split in TEMPLATES && diffDays(today, lastReal.date) <= 3 ? [lastReal.split as TemplateId] : [];
 
   for (let i = 0; i < allDates.length; i++) {
     const d = allDates[i];
@@ -684,6 +714,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     if (i >= dates.length) best.reasons.unshift(`Woche 2 (${strategy2.label}): wird bei jedem Training neu berechnet.`);
     if (focus.length) best.reasons.push(`Schwerpunkt: ${focus.join(', ')}.`);
     if (skippedTired.length) best.reasons.push(`Ausgelassen wegen Ermüdung: ${skippedTired.join(', ')}.`);
+    if (allDates.length === 1 && !uncertain && minutes < 90)
+      best.reasons.push(`Nur 1 Einheit in den nächsten 7 Tagen: Mit ${minutes} min sind pro Muskel nur wenige Sätze möglich. Wenn es geht, plane 90–120 min ein (Profil → Standarddauer oder „Zeit heute“) – das bringt deutlich mehr Wochenvolumen.`);
     if (best.tentative) best.reasons.push('Vorläufig: Tag ist als „möglich“ markiert. Bestätige ihn im Kalender oder er wird automatisch neu verteilt.');
     sessions.push(best);
     usedTemplates.push(best.templateId);
