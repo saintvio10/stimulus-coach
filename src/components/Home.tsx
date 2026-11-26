@@ -5,7 +5,7 @@ import { useStore } from '../lib/store';
 import { useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability } from '../lib/types';
 import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
-import { planTemplate, planToday, PLAN_DAYS, personalTarget } from '../engine/planner';
+import { planTemplate, planToday, PLAN_DAYS, personalTarget, TEMPLATE_SHORT, TEMPLATES } from '../engine/planner';
 import { MUSCLES } from '../lib/muscles';
 import type { MuscleId } from '../lib/types';
 import { useMuscleStates } from '../lib/hooks';
@@ -159,16 +159,24 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
                   )}
                 />
               )}
-              {planned && !done && (
-                <span
-                  className={cn(
-                    'absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full px-1.5 text-[8.5px] font-bold uppercase leading-[14px]',
-                    planned.tentative ? 'bg-rec-yellow text-bg' : 'bg-accent text-bg',
-                  )}
-                >
-                  Plan
-                </span>
-              )}
+              {(() => {
+                // Tages-Plan als Etikett: erledigt/laufend → tatsächliches Training, sonst geplanter Split
+                const real = s.sessions.find((x) => x.date === d && (x.status === 'active' || x.status === 'done'));
+                const tid = (real?.split ?? (done ? undefined : planned?.templateId)) as keyof typeof TEMPLATE_SHORT | undefined;
+                const txt = tid && tid in TEMPLATE_SHORT ? TEMPLATE_SHORT[tid] : real ? real.title.split(' (')[0] : null;
+                if (!txt) return null;
+                return (
+                  <span
+                    title={tid && tid in TEMPLATES ? TEMPLATES[tid].label : txt}
+                    className={cn(
+                      'absolute -top-2 left-1/2 max-w-[calc(100%+10px)] -translate-x-1/2 truncate whitespace-nowrap rounded-full px-1.5 text-[9px] font-bold leading-[15px]',
+                      real ? 'bg-fg text-bg' : planned?.tentative ? 'bg-rec-yellow text-bg' : 'bg-accent text-bg',
+                    )}
+                  >
+                    {txt}
+                  </span>
+                );
+              })()}
             </button>
           );
         })}
@@ -287,15 +295,15 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                     key={e.uid}
                     className={cn(
                       'flex items-center gap-3 rounded-2xl px-2 py-1.5 transition',
-                      cur && 'bg-rec-green/[0.08] shadow-[0_0_0_1px_rgb(var(--rec-green)/0.45),0_0_22px_rgb(var(--rec-green)/0.25)]',
+                      cur && 'bg-white/[0.06] shadow-[0_0_0_1px_rgba(255,255,255,0.55),0_0_22px_rgba(255,255,255,0.22)]',
                       e.skipped && 'opacity-40',
                     )}
                   >
                     <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={40} />
                     <span className={cn('min-w-0 flex-1 truncate text-[14px]', cur ? 'font-semibold' : fin ? 'text-muted line-through decoration-muted/50' : '')}>{ex.name}</span>
                     {cur ? (
-                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase text-rec-green">
-                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rec-green" /> Jetzt
+                      <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase text-white">
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.9)]" /> Jetzt
                       </span>
                     ) : (
                       <span className={cn('tnum shrink-0 text-[12px]', fin ? 'text-rec-green' : 'text-muted')}>{fin ? '✓' : `${d}/${e.sets.length}`}</span>

@@ -22,6 +22,22 @@ export type TemplateId =
   | 'pullLegs'
   | 'arms';
 
+/** Kurzname für die Tages-Pills (passt in ~45 px) */
+export const TEMPLATE_SHORT: Record<TemplateId, string> = {
+  full: 'Ganzk.',
+  fbA: 'Ganzk. A',
+  fbB: 'Ganzk. B',
+  fbC: 'Ganzk. C',
+  push: 'Push',
+  pull: 'Pull',
+  legsPlus: 'Legs+',
+  upper: 'Oberk.',
+  lowerPlus: 'Unterk.+',
+  pushLegs: 'Push+B',
+  pullLegs: 'Pull+B',
+  arms: 'Arme',
+};
+
 type Mask = Partial<Record<MuscleId, number>>;
 
 const ALL: Mask = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 1])) as Mask;

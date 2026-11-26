@@ -412,7 +412,7 @@ function ExerciseCard({
         'scroll-mt-24 p-0 transition-shadow sm:p-0',
         se.skipped && 'opacity-50',
         open && !isCurrent && 'ring-1 ring-line/10',
-        isCurrent && 'border-rec-green/50 shadow-[0_0_0_1px_rgb(var(--rec-green)/0.35),0_0_24px_rgb(var(--rec-green)/0.28)]',
+        isCurrent && 'border-white/50 shadow-[0_0_0_1px_rgba(255,255,255,0.4),0_0_24px_rgba(255,255,255,0.2)]',
       )}
     >
       <button onClick={onToggle} className="flex w-full items-center gap-3 p-4 text-left">
@@ -431,8 +431,8 @@ function ExerciseCard({
           <div className="flex items-center gap-2">
             <span className="truncate text-[15px] font-semibold">{ex.name}</span>
             {isCurrent && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-rec-green/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-rec-green">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rec-green shadow-[0_0_6px_rgb(var(--rec-green))]" /> Jetzt
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-white">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.9)]" /> Jetzt
               </span>
             )}
             {se.superset && <Badge tone="accent">{se.superset}</Badge>}
