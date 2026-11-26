@@ -8,6 +8,7 @@ import { DEFAULT_PRIORITIES } from './muscles';
 import { addDays, dateKey, endOfWeek, uid } from './utils';
 import { optimalSetsFor, type PlannedSession } from '../engine/planner';
 import { calibrateTime, computeVolumeAdjust } from '../engine/adapt';
+import { adviseExercise } from '../engine/progression';
 
 const DATA_VERSION = 3;
 /** Pausenzeiten vor Version 2 – werden nur ersetzt, wenn sie unverändert vom Standard sind */
@@ -297,17 +298,22 @@ export const useStore = create<Store>()(
         addExerciseToSession: (sid, exercise, afterUid) =>
           {
             const opt = optimalSetsFor(get() as unknown as AppData, exercise, sid);
+            // Gewicht vom letzten Mal (bzw. empfohlene Steigerung) direkt eintragen
+            const adv = adviseExercise(exercise, get().sessions.filter((x) => x.id !== sid), { settings: get().settings, checkIns: get().checkIns });
             mutSession(sid, (s) => {
             const se: SessionExercise = {
               uid: uid(),
               exerciseId: exercise.id,
-              sets: emptySets(opt.sets, null, Math.round((exercise.repMin + exercise.repMax) / 2), exercise.targetRir),
+              sets: emptySets(opt.sets, adv.weight, adv.repTarget, exercise.targetRir),
               setsReason: opt.reason,
+              adviceText: adv.text,
+              adviceType: adv.type,
+              lastWeight: adv.lastWeight,
               repMin: exercise.repMin,
               repMax: exercise.repMax,
               targetRir: exercise.targetRir,
               restSec: exercise.restSec,
-              recWeight: null,
+              recWeight: adv.weight,
               skipped: false,
               note: '',
               reason: 'Manuell hinzugefügt',
@@ -317,19 +323,27 @@ export const useStore = create<Store>()(
             else s.exercises.push(se);
           });
           },
-        swapExercise: (sid, xu, exercise) =>
+        swapExercise: (sid, xu, exercise) => {
+          const adv = adviseExercise(exercise, get().sessions.filter((x) => x.id !== sid), { settings: get().settings, checkIns: get().checkIns });
           mutSession(sid, (s) => {
             const se = s.exercises.find((e) => e.uid === xu);
             if (!se) return;
             se.exerciseId = exercise.id;
             se.repMin = exercise.repMin;
             se.repMax = exercise.repMax;
+            se.targetRir = exercise.targetRir;
             se.restSec = exercise.restSec;
-            se.recWeight = null;
-            se.adviceText = undefined;
+            se.recWeight = adv.weight;
+            se.adviceText = adv.text;
+            se.adviceType = adv.type;
+            se.lastWeight = adv.lastWeight;
+            se.decision = undefined;
+            se.why = undefined;
             se.reason = 'Ausgetauscht';
-            se.sets = se.sets.map((x) => (x.done ? x : { ...x, weight: null }));
-          }),
+            // offene Sätze mit dem Gewicht vom letzten Mal (bzw. Empfehlung) und Ziel-Wiederholungen füllen
+            se.sets = se.sets.map((x) => (x.done ? x : { ...x, weight: adv.weight, reps: adv.repTarget, rir: exercise.targetRir }));
+          });
+        },
         moveExercise: (sid, xu, dir) =>
           mutSession(sid, (s) => {
             const i = s.exercises.findIndex((e) => e.uid === xu);
