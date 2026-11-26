@@ -98,3 +98,10 @@ if (typeof window !== 'undefined') {
 
 // ───── Globale Suche ─────
 export const useSearch = create<{ open: boolean; set: (v: boolean) => void }>((set) => ({ open: false, set: (v) => set({ open: v }) }));
+
+// ───── Fokus-Modus anfordern (z. B. durch Tippen auf den Pausen-Timer) ─────
+export const useFocusRequest = create<{ pending: boolean; request: () => void; consume: () => void }>((set) => ({
+  pending: false,
+  request: () => set({ pending: true }),
+  consume: () => set({ pending: false }),
+}));

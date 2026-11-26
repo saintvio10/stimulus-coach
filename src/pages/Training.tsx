@@ -22,7 +22,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { useNow, useRouter, useToast } from '../lib/hooks';
+import { useFocusRequest, useNow, useRouter, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
@@ -125,6 +125,14 @@ function Workout({ session }: { session: Session }) {
   const [discard, setDiscard] = useState(false);
   const [summary, setSummary] = useState<{ session: Session; prs: string[] } | null>(null);
   const [focusUid, setFocusUid] = useState<string | null>(null);
+  // Tippen auf den Pausen-Timer → Fokus-Modus der aktuellen Übung
+  const focusPending = useFocusRequest((f) => f.pending);
+  useEffect(() => {
+    if (!focusPending) return;
+    useFocusRequest.getState().consume();
+    const cur = session.exercises.find((e) => !e.skipped && e.sets.some((x) => !x.done)) ?? session.exercises.find((e) => !e.skipped);
+    if (cur) setFocusUid(cur.uid);
+  }, [focusPending, session.exercises]);
 
   useEffect(() => {
     if (!openUid) return;

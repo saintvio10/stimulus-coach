@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Minus, Plus, TimerReset, X } from 'lucide-react';
+import { Maximize2, Minus, Plus, TimerReset, X } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { fmtClock } from '../lib/utils';
+import { useFocusRequest, useRouter } from '../lib/hooks';
 
 let audioCtx: AudioContext | null = null;
 export function unlockAudio() {
@@ -62,6 +63,14 @@ export function RestTimer() {
   const settings = useStore((s) => s.settings);
   const stop = useStore((s) => s.stopTimer);
   const adjust = useStore((s) => s.adjustTimer);
+  const hasActive = useStore((s) => s.sessions.some((x) => x.status === 'active'));
+  const go = useRouter((r) => r.go);
+  const requestFocus = useFocusRequest((f) => f.request);
+  const openFocus = () => {
+    if (!hasActive) return;
+    if (useRouter.getState().route !== 'training') go('training');
+    requestFocus();
+  };
   const [now, setNow] = useState(Date.now());
   const fired = useRef<number | null>(null);
 
@@ -103,11 +112,19 @@ export function RestTimer() {
           <div className="h-full bg-accent transition-[width] duration-300" style={{ width: `${frac * 100}%` }} />
         </div>
         <div className="flex items-center gap-3 px-4 py-3">
+          <button
+            type="button"
+            onClick={openFocus}
+            aria-label="Fokus-Modus der aktuellen Übung öffnen"
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          >
           <TimerReset size={18} className={done ? 'text-rec-green' : 'text-accent'} />
           <div className="min-w-0 flex-1">
             <div className="tnum text-[22px] font-semibold leading-none">{done ? 'Los geht’s' : fmtClock(left)}{timer.pausedLeft != null && <span className="ml-2 text-[12px] font-medium text-muted">pausiert</span>}</div>
             <div className="mt-1 truncate text-[12px] text-muted">{done ? `Nächster Satz: ${timer.label}` : `Satzpause · ${timer.label}`}</div>
           </div>
+          {hasActive && <Maximize2 size={15} className="shrink-0 text-muted" />}
+          </button>
           {!done && (
             <>
               <button className="grid h-9 w-9 place-items-center rounded-full bg-bg/60 text-muted hover:text-fg" onClick={() => adjust(-15)} aria-label="15 Sekunden weniger">
