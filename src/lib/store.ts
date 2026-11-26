@@ -9,9 +9,11 @@ import { addDays, dateKey, endOfWeek, uid } from './utils';
 import { optimalSetsFor, type PlannedSession } from '../engine/planner';
 import { calibrateTime, computeVolumeAdjust } from '../engine/adapt';
 
-const DATA_VERSION = 2;
+const DATA_VERSION = 3;
 /** Pausenzeiten vor Version 2 – werden nur ersetzt, wenn sie unverändert vom Standard sind */
-const OLD_REST: Record<string, number> = {"pushdown": 75, "dip-machine": 120, "incline-press": 150, "chest-press": 150, "butterfly": 90, "lat-pulldown": 120, "chest-supported-row": 120, "cable-row": 120, "cable-lateral": 75, "db-lateral": 75, "reverse-cable-fly": 75, "seated-leg-curl": 90, "leg-extension": 90, "calf-raise": 60, "cable-crunch": 60, "ab-machine": 60, "reverse-butterfly": 75};
+/** Standard-Pausenzeiten früherer Versionen – nur unveränderte Werte werden auf den neuen Standard gesetzt */
+const REST_V1: Record<string, number> = {"preacher-curl": 90, "hammer-curl": 90, "bayesian-curl": 90, "db-curl": 90, "overhead-ext": 90, "pushdown": 75, "dip-machine": 120, "incline-press": 150, "chest-press": 150, "butterfly": 90, "lat-pulldown": 120, "chest-supported-row": 120, "cable-row": 120, "cable-lateral": 75, "db-lateral": 75, "reverse-cable-fly": 75, "shoulder-press": 150, "leg-press": 180, "seated-leg-curl": 90, "leg-extension": 90, "rdl": 180, "calf-raise": 60, "cable-crunch": 60, "ab-machine": 60, "reverse-butterfly": 75};
+const REST_V2: Record<string, number> = {"preacher-curl": 90, "hammer-curl": 90, "bayesian-curl": 90, "db-curl": 90, "overhead-ext": 90, "pushdown": 90, "dip-machine": 150, "incline-press": 180, "chest-press": 180, "butterfly": 120, "lat-pulldown": 150, "chest-supported-row": 150, "cable-row": 150, "cable-lateral": 90, "db-lateral": 90, "reverse-cable-fly": 90, "shoulder-press": 150, "leg-press": 180, "seated-leg-curl": 120, "leg-extension": 120, "rdl": 180, "calf-raise": 90, "cable-crunch": 75, "ab-machine": 75, "reverse-butterfly": 90};
 
 export function defaultData(): AppData {
   return {
@@ -31,7 +33,7 @@ export function defaultData(): AppData {
       sessionsPerWeek: 2,
       maxSessionsPerWeek: 4,
       maxConsecutive: 3,
-      defaultMinutes: 75,
+      defaultMinutes: 90,
       orderMode: 'priority',
       autoSuperset: true,
       dumbbellWeights: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42.5, 45, 47.5, 50],
@@ -128,11 +130,16 @@ export function migrate(raw: Partial<AppData>): AppData {
     version: DATA_VERSION,
   };
   if (!d.profile.name) d.profile.name = 'Dominic';
-  // Migration v2: neue, studienbasierte Pausenzeiten für unveränderte Standardübungen
-  if ((raw.version ?? 1) < 2) {
+  // Migration v3: studienbasierte Pausenzeiten (Mehrgelenk 3 min, Isolation 2 min, kleine Muskeln 90 s)
+  // für alle Standardübungen, deren Pause noch dem alten Standard entspricht (selbst geänderte bleiben)
+  const fromVersion = raw.version ?? 1;
+  if (fromVersion < 3 && raw.settings?.defaultMinutes === 75) d.settings.defaultMinutes = 90;
+  if (fromVersion < 3) {
     d.exercises = d.exercises.map((x) => {
       const def = DEFAULT_EXERCISES.find((e) => e.id === x.id);
-      return def && !x.custom && OLD_REST[x.id] === x.restSec ? { ...x, restSec: def.restSec } : x;
+      if (!def || x.custom) return x;
+      const untouched = (fromVersion < 2 && REST_V1[x.id] === x.restSec) || REST_V2[x.id] === x.restSec;
+      return untouched ? { ...x, restSec: def.restSec } : x;
     });
   }
   // Bestehende Nutzer nicht erneut durch das Onboarding schicken

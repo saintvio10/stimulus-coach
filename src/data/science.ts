@@ -78,10 +78,14 @@ export const TOPICS: Topic[] = [
     title: 'Satzpausen',
     evidence: 'moderat belegt',
     finding:
-      'Pausen über 60 Sekunden zeigen einen kleinen Vorteil für Hypertrophie, vermutlich weil mehr Wiederholungen möglich sind. Jenseits von ~90 Sekunden waren in der Bayes-Meta-Analyse keine nennenswerten Unterschiede mehr erkennbar – die Unsicherheit ist allerdings groß.',
-    practice: 'Isolation ca. 90–120 s, schwere Mehrgelenksübungen 2–3 min. Lieber so lange pausieren, dass die Leistung im nächsten Satz nicht stark einbricht – zu kurze Pausen kosten Wiederholungen und damit Reiz.',
-    app: 'Pausen je Übung: Isolation 90–120 s (Bauch 75 s), Mehrgelenksübungen 150–180 s – also überall über der 60–90-s-Schwelle. Autoreguliert: +30 s nach einem Satz bis Versagen und +30 s, wenn die Wiederholungen schon ≥ 3 unter dem ersten Satz liegen. Im Timer mit ±15 s anpassbar; die Zeitplanung rechnet mit diesen Pausen. Nur im Zeitmodus (≤ 50 min) werden Antagonisten als Supersatz gepaart.',
-    refs: [{ label: 'Singer et al. (2024), Front Sports Act Living – „Give it a rest“', url: 'https://www.frontiersin.org/articles/10.3389/fspor.2024.1429789/full' }],
+      'In einer Studie mit trainierten Männern (8 Wochen, Ganzkörpertraining mit Grundübungen) brachten 3 Minuten Pause mehr Muskel- und Kraftzuwachs als 1 Minute (Schoenfeld 2016). Eine Bayes-Meta-Analyse über 9 Studien fand einen kleinen Vorteil für Pausen über 60 s; über ~90 s waren Unterschiede nicht mehr sicher erkennbar, die Schätzungen für Arme und Beine tendierten aber weiter zu längeren Pausen (Singer 2024). Der wahrscheinliche Mechanismus: Mit längerer Pause schafft man in den Folgesätzen mehr Wiederholungen – das Trainingsvolumen zählt (Longo 2022).',
+    practice: 'Mehrgelenksübungen ca. 3 min, Isolationsübungen ca. 2 min, kleine, wenig ermüdende Muskeln (seitliche/hintere Schulter, Waden, Bauch) ca. 90 s. Faustregel: so lange, bis du im nächsten Satz annähernd dieselben Wiederholungen schaffst.',
+    app: 'Mehrgelenk 180 s, Isolation 120 s, kleine Muskeln 90 s. Autoreguliert +30 s nach Satz bis Versagen und +30 s, wenn die Wiederholungen ≥ 3 unter dem ersten Satz liegen. Beim Wechsel zur nächsten Übung mindestens 2 min (bzw. die Pause der nächsten Übung, z. B. 3 min vor einer Presse). Nur im Zeitmodus (≤ 50 min) werden Antagonisten als Supersatz gepaart. Die Zeitplanung rechnet mit diesen Pausen.',
+    refs: [
+      { label: 'Schoenfeld et al. (2016), J Strength Cond Res – 3 min vs. 1 min Pause bei Trainierten', url: 'https://pubmed.ncbi.nlm.nih.gov/26605807/' },
+      { label: 'Singer et al. (2024), Front Sports Act Living – „Give it a rest“, Bayes-Meta-Analyse', url: 'https://www.frontiersin.org/articles/10.3389/fspor.2024.1429789/full' },
+      { label: 'Longo et al. (2022), J Strength Cond Res – Volumenlast statt Pausenlänge entscheidend', url: 'https://pubmed.ncbi.nlm.nih.gov/35622106/' },
+    ],
   },
   {
     id: 'stretch',

@@ -20,3 +20,8 @@ export function restAfterSet(se: SessionExercise, reps: number | null, rir: numb
   }
   return { sec, note: notes.length ? `+${sec - se.restSec}s (${notes.join(', ')})` : null };
 }
+
+/** Pause beim Wechsel zur nächsten Übung: mindestens 2 min und mindestens so lang wie die Pause der nächsten Übung */
+export function transitionRest(currentRestSec: number, nextRestSec: number | undefined): number {
+  return Math.max(120, currentRestSec, nextRestSec ?? 0);
+}

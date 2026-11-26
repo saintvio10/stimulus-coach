@@ -23,7 +23,7 @@ import { useNow, useRouter, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
-import { restAfterSet } from '../engine/rest';
+import { restAfterSet, transitionRest } from '../engine/rest';
 import { detectPRs, sessionSets, sessionVolume } from '../engine/stats';
 import { Badge, Button, Card, Confirm, GlowProgress, Input, PageHeader, Sheet } from '../components/ui';
 import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Coach';
@@ -351,7 +351,11 @@ function ExerciseCard({
     if (partner && partner.sets.some((x) => !x.done)) {
       s.startTimer(20, `Wechsel: ${s.exercises.find((e) => e.id === partner.exerciseId)?.name ?? 'Partnerübung'}`);
     } else {
-      s.startTimer(rest.sec, `${isLast ? 'nächste Übung' : `${ex.name} · Satz ${idx + 2}`}${rest.note ? ` · ${rest.note}` : ''}`);
+      if (isLast) {
+        const nextSe = session.exercises.slice(session.exercises.indexOf(se) + 1).find((e) => !e.skipped && e.sets.some((x) => !x.done));
+        const nextEx = nextSe ? s.exercises.find((e) => e.id === nextSe.exerciseId) : undefined;
+        if (nextSe && nextEx) s.startTimer(Math.max(rest.sec, transitionRest(se.restSec, nextSe.restSec)), `Wechsel zu ${nextEx.name}`);
+      } else s.startTimer(rest.sec, `${ex.name} · Satz ${idx + 2}${rest.note ? ` · ${rest.note}` : ''}`);
     }
     if (isLast && !partner) setTimeout(onNext, 300);
   };
