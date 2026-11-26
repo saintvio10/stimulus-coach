@@ -35,12 +35,14 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const [w, setW] = useState<number | null>(null);
   const [noWeight, setNoWeight] = useState(false);
   const [reps, setReps] = useState<number>(10);
+  const [repsR, setRepsR] = useState<number>(10);
   const [rir, setRir] = useState<number>(1);
   useEffect(() => {
     if (!se) return;
     const lastDone = [...se.sets].reverse().find((x) => x.done);
     setW(cur?.weight ?? lastDone?.weight ?? rec ?? null);
-    setReps(cur?.reps ?? advice?.repTarget ?? se.repMin);
+    setReps(cur?.repsL ?? cur?.reps ?? advice?.repTarget ?? se.repMin);
+    setRepsR(cur?.repsR ?? cur?.reps ?? advice?.repTarget ?? se.repMin);
     setRir(cur?.rir ?? se.targetRir);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [se?.uid, setIndex]);
@@ -82,13 +84,15 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
       setNoWeight(true);
       return;
     }
-    if (!(reps > 0)) return;
+    const uni = !!ex.unilateral;
+    if (!(reps > 0) || (uni && !(repsR > 0))) return;
+    const effReps = uni ? Math.min(reps, repsR) : reps;
     setNoWeight(false);
     unlockAudio();
     s.setWeightFrom(session.id, se.uid, cur.id, w);
-    s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps, rir, failure: rir === 0 ? cur.failure : false });
+    s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps: effReps, ...(uni ? { repsL: reps, repsR } : {}), rir, failure: rir === 0 ? cur.failure : false });
     const last = setIndex === se.sets.length - 1;
-    const rest = restAfterSet(se, reps, rir, rir === 0);
+    const rest = restAfterSet(se, effReps, rir, rir === 0);
     if (last) {
       const nextSe = list[idx + 1];
       const nextEx = nextSe ? s.exercises.find((e) => e.id === nextSe.exerciseId) : undefined;
@@ -183,10 +187,21 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
         {/* Satz erfassen */}
         {cur ? (
           <div className="flex flex-col gap-3 rounded-[24px] bg-white/[0.06] p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Stepper label="Gewicht" value={w == null ? '–' : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
-              <Stepper label="Wiederholungen" value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
-            </div>
+            {ex.unilateral ? (
+              <>
+                <Stepper label="Gewicht" value={w == null ? '–' : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
+                <div className="grid grid-cols-2 gap-3">
+                  <Stepper label="Links · Wdh." value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
+                  <Stepper label="Rechts · Wdh." value={String(repsR)} onMinus={() => setRepsR(Math.max(0, repsR - 1))} onPlus={() => setRepsR(repsR + 1)} />
+                </div>
+                <p className="-mt-1 text-center text-[11.5px] text-white/45">Erst der schwächere Arm, dann der andere mit gleich vielen Wdh.</p>
+              </>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <Stepper label="Gewicht" value={w == null ? '–' : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
+                <Stepper label="Wiederholungen" value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
+              </div>
+            )}
             <div className="flex items-center gap-2">
               <span className="w-10 text-[11px] font-semibold uppercase tracking-wider text-white/45">RIR</span>
               <div className="grid flex-1 grid-cols-5 gap-1">

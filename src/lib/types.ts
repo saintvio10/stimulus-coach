@@ -48,6 +48,8 @@ export interface Exercise {
   /** Muskelbeitrag pro Satz: 1 = direkt, 0.5 = indirekt (fraktionale Zählung) */
   muscles: Partial<Record<MuscleId, number>>;
   primary: MuscleId;
+  /** Arme einzeln erfassen (z. B. Seitheben): Wdh. für links und rechts */
+  unilateral?: boolean;
   equipment: Equipment;
   pattern: AnimPattern;
   compound: boolean;
@@ -81,6 +83,9 @@ export interface SetLog {
   failure: boolean;
   done: boolean;
   note: string;
+  /** nur bei einseitigen Übungen: Wdh. links / rechts (reps = schwächere Seite) */
+  repsL?: number | null;
+  repsR?: number | null;
 }
 
 export type AdviceType = 'new' | 'increase' | 'extend' | 'hold' | 'decrease' | 'deload';

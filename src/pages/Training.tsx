@@ -363,13 +363,17 @@ function ExerciseCard({
       setTimeout(() => document.getElementById(`w-${setId}`)?.focus(), 50);
       return;
     }
-    if (st.reps != null && !(st.reps > 0)) {
-      toast('Bitte die Wiederholungen eintragen');
+    const uni = !!ex.unilateral;
+    const repL = uni ? st.repsL ?? st.reps : st.reps;
+    const repR = uni ? st.repsR ?? st.reps : st.reps;
+    if ((repL != null && !(repL > 0)) || (repR != null && !(repR > 0))) {
+      toast(uni ? 'Bitte die Wiederholungen für beide Arme eintragen' : 'Bitte die Wiederholungen eintragen');
       setTimeout(() => document.getElementById(`r-${setId}`)?.focus(), 50);
       return;
     }
     setMissing(null);
-    const doneReps = st.reps ?? advice.repTarget;
+    // Einseitig: für Fortschritt & Progression zählt der schwächere Arm
+    const doneReps = uni ? Math.min(repL ?? advice.repTarget, repR ?? advice.repTarget) : st.reps ?? advice.repTarget;
     const doneRir = st.rir ?? se.targetRir;
     const rest = restAfterSet(se, doneReps, doneRir, st.failure);
     s.updateSet(session.id, se.uid, setId, {
@@ -377,6 +381,7 @@ function ExerciseCard({
       weight,
       reps: doneReps,
       rir: doneRir,
+      ...(uni ? { repsL: repL ?? advice.repTarget, repsR: repR ?? advice.repTarget } : {}),
     });
     const isLast = idx === se.sets.length - 1;
     // Supersatz: kurzer Wechsel zur Partnerübung, sonst volle Pause
@@ -575,9 +580,12 @@ function ExerciseCard({
             <div className="grid grid-cols-[1.75rem_1fr_1fr_3.25rem] gap-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">
               <span>#</span>
               <span className="text-center">Gewicht (kg)</span>
-              <span className="text-center">Wdh.</span>
+              <span className="text-center">{ex.unilateral ? 'Wdh. L / R' : 'Wdh.'}</span>
               <span />
             </div>
+            {ex.unilateral && (
+              <p className="-mt-1 px-1 text-[11px] text-muted">Arme einzeln: mit dem schwächeren Arm beginnen, der andere macht gleich viele Wdh. Für den Fortschritt zählt der schwächere Arm.</p>
+            )}
             {se.sets.map((st, i) => {
               const activeSet = !st.done && se.sets.findIndex((x) => !x.done) === i;
               return (
@@ -606,6 +614,32 @@ function ExerciseCard({
                       }}
                       label="Gewicht"
                     />
+                    {ex.unilateral ? (
+                      <div className="flex min-w-0 flex-col gap-1.5">
+                        {(['L', 'R'] as const).map((side) => {
+                          const key = side === 'L' ? 'repsL' : 'repsR';
+                          const otherKey = side === 'L' ? 'repsR' : 'repsL';
+                          const other = st[otherKey] ?? st.reps;
+                          const val = st[key] ?? st.reps;
+                          const set = (v: number | null) =>
+                            s.updateSet(session.id, se.uid, st.id, { [key]: v, [otherKey]: other, reps: v == null ? other : other == null ? v : Math.min(v, other) });
+                          return (
+                            <div key={side} className="relative min-w-0">
+                              <span className="pointer-events-none absolute -left-1 -top-1 z-10 grid h-4 w-4 place-items-center rounded-full bg-accent text-[9px] font-bold text-white">{side}</span>
+                              <NumStepper
+                                id={side === 'L' ? `r-${st.id}` : `rr-${st.id}`}
+                                value={val}
+                                placeholder={String(advice.repTarget)}
+                                disabled={st.done}
+                                onChange={(v) => set(v == null ? null : Math.round(v))}
+                                onStep={(d) => set(Math.max(0, (val ?? advice.repTarget) + d))}
+                                label={side === 'L' ? 'Wiederholungen links' : 'Wiederholungen rechts'}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
                     <NumStepper
                       id={`r-${st.id}`}
                       value={st.reps}
@@ -615,6 +649,7 @@ function ExerciseCard({
                       onStep={(d) => s.updateSet(session.id, se.uid, st.id, { reps: Math.max(0, (st.reps ?? advice.repTarget) + d) })}
                       label="Wiederholungen"
                     />
+                    )}
                     <button
                       aria-label={st.done ? 'Satz zurücksetzen' : 'Satz abschließen'}
                       onClick={() => completeSet(st.id, i)}
@@ -650,7 +685,7 @@ function ExerciseCard({
                   )}
                   {st.done && (
                     <div className="tnum pl-[2.25rem] text-[11.5px] text-muted">
-                      RIR {st.rir ?? '–'}
+                      {ex.unilateral && st.repsL != null && st.repsR != null && `Links ${st.repsL} · Rechts ${st.repsR} · `}RIR {st.rir ?? '–'}
                       {st.failure && ' · Muskelversagen'}
                     </div>
                   )}

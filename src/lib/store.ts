@@ -153,6 +153,11 @@ export function migrate(raw: Partial<AppData>): AppData {
     if (!ex) d.exercises.push({ ...e });
     else if (e.benefit && ex.benefit !== e.benefit && !ex.custom) d.exercises = d.exercises.map((x) => (x.id === e.id ? { ...x, benefit: e.benefit } : x));
   }
+  // Seitheben: Arme einzeln erfassen (einmalig, eigene Einstellung bleibt danach erhalten)
+  d.exercises = d.exercises.map((x) => {
+    const def = DEFAULT_EXERCISES.find((e) => e.id === x.id);
+    return def?.unilateral && x.unilateral === undefined ? { ...x, unilateral: true } : x;
+  });
   return d;
 }
 
@@ -289,7 +294,7 @@ export const useStore = create<Store>()(
             const se = s.exercises.find((e) => e.uid === xu);
             if (!se) return;
             const last = se.sets[se.sets.length - 1];
-            se.sets.push({ id: uid(), weight: last?.weight ?? se.recWeight, reps: last?.reps ?? null, rir: last?.rir ?? se.targetRir, failure: false, done: false, note: '' });
+            se.sets.push({ id: uid(), weight: last?.weight ?? se.recWeight, reps: last?.reps ?? null, repsL: last?.repsL, repsR: last?.repsR, rir: last?.rir ?? se.targetRir, failure: false, done: false, note: '' });
           }),
         removeSet: (sid, xu, setId) =>
           mutSession(sid, (s) => {

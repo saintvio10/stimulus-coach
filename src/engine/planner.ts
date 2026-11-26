@@ -132,7 +132,7 @@ const familyOf = (ex: Exercise) => FAMILY[ex.pattern] ?? ex.pattern;
 const MIN_SET_VALUE = 0.06;
 
 function setMinutes(ex: Exercise, short: boolean): number {
-  const unilateral = ex.pattern === 'bayesian';
+  const unilateral = ex.pattern === 'bayesian' || !!ex.unilateral;
   const work = (ex.compound ? 50 : 40) * (unilateral ? 2 : 1);
   let m = (work + ex.restSec) / 60;
   if (short && !ex.compound && ['biceps', 'triceps', 'sideDelts', 'rearDelts'].includes(ex.primary)) m *= 0.65;

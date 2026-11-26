@@ -388,6 +388,10 @@ function EditSheet({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
           <Input id="ed-note" value={e.note ?? ''} onChange={(x) => setE({ ...e, note: x.target.value || undefined })} />
         </Field>
         <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2.5">
+          <span className="text-[13px]">Arme/Beine einzeln erfassen (Wdh. links & rechts)</span>
+          <Switch id="ed-uni" checked={!!e.unilateral} onChange={(v) => setE({ ...e, unilateral: v })} label="Einzeln erfassen" />
+        </div>
+        <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2.5">
           <span className="text-[13px]">Gesperrt (nie einplanen)</span>
           <Switch id="ed-lock" checked={e.locked} onChange={(v) => setE({ ...e, locked: v })} label="Gesperrt" />
         </div>

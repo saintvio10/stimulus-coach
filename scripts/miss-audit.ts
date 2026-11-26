@@ -49,7 +49,7 @@ function sim(days: number[], spw: number, missRate: number, seed0 = 11) {
       const pi = pending.findIndex((x) => x.id === ex.id);
       if (pi >= 0) { makeup.push(diffDays(day, pending[pi].day)); makeupRec.push(r); pending.splice(pi, 1); }
     }
-    for (const [m, v] of Object.entries(perMuscle)) if (v > MUSCLE[m as keyof typeof MUSCLE].sessionCap + 0.01) { capOver++; if (process.env.V) console.log(`  cap ${day} ${m} ${v.toFixed(2)}/${MUSCLE[m as keyof typeof MUSCLE].sessionCap} :: ${p.exercises.map((x) => x.exerciseId + "×" + x.sets).join(" ")}`); }
+    for (const [m, v] of Object.entries(perMuscle)) if (v > MUSCLE[m as keyof typeof MUSCLE].sessionCap + 0.01) { capOver++; if ((globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.V) console.log(`  cap ${day} ${m} ${v.toFixed(2)}/${MUSCLE[m as keyof typeof MUSCLE].sessionCap} :: ${p.exercises.map((x) => x.exerciseId + "×" + x.sets).join(" ")}`); }
     // Abbruch simulieren: mit Wahrscheinlichkeit missRate werden die letzten 1–2 Übungen entfernt
     const nMiss = rand() < missRate ? (rand() < 0.5 ? 1 : 2) : 0;
     const s: Session = {
