@@ -173,6 +173,17 @@ export interface BodyEntry {
   demo?: boolean;
 }
 
+export interface Activity {
+  id: string;
+  date: string;
+  type: string; // ActivityType
+  minutes?: number;
+  steps?: number;
+  km?: number;
+  intensity: 'light' | 'medium' | 'hard';
+  note?: string;
+}
+
 export interface FoodEntry {
   id: string;
   name: string;
@@ -244,6 +255,8 @@ export interface AppData {
   body: BodyEntry[];
   nutrition: Record<string, NutritionDay>;
   timer: RestTimer | null;
+  /** Aktivitäten außerhalb des Krafttrainings (Ski, Spazieren …) */
+  activities: Activity[];
   /** persönliche, gelernte Volumenanpassung je Muskel */
   volumeAdjust: Partial<Record<MuscleId, VolumeAdjust>>;
   updatedAt: number;

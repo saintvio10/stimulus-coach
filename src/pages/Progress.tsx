@@ -7,6 +7,7 @@ import { Button, Card, Field, Input, PageHeader, SectionTitle, Segmented, Select
 import { RANGE_DAYS, doneSessions, exerciseSeries, inRange, personalRecords, weeklyBuckets, type RangeKey } from '../engine/stats';
 import type { AppData } from '../lib/types';
 import { dateKey, fmtDate, fmtNum, fmtShortDay } from '../lib/utils';
+import { WeightChart, useWeightSeries } from '../components/Extras';
 
 export const axisProps = {
   tick: { fill: 'rgb(var(--muted))', fontSize: 11 },
@@ -50,6 +51,7 @@ export default function ProgressPage() {
   const weeks = useMemo(() => weeklyBuckets(done, range), [done, range]);
   const body = s.body.filter((b) => inRange(b.date, range)).map((b) => ({ ...b, label: fmtDate(b.date) }));
   const prs = useMemo(() => [...personalRecords(s.sessions).values()].sort((a, b) => b.e1rm.value - a.e1rm.value), [s.sessions]);
+  const weightSeries = useWeightSeries(365);
   const [form, setForm] = useState({ date: dateKey(), weight: '', arm: '', chest: '', waist: '' });
   const num = (v: string) => (v === '' ? undefined : Number(v.replace(',', '.')));
 
@@ -148,19 +150,8 @@ export default function ProgressPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <SectionTitle>Körpergewicht</SectionTitle>
-          {body.filter((b) => b.weight).length > 1 ? (
-            <ChartBox>
-              <LineChart data={body.filter((b) => b.weight)} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
-                <CartesianGrid vertical={false} stroke="rgb(var(--line) / 0.06)" />
-                <XAxis dataKey="label" {...axisProps} />
-                <YAxis {...axisProps} domain={['dataMin - 0.5', 'dataMax + 0.5']} tickFormatter={(v) => fmtNum(v, 1)} />
-                <Tooltip content={<ChartTooltip unit=" kg" />} />
-                <Line type="monotone" dataKey="weight" name="Gewicht" stroke={C2} strokeWidth={2} dot={{ r: 2, fill: C2 }} />
-              </LineChart>
-            </ChartBox>
-          ) : (
-            <Empty title="Mindestens zwei Messungen nötig" />
-          )}
+          <WeightChart series={weightSeries} height={220} />
+          <p className="mt-2 text-[11.5px] text-muted">Punkte = einzelne Messungen · Linie = Ø 7 Tage</p>
         </Card>
         <Card>
           <SectionTitle>Umfänge (cm)</SectionTitle>

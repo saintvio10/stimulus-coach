@@ -2,6 +2,7 @@ import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL } from '.
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
 import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent } from './fatigue';
+import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
 import { adviseExercise } from './progression';
 import { readinessAdjust, readinessScore } from './readiness';
 
@@ -419,7 +420,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
       if (sc.neglect > 0.2) bits.push('Ausgleich: länger kein direkter Reiz');
       reason = bits.join(' · ');
     } else if (sc.rec < 0.35) {
-      reason = `Noch ermüdet (Erholung ~${st.recovery} %${st.lastAny ? `, letzter Reiz vor ${Math.round((at - st.lastAny) / HOUR)} h` : ''}) – voraussichtlich bereit ${relDayLabel(dateKey(st.readyAt))}.`;
+      const act = (data.activities ?? []).filter((a) => at - parseKey(a.date).getTime() < 48 * HOUR && at >= parseKey(a.date).getTime() && (activityMuscles(a)[m] ?? 0) >= 0.5);
+      reason = `Noch ermüdet (Erholung ~${st.recovery} %${act.length ? `, u. a. durch ${act.map((a) => ACTIVITY_TYPES[a.type as keyof typeof ACTIVITY_TYPES]?.label ?? a.type).join(', ')}` : st.lastAny ? `, letzter Reiz vor ${Math.round((at - st.lastAny) / HOUR)} h` : ''}) – voraussichtlich bereit ${relDayLabel(dateKey(st.readyAt))}.`;
     } else if ((tpl.mask[m] ?? 0) === 0) {
       reason = `Nicht Teil von „${tpl.label}“${nextLabel ? ` – nächste Gelegenheit: ${nextLabel}` : ''}.`;
     } else if (st.vol7 >= sc.target) {
@@ -605,7 +607,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   const restDays: { date: string; reason: string }[] = [];
   if (!opts.forceToday && !uncertain && dates.length > 1) {
     const maxCons = Math.max(2, data.settings.maxConsecutive || 3);
-    const doneDates = new Set(doneSessions.map((s) => s.date));
+    const doneDates = new Set([...doneSessions.map((s) => s.date), ...(data.activities ?? []).filter((a) => activityLoad(a) >= 4).map((a) => a.date)]);
     // bereits trainierte Tage im rollierenden Fenster (letzte 6 Tage vor start)
     const recentDone = Array.from({ length: 6 }, (_, i) => addDays(start, -(i + 1))).filter((d) => doneDates.has(d));
     const cap = Math.max(1, (data.settings.maxSessionsPerWeek || 4) - Math.max(0, recentDone.length - 2));
@@ -672,7 +674,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   // Ziele an realistische Frequenz koppeln
   const spw = clamp(opts.forceToday ? data.settings.sessionsPerWeek : dates.length || data.settings.sessionsPerWeek, 1, 3);
 
-  let events = eventsFromSessions(doneSessions.concat(data.sessions.filter((s) => s.status === 'active')), data.exercises);
+  let events = allEvents(data);
   const exById = new Map(data.exercises.map((e) => [e.id, e]));
   const sessions: PlannedSession[] = [];
   // Letztes echtes Training (≤ 3 Tage) zählt für die Split-Rotation mit, damit nicht dauernd derselbe Split kommt
@@ -757,7 +759,7 @@ export const _internal = { endOfWeek };
 
 /** Plan für eine bestimmte Vorlage heute (Schnellstart) – nutzt dieselbe Bewertungslogik */
 export function planTemplate(data: AppData, templateId: TemplateId, minutes: number, now = Date.now()): PlannedSession {
-  const events = eventsFromSessions(data.sessions.filter((s) => s.status === 'done' || s.status === 'active'), data.exercises);
+  const events = allEvents(data);
   const s = buildSession({
     date: dateKey(now),
     at: now,
@@ -779,7 +781,7 @@ export function planTemplate(data: AppData, templateId: TemplateId, minutes: num
  */
 export function optimalSetsFor(data: AppData, ex: Exercise, sessionId?: string): { sets: number; reason: string } {
   const now = Date.now();
-  const events = eventsFromSessions(data.sessions.filter((s) => s.status === 'done' || s.status === 'active'), data.exercises);
+  const events = allEvents(data);
   const st = computeAllStates(events, now, data.checkIns)[ex.primary];
   const target = personalTarget(data, ex.primary, data.settings.sessionsPerWeek);
   // bereits in dieser Einheit eingeplante (noch offene) Sätze für den Zielmuskel

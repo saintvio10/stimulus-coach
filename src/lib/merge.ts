@@ -97,6 +97,8 @@ export function mergeData(local: AppData, incoming: AppData): { data: AppData; r
       report.nutritionDays++;
     }
   for (const [k, v] of Object.entries(incoming.availability ?? {})) if (!d.availability[k]) d.availability[k] = v;
+  d.activities ??= [];
+  for (const a of incoming.activities ?? []) if (!d.activities.some((x) => x.id === a.id)) d.activities.push(a);
 
   d.updatedAt = Date.now();
   return { data: d, report };

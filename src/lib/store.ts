@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
 import { produce } from 'immer';
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
-import type { AppData, Availability, BodyEntry, CheckIn, Exercise, FoodEntry, Session, SessionExercise, SetLog } from './types';
+import type { Activity, AppData, Availability, BodyEntry, CheckIn, Exercise, FoodEntry, Session, SessionExercise, SetLog } from './types';
 import { DEFAULT_EXERCISES } from '../data/exercises';
 import { DEFAULT_PRIORITIES } from './muscles';
 import { addDays, dateKey, endOfWeek, uid } from './utils';
@@ -61,6 +61,7 @@ export function defaultData(): AppData {
     nutrition: {},
     timer: null,
     volumeAdjust: {},
+    activities: [],
     updatedAt: Date.now(),
   };
 }
@@ -128,6 +129,7 @@ export function migrate(raw: Partial<AppData>): AppData {
     body: raw.body ?? def.body,
     nutrition: raw.nutrition ?? {},
     volumeAdjust: raw.volumeAdjust ?? {},
+    activities: raw.activities ?? [],
     version: DATA_VERSION,
   };
   if (!d.profile.name) d.profile.name = 'Dominic';
@@ -181,6 +183,8 @@ interface Store extends AppData {
   saveCheckIn: (date: string, c: CheckIn) => void;
   addBody: (e: Omit<BodyEntry, 'id'>) => void;
   removeBody: (id: string) => void;
+  addActivity: (a: Omit<Activity, 'id'>) => void;
+  removeActivity: (id: string) => void;
   addFood: (date: string, f: Omit<FoodEntry, 'id'>) => void;
   removeFood: (date: string, id: string) => void;
   setCreatine: (date: string, v: boolean) => void;
@@ -403,6 +407,15 @@ export const useStore = create<Store>()(
         removeBody: (id) =>
           mutate((d) => {
             d.body = d.body.filter((b) => b.id !== id);
+          }),
+        addActivity: (a) =>
+          mutate((d) => {
+            d.activities.push({ ...a, id: uid() });
+            d.activities.sort((x, y) => (x.date < y.date ? -1 : 1));
+          }),
+        removeActivity: (id) =>
+          mutate((d) => {
+            d.activities = d.activities.filter((x) => x.id !== id);
           }),
         addFood: (date, f) =>
           mutate((d) => {

@@ -11,6 +11,7 @@ import { avgDurationMin, doneSessions, exerciseSeries, personalRecords, sessionS
 import { cn, dateKey, fmtDuration, fmtNum, fmtShortDay, parseKey, relDayLabel, WEEKDAYS_LONG, MONTHS, DAY } from '../lib/utils';
 import type { AppData } from '../lib/types';
 import { planToday, personalTarget } from '../engine/planner';
+import { QuickLog } from '../components/Extras';
 
 export default function Dashboard() {
   const s = useStore();
@@ -69,6 +70,7 @@ export default function Dashboard() {
       <div className="flex flex-col gap-3">
         <DayPicker plan={plan} selected={day} onSelect={setDay} />
         <MoreAvailability />
+        <QuickLog />
       </div>
       <SwipeDays plan={plan} day={day} onDay={setDay} />
       <UpcomingDays plan={plan} />

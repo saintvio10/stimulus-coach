@@ -3,7 +3,8 @@ import { create } from 'zustand';
 import { useStore } from './store';
 import type { AppData } from './types';
 import { buildPlan } from '../engine/planner';
-import { computeAllStates, eventsFromSessions } from '../engine/fatigue';
+import { computeAllStates } from '../engine/fatigue';
+import { allEvents } from '../engine/activities';
 
 export function useData(): AppData {
   const s = useStore();
@@ -31,7 +32,7 @@ export function usePlan() {
   return useMemo(
     () => buildPlan(s as unknown as AppData, Date.now()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns, b],
+    [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns, s.activities, b],
   );
 }
 
@@ -40,13 +41,10 @@ export function useMuscleStates() {
   const now = useNow();
   const b = bucket(now);
   return useMemo(() => {
-    const events = eventsFromSessions(
-      s.sessions.filter((x) => x.status === 'done' || x.status === 'active'),
-      s.exercises,
-    );
+    const events = allEvents(s as unknown as AppData);
     return { events, states: computeAllStates(events, Date.now(), s.checkIns) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [s.sessions, s.exercises, s.checkIns, b]);
+  }, [s.sessions, s.exercises, s.checkIns, s.activities, b]);
 }
 
 // ───── Toast ─────

@@ -8,6 +8,8 @@ import type { Availability, Session } from '../lib/types';
 import { MONTHS, WEEKDAYS_LONG, addDays, cn, dateKey, fmtNum, parseKey, relDayLabel, weekdayOf } from '../lib/utils';
 import { sessionSets, sessionVolume } from '../engine/stats';
 import { ExerciseIcon } from '../components/ExerciseAnimation';
+import { ActivitySheet } from '../components/Extras';
+import { INTENSITY, activityLabel } from '../engine/activities';
 
 export default function CalendarPage() {
   const s = useStore();
@@ -138,7 +140,9 @@ function DaySheet({ day, onClose }: { day: string | null; onClose: () => void })
   const plan = usePlan();
   const toast = useToast((t) => t.show);
   const [del, setDel] = useState<Session | null>(null);
+  const [act, setAct] = useState(false);
   if (!day) return null;
+  const acts = (s.activities ?? []).filter((a) => a.date === day);
   const today = dateKey();
   const sessions = s.sessions.filter((x) => x.date === day && x.status === 'done');
   const planned = plan.sessions.find((x) => x.date === day);
@@ -209,7 +213,26 @@ function DaySheet({ day, onClose }: { day: string | null; onClose: () => void })
           </div>
         ))}
         {!planned && !sessions.length && <p className="text-[13px] text-muted">Kein Training an diesem Tag.</p>}
+        {day <= today && (
+          <div>
+            <div className="label mb-2">Aktivitäten</div>
+            {acts.map((a) => (
+              <div key={a.id} className="mb-1.5 flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-[13px]">
+                <span className="flex-1">
+                  {activityLabel(a)} <span className="text-muted">· {INTENSITY[a.intensity].label}</span>
+                </span>
+                <button aria-label="Aktivität löschen" onClick={() => s.removeActivity(a.id)} className="text-muted hover:text-fg">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+            <Button variant="secondary" size="sm" onClick={() => setAct(true)}>
+              + Aktivität (Ski, Spazieren …)
+            </Button>
+          </div>
+        )}
       </div>
+      <ActivitySheet key={day} open={act} onClose={() => setAct(false)} date={day} />
       <Confirm
         open={!!del}
         onClose={() => setDel(null)}
