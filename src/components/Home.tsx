@@ -1,9 +1,9 @@
 import { useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
-import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { useRouter, useSearch, useToast } from '../lib/hooks';
-import type { AppData, AnimPattern, Availability } from '../lib/types';
+import { useCompletion, useRouter, useSearch, useToast } from '../lib/hooks';
+import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
 import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
 import { planTemplate, planToday, PLAN_DAYS, personalTarget, TEMPLATE_SHORT, TEMPLATES } from '../engine/planner';
 import { MUSCLES } from '../lib/muscles';
@@ -12,7 +12,8 @@ import { useMuscleStates } from '../lib/hooks';
 import { MUSCLE } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
 import { addDays, cn, dateKey, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, WEEKDAYS_LONG, MONTHS } from '../lib/utils';
-import { Badge, Button, Chip, Ring, Sheet } from './ui';
+import { Badge, Button, Chip, GlowProgress, Ring, Sheet } from './ui';
+import { sessionStats, sessionsThisWeek } from '../engine/sessionStats';
 import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
 import { SwipeToStart } from './SwipeToStart';
 import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability } from './Coach';
@@ -317,18 +318,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
             </Button>
           </>
         ) : doneHere.length ? (
-          <>
-            <h2 className="text-[26px] font-semibold leading-tight">{doneHere[0].title} ✓</h2>
-            <p className="text-[13px] text-muted">
-              Erledigt · {sessionSets(doneHere[0])} Sätze{doneHere[0].endedAt ? ` · ${Math.round((doneHere[0].endedAt - doneHere[0].startedAt) / 60000)} min` : ''}. Die
-              nächste Einheit berücksichtigt dieses Training bereits.
-            </p>
-            {nextPlanned && (
-              <Button variant="secondary" onClick={() => onNext(nextPlanned.date)}>
-                Nächste Einheit: {relDayLabel(nextPlanned.date)} <ChevronRight size={15} />
-              </Button>
-            )}
-          </>
+          <DoneToday session={doneHere[doneHere.length - 1]} nextPlanned={nextPlanned} onNext={onNext} />
         ) : planned && !planned.rest ? (
           <>
             <div>
@@ -907,5 +897,93 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
       </div>
       <p className="-mt-2 text-center text-[11px] text-muted">Wischen für die nächsten Tage</p>
     </div>
+  );
+}
+
+/** Erledigtes Training: befriedigende Abschlusskarte mit Ring, Fortschrittsbalken und Kennzahlen */
+function DoneToday({ session, nextPlanned, onNext }: { session: Session; nextPlanned?: { date: string } | null; onNext: (d: string) => void }) {
+  const s = useStore();
+  const openSummary = useCompletion((c) => c.open);
+  const st = useMemo(() => sessionStats(session, s.sessions, s.exercises), [session, s.sessions, s.exercises]);
+  const planned = st.plannedSets && st.plannedSets > 0 ? st.plannedSets : st.sets;
+  const ratio = planned ? Math.min(1, st.sets / planned) : 1;
+  const week = sessionsThisWeek(s.sessions, session.date);
+  const goal = Math.max(1, s.settings.sessionsPerWeek);
+  const R = 30;
+  const C = 2 * Math.PI * R;
+  return (
+    <>
+      <div className="flex items-center gap-4">
+        <div className="relative grid h-[76px] w-[76px] shrink-0 place-items-center">
+          <svg viewBox="0 0 76 76" className="absolute inset-0 -rotate-90 drop-shadow-[0_0_12px_rgba(61,220,151,0.5)]">
+            <circle cx="38" cy="38" r={R} fill="none" stroke="rgb(var(--line) / 0.1)" strokeWidth="7" />
+            <circle cx="38" cy="38" r={R} fill="none" stroke="rgb(var(--rec-green))" strokeWidth="7" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - ratio)} className="transition-[stroke-dashoffset] duration-1000" />
+          </svg>
+          <div className="grid h-9 w-9 place-items-center rounded-full bg-rec-green text-black shadow-[0_0_16px_rgba(61,220,151,0.6)]">
+            <Check size={20} strokeWidth={3} />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="text-[12px] font-bold uppercase tracking-wider text-rec-green">{ratio >= 0.9 ? 'Geschafft' : 'Training beendet'}</div>
+          <h2 className="truncate text-[26px] font-semibold leading-tight">{session.title.split(' (')[0]}</h2>
+          <div className="tnum text-[13px] text-muted">
+            {st.sets}/{planned} Sätze · {Math.round(ratio * 100)} %
+          </div>
+        </div>
+      </div>
+      <GlowProgress value={ratio} height={14} />
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          ['Dauer', `${st.durationMin} min`],
+          ['Volumen', st.volume >= 1000 ? `${fmtNum(st.volume / 1000, 1)} t` : `${Math.round(st.volume)} kg`],
+          ['Pausen', st.restMin != null ? `${Math.round(st.restMin)} min` : `${st.reps} Wdh.`],
+        ].map(([l, v], i) => (
+          <div key={l} className="rounded-2xl bg-fg/[0.05] px-3 py-2.5">
+            <div className="text-[10.5px] font-semibold uppercase tracking-wider text-muted">{i === 2 && st.restMin == null ? 'Wdh.' : l}</div>
+            <div className="tnum mt-0.5 text-[17px] font-semibold">{v}</div>
+          </div>
+        ))}
+      </div>
+      {(st.bestGain || (session.prs?.length ?? 0) > 0) && (
+        <div className="flex items-center gap-2 rounded-2xl bg-rec-green/10 px-3 py-2.5 text-[13px] ring-1 ring-rec-green/20">
+          {(session.prs?.length ?? 0) > 0 ? <Trophy size={15} className="shrink-0 text-rec-yellow" /> : <TrendingUp size={15} className="shrink-0 text-rec-green" />}
+          <span className="min-w-0">
+            {(session.prs?.length ?? 0) > 0
+              ? `${session.prs!.length} neue${session.prs!.length === 1 ? 'r' : ''} Rekord${session.prs!.length === 1 ? '' : 'e'}`
+              : `${st.bestGain!.name} +${fmtNum(st.bestGain!.pct, 1)} % stärker`}
+          </span>
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {st.muscles.slice(0, 6).map((m) => (
+          <span key={m.muscle} className="rounded-full bg-rec-green/12 px-2.5 py-1 text-[11.5px] font-medium text-rec-green">
+            ✓ {MUSCLE[m.muscle].short} <span className="tnum opacity-70">{fmtNum(m.sets)}</span>
+          </span>
+        ))}
+      </div>
+      <div>
+        <div className="mb-1.5 flex justify-between text-[12px] text-muted">
+          <span>Diese Woche</span>
+          <span className="tnum">
+            {week}/{goal} Einheiten
+          </span>
+        </div>
+        <div className="flex gap-1.5">
+          {Array.from({ length: Math.max(goal, week) }, (_, i) => (
+            <span key={i} className={cn('h-2 flex-1 rounded-full', i < week ? 'bg-rec-green shadow-[0_0_8px_rgb(var(--rec-green)/0.5)]' : 'bg-fg/10')} />
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" onClick={() => openSummary(session.id)}>
+          Zusammenfassung
+        </Button>
+        {nextPlanned && (
+          <Button variant="secondary" onClick={() => onNext(nextPlanned.date)}>
+            Nächste: {relDayLabel(nextPlanned.date).split(',')[0]} <ChevronRight size={15} />
+          </Button>
+        )}
+      </div>
+    </>
   );
 }

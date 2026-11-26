@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { usePlan, useToast } from '../lib/hooks';
+import { useCompletion, usePlan, useToast } from '../lib/hooks';
 import { Badge, Button, Card, Confirm, PageHeader, SectionTitle, Sheet } from '../components/ui';
 import { QuickAvailability, SessionPreview } from '../components/Coach';
 import type { Availability, Session } from '../lib/types';
@@ -193,6 +193,9 @@ function DaySheet({ day, onClose }: { day: string | null; onClose: () => void })
                   {x.endedAt ? `${Math.round((x.endedAt - x.startedAt) / 60000)} min · ` : ''}
                   {sessionSets(x)} Sätze · {fmtNum(sessionVolume(x) / 1000, 1)} t{x.demo ? ' · Beispiel' : ''}
                 </div>
+                <button className="mt-1 text-[12.5px] font-semibold text-accent" onClick={() => useCompletion.getState().open(x.id)}>
+                  Zusammenfassung ansehen →
+                </button>
               </div>
               <Button size="icon" variant="ghost" onClick={() => setDel(x)} aria-label="Training löschen">
                 <Trash2 size={15} />

@@ -66,9 +66,10 @@ export type Route =
   | 'fortschritt'
   | 'ernaehrung'
   | 'profil'
-  | 'wissenschaft';
+  | 'wissenschaft'
+  | 'statistik';
 
-const ROUTES: Route[] = ['uebersicht', 'training', 'kalender', 'uebungen', 'muskeln', 'fortschritt', 'ernaehrung', 'profil', 'wissenschaft'];
+const ROUTES: Route[] = ['uebersicht', 'training', 'kalender', 'uebungen', 'muskeln', 'fortschritt', 'ernaehrung', 'profil', 'wissenschaft', 'statistik'];
 
 function readHash(): Route {
   const h = (typeof location !== 'undefined' ? location.hash.replace('#', '') : '') as Route;
@@ -104,4 +105,12 @@ export const useFocusRequest = create<{ pending: boolean; request: () => void; c
   pending: false,
   request: () => set({ pending: true }),
   consume: () => set({ pending: false }),
+}));
+
+// ───── Abschluss-Screen eines Trainings (global, überlebt das Beenden der Einheit) ─────
+export const useCompletion = create<{ sessionId: string | null; prs: string[]; open: (id: string, prs?: string[]) => void; close: () => void }>((set) => ({
+  sessionId: null,
+  prs: [],
+  open: (id, prs = []) => set({ sessionId: id, prs }),
+  close: () => set({ sessionId: null, prs: [] }),
 }));

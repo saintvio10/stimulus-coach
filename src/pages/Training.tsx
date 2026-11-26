@@ -22,7 +22,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { useFocusRequest, useNow, useRouter, useToast } from '../lib/hooks';
+import { useCompletion, useFocusRequest, useNow, useRouter, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
@@ -124,7 +124,6 @@ function Workout({ session }: { session: Session }) {
   const [picker, setPicker] = useState<{ mode: 'add' | 'swap'; uid?: string } | null>(null);
   const [finishOpen, setFinishOpen] = useState(false);
   const [discard, setDiscard] = useState(false);
-  const [summary, setSummary] = useState<{ session: Session; prs: string[] } | null>(null);
   const [focusUid, setFocusUid] = useState<string | null>(null);
   // Tippen auf den Pausen-Timer → Fokus-Modus der aktuellen Übung
   const focusPending = useFocusRequest((f) => f.pending);
@@ -145,10 +144,10 @@ function Workout({ session }: { session: Session }) {
 
   const finish = () => {
     const prs = detectPRs(session, s.sessions, s.exercises);
-    const snapshot: Session = { ...session, endedAt: Date.now() };
     s.finishSession(session.id, prs);
     s.stopTimer();
-    setSummary({ session: snapshot, prs });
+    useCompletion.getState().open(session.id, prs);
+    go('uebersicht');
   };
 
   return (
@@ -250,59 +249,6 @@ function Workout({ session }: { session: Session }) {
         confirmLabel="Verwerfen"
         danger
       />
-      <Sheet
-        open={!!summary}
-        onClose={() => {
-          setSummary(null);
-          go('uebersicht');
-        }}
-        title="Training gespeichert"
-        footer={
-          <Button
-            variant="primary"
-            className="w-full"
-            onClick={() => {
-              setSummary(null);
-              go('uebersicht');
-            }}
-          >
-            Zur Übersicht
-          </Button>
-        }
-      >
-        {summary && (
-          <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl bg-raised p-3">
-                <div className="label">Dauer</div>
-                <div className="tnum mt-1 text-[20px] font-semibold">{Math.round((summary.session.endedAt! - summary.session.startedAt) / 60000)}′</div>
-              </div>
-              <div className="rounded-2xl bg-raised p-3">
-                <div className="label">Sätze</div>
-                <div className="tnum mt-1 text-[20px] font-semibold">{sessionSets(summary.session)}</div>
-              </div>
-              <div className="rounded-2xl bg-raised p-3">
-                <div className="label">Volumen</div>
-                <div className="tnum mt-1 text-[20px] font-semibold">{fmtNum(sessionVolume(summary.session) / 1000, 1)} t</div>
-              </div>
-            </div>
-            {summary.prs.length > 0 ? (
-              <div>
-                <div className="label mb-2 flex items-center gap-1.5">
-                  <Trophy size={13} className="text-rec-yellow" /> Neue Rekorde
-                </div>
-                <ul className="flex flex-col gap-1.5 text-[14px]">
-                  {summary.prs.map((p) => (
-                    <li key={p}>{p}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : (
-              <p className="text-[13px] text-muted">Keine neuen Rekorde diesmal – Konstanz zählt. Die Gewichtsempfehlungen für das nächste Mal sind bereits aktualisiert.</p>
-            )}
-          </div>
-        )}
-      </Sheet>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Activity,
+  BarChart3,
   BookOpen,
   CalendarDays,
   Dumbbell,
@@ -13,7 +14,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useStore } from './lib/store';
-import { useRouter, useSearch, useToast, type Route } from './lib/hooks';
+import { useCompletion, useRouter, useSearch, useToast, type Route } from './lib/hooks';
 import { cn } from './lib/utils';
 import { Sheet, Toast } from './components/ui';
 import { RestTimer } from './components/RestTimer';
@@ -32,6 +33,8 @@ import { StartScreen, shouldAutoOpen, useStartScreen } from './components/StartS
 import { SearchSheet } from './components/Search';
 import type { AppData } from './lib/types';
 import { useEffect } from 'react';
+import { SessionComplete } from './components/SessionComplete';
+import StatsPage from './pages/Stats';
 
 const NAV: { id: Route; label: string; icon: typeof Gauge }[] = [
   { id: 'uebersicht', label: 'Übersicht', icon: LayoutGrid },
@@ -40,6 +43,7 @@ const NAV: { id: Route; label: string; icon: typeof Gauge }[] = [
   { id: 'uebungen', label: 'Übungen', icon: Activity },
   { id: 'muskeln', label: 'Muskelanalyse', icon: PersonStanding },
   { id: 'fortschritt', label: 'Fortschritt', icon: LineChart },
+  { id: 'statistik', label: 'Statistiken', icon: BarChart3 },
   { id: 'ernaehrung', label: 'Ernährung', icon: Salad },
   { id: 'profil', label: 'Profil', icon: UserRound },
 ];
@@ -99,6 +103,7 @@ export default function App() {
     ernaehrung: NutritionPage,
     profil: ProfilePage,
     wissenschaft: SciencePage,
+    statistik: StatsPage,
   }[route];
 
   return (
@@ -201,6 +206,7 @@ export default function App() {
       </Sheet>
 
       <RestTimer />
+      <CompletionHost />
       <SearchSheet open={searchOpen} onClose={() => setSearchOpen(false)} />
       {start.open && <StartScreen onClose={() => start.set(false)} />}
       <Toast message={toast} />
@@ -209,3 +215,10 @@ export default function App() {
 }
 
 export { Logo };
+
+function CompletionHost() {
+  const { sessionId, prs, close } = useCompletion();
+  const session = useStore((s) => s.sessions.find((x) => x.id === sessionId));
+  if (!sessionId || !session) return null;
+  return <SessionComplete session={session} prs={prs.length ? prs : undefined} onClose={close} />;
+}

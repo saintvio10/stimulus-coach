@@ -86,6 +86,8 @@ export interface SetLog {
   /** nur bei einseitigen Übungen: Wdh. links / rechts (reps = schwächere Seite) */
   repsL?: number | null;
   repsR?: number | null;
+  /** Zeitpunkt des Abhakens (für Pausen-Statistik) */
+  doneAt?: number;
 }
 
 export type AdviceType = 'new' | 'increase' | 'extend' | 'hold' | 'decrease' | 'deload';

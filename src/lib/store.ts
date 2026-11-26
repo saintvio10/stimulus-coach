@@ -278,7 +278,10 @@ export const useStore = create<Store>()(
           mutSession(sid, (s) => {
             const se = s.exercises.find((e) => e.uid === xu);
             const st = se?.sets.find((x) => x.id === setId);
-            if (st) Object.assign(st, patch);
+            if (!st) return;
+            if (patch.done === true && !st.done) st.doneAt = Date.now();
+            if (patch.done === false) st.doneAt = undefined;
+            Object.assign(st, patch);
           }),
         setWeightFrom: (sid, xu, setId, weight) =>
           mutSession(sid, (s) => {

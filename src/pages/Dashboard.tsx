@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
-import { ArrowRight, Flame, Play, Trophy, TrendingUp, AlertTriangle, Moon } from 'lucide-react';
+import { ArrowRight, BarChart3, Flame, Play, Trophy, TrendingUp, AlertTriangle, Moon } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useMuscleStates, useNow, usePlan, useRouter } from '../lib/hooks';
 import { Badge, Bar, Button, Card, Ring, SectionTitle, Stat } from '../components/ui';
@@ -78,7 +78,8 @@ export default function Dashboard() {
       <QuickStart />
 
       {/* Kennzahlen */}
-      <Card className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+      <Card className="flex flex-col gap-4">
+        <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
         <Stat label="Trainings" value={done.length} sub={`${last30} in 30 Tagen`} />
         <Stat label="Ø Dauer" value={avgDur ? `${avgDur}′` : '–'} sub="pro Einheit" />
         <Stat
@@ -92,6 +93,13 @@ export default function Dashboard() {
           sub={streak === 1 ? 'Woche in Folge' : 'Wochen in Folge'}
         />
         <Stat label="Direkte Sätze" value={fmtNum(vol7, 0)} sub="letzte 7 Tage" />
+        </div>
+        <button onClick={() => go('statistik')} className="flex items-center justify-between rounded-xl bg-raised px-3.5 py-3 text-[14px] font-medium">
+          <span className="flex items-center gap-2">
+            <BarChart3 size={16} className="text-accent" /> Alle Statistiken
+          </span>
+          <ArrowRight size={16} className="text-muted" />
+        </button>
       </Card>
 
       <div className="grid gap-6 md:grid-cols-2 md:gap-4">
