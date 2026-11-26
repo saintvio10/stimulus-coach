@@ -547,10 +547,13 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
 
   const pickWindow = (win: string[], prevFixed: string[]) => {
     let ds = win.filter((d) => data.availability[d] === 'yes');
-    // Nur wenn gar nichts markiert ist, schlägt die App vorläufige Tage vor
-    const target = ds.length ? 0 : Math.max(1, Math.round((data.settings.sessionsPerWeek * win.length) / 7));
-    if (ds.length < target) {
-      const cands = win.filter((d) => !ds.includes(d) && availOf(d) === 'maybe');
+    const explicitMaybe = win.filter((d) => data.availability[d] === 'maybe');
+    // „Vielleicht“-Tage füllen bis zur erwarteten Frequenz auf (vorläufig).
+    // Ist gar nichts markiert, schlägt die App Standardtage vor.
+    const target = Math.max(1, Math.round((data.settings.sessionsPerWeek * win.length) / 7));
+    const nothingMarked = !ds.length && !explicitMaybe.length;
+    if (ds.length < target && (explicitMaybe.length || nothingMarked)) {
+      const cands = explicitMaybe.length ? explicitMaybe.filter((d) => !ds.includes(d)) : win.filter((d) => !ds.includes(d) && availOf(d) === 'maybe');
       const extra = pickSpread(cands, [...ds, ...prevFixed], target - ds.length);
       extra.forEach((d) => tentativeSet.add(d));
       ds = [...ds, ...extra].sort();

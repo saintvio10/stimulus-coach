@@ -19,9 +19,9 @@ const OUT = '/tmp/claude-0/-home-user/77587700-1482-5af7-9d38-099b28ee21ee/scrat
   await p.screenshot({ path: OUT + 'a3-today.png' });
   await p.goto('http://localhost:4173/#uebersicht'); await p.waitForTimeout(600);
   await p.getByRole('button', { name: /^Morgen:/ }).first().click(); await p.waitForTimeout(300);
-  await p.getByRole('button', { name: /^Sonntag/ }).first().click(); await p.waitForTimeout(200); await p.getByRole('button', { name: /^Sonntag/ }).first().click(); await p.waitForTimeout(500);
+  for (let i=0;i<3;i++) { await p.getByRole('button', { name: /^Sonntag/ }).first().click(); await p.waitForTimeout(150); } await p.waitForTimeout(400);
   await p.screenshot({ path: OUT + 'a3c-week.png' });
-  await p.getByRole('button', { name: /^Heute:/ }).click(); await p.waitForTimeout(200); await p.getByRole('button', { name: /^Heute:/ }).click(); await p.waitForTimeout(500);
+  for (let i=0;i<3;i++) { await p.getByRole('button', { name: /^Heute:/ }).click(); await p.waitForTimeout(150); } await p.waitForTimeout(400);
   await p.screenshot({ path: OUT + 'a3b-home-top.png' });
   // Swipe to start
   const thumb = p.getByRole('button', { name: 'Training starten' }).first();

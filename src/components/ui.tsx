@@ -345,7 +345,7 @@ export function Toast({ message }: { message: string | null }) {
   );
 }
 
-/** Breiter Fortschrittsbalken mit warmem Verlauf (Rot → Orange → Gelb → Weiß) und Beschriftung im Balken */
+/** Breiter Fortschrittsbalken mit grünem Verlauf und Beschriftung im Balken */
 export function GlowProgress({ value, label, className, height = 44 }: { value: number; label?: ReactNode; className?: string; height?: number }) {
   const v = Math.max(0, Math.min(1, value));
   const onFill = v > 0.62; // Text liegt auf dem hellen Ende des Verlaufs
@@ -355,15 +355,15 @@ export function GlowProgress({ value, label, className, height = 44 }: { value: 
         className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-700 ease-out"
         style={{
           width: `max(${height}px, ${v * 100}%)`,
-          background: 'linear-gradient(90deg, #ff5b4f 0%, #ff8a3d 30%, #f8c64a 62%, #fff6df 100%)',
-          boxShadow: '0 0 22px rgba(255, 196, 110, 0.35), inset 0 1px 0 rgba(255,255,255,0.35)',
+          background: 'linear-gradient(90deg, #0b8f5a 0%, #22c47e 32%, #6ee7a8 64%, #ecfff4 100%)',
+          boxShadow: '0 0 22px rgba(61, 220, 151, 0.35), inset 0 1px 0 rgba(255,255,255,0.35)',
         }}
       />
       {label != null && (
         <span
           className={cn(
             'tnum absolute inset-y-0 right-4 flex items-center whitespace-nowrap text-[14.5px] font-medium',
-            onFill ? 'text-[#4a3412]' : 'text-muted',
+            onFill ? 'text-[#0d3b26]' : 'text-muted',
           )}
         >
           {label}

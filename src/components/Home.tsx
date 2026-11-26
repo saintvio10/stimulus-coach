@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
-import { CalendarDays, ChevronRight, Clock, Dumbbell, Layers, Play, Search, SlidersHorizontal } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Layers, Moon, Play, Search, SlidersHorizontal } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability } from '../lib/types';
@@ -81,7 +81,7 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[19px] font-semibold tracking-tight">Wann hast du Zeit?</h2>
-          <div className="text-[12px] text-muted">Tag antippen – der Plan passt sich an</div>
+          <div className="text-[12px] text-muted">Antippen: Zeit → Vielleicht → Keine Zeit</div>
         </div>
         <div className="flex gap-1">
           <button onClick={() => openStart(true)} aria-label="Verfügbarkeit planen" className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-raised hover:text-fg">
@@ -94,69 +94,94 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
       </div>
       <div className="grid grid-cols-7 gap-1.5">
         {days.map((d) => {
-          const a = s.availability[d] ?? 'maybe'; // nicht gewählt = neutral
+          const a = s.availability[d]; // undefined = offen
           const done = s.sessions.some((x) => x.date === d && x.status === 'done');
           const planned = plan.sessions.find((x) => x.date === d);
           const rest = plan.restDays?.find((x) => x.date === d);
           const isToday = d === today;
+          const look = done ? 'done' : rest ? 'rest' : a === 'yes' ? 'yes' : a === 'maybe' ? 'maybe' : a === 'no' ? 'no' : 'open';
           return (
             <button
               key={d}
               onClick={() => {
-                const next: Availability = a === 'yes' ? 'no' : 'yes';
+                const next: Availability = a === 'yes' ? 'maybe' : a === 'maybe' ? 'no' : 'yes';
                 s.setAvailability(d, next);
                 try {
                   navigator.vibrate?.(10);
                 } catch {
                   /* ignore */
                 }
-                toast(`${relDayLabel(d)}: ${next === 'yes' ? 'Zeit ✓ – Plan wird neu berechnet' : 'keine Zeit'}`);
+                toast(`${relDayLabel(d)}: ${next === 'yes' ? 'Zeit ✓' : next === 'maybe' ? 'Vielleicht – wird vorläufig eingeplant' : 'Keine Zeit'}`);
               }}
               aria-pressed={a === 'yes'}
-              aria-label={`${relDayLabel(d)}: ${a === 'yes' ? 'Zeit' : a === 'no' ? 'keine Zeit' : 'offen'} – tippen zum Umschalten`}
+              aria-label={`${relDayLabel(d)}: ${STATUS_LABEL[look]} – tippen zum Umschalten`}
               className={cn(
                 'relative flex flex-col items-center gap-2 rounded-full border pb-3 pt-3 transition active:scale-95',
-                a === 'yes' ? 'border-rec-green/40 bg-rec-green/[0.08]' : a === 'no' ? 'border-rec-red/35 bg-rec-red/[0.07]' : 'border-line/[0.07] bg-surface',
+                look === 'yes' || look === 'done'
+                  ? 'border-rec-green/40 bg-rec-green/[0.08]'
+                  : look === 'maybe'
+                    ? 'border-rec-yellow/40 bg-rec-yellow/[0.07]'
+                    : look === 'no'
+                      ? 'border-rec-red/35 bg-rec-red/[0.07]'
+                      : look === 'rest'
+                        ? 'border-[#8b7cf6]/45 bg-[linear-gradient(180deg,rgba(139,124,246,0.18),rgba(139,124,246,0.04))]'
+                        : 'border-line/[0.07] bg-surface',
                 isToday && 'ring-2 ring-fg/25',
               )}
             >
-              <span className={cn('text-[11px] font-medium', a === 'maybe' ? 'text-muted' : 'text-fg')}>{isToday ? 'Heute' : WEEKDAYS_SHORT[weekdayOf(d)]}</span>
-              <span className={cn('tnum text-[17px] font-semibold leading-none', a === 'yes' ? 'text-fg' : a === 'no' ? 'text-rec-red/80' : 'text-muted')}>{Number(d.slice(8))}</span>
+              <span className={cn('text-[11px] font-medium', look === 'open' ? 'text-muted' : 'text-fg')}>{isToday ? 'Heute' : WEEKDAYS_SHORT[weekdayOf(d)]}</span>
               <span
                 className={cn(
-                  'h-2.5 w-2.5 rounded-full transition',
-                  a === 'yes'
-                    ? 'bg-rec-green shadow-[0_0_8px_2px_rgb(var(--rec-green)/0.75),0_0_18px_4px_rgb(var(--rec-green)/0.35)]'
-                    : a === 'no'
-                      ? 'bg-rec-red shadow-[0_0_8px_2px_rgb(var(--rec-red)/0.75),0_0_18px_4px_rgb(var(--rec-red)/0.35)]'
-                      : 'bg-line/15',
+                  'tnum text-[17px] font-semibold leading-none',
+                  look === 'no' ? 'text-rec-red/80' : look === 'open' ? 'text-muted' : look === 'rest' ? 'text-[#c4b9ff]' : 'text-fg',
                 )}
-              />
-              {rest && !done && (
-                <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full bg-[#3b4a6b] px-1.5 text-[8.5px] font-bold uppercase leading-[14px] text-[#c9d6ff]">
-                  Ruhe
-                </span>
+              >
+                {Number(d.slice(8))}
+              </span>
+              {look === 'rest' ? (
+                <Moon size={12} className="text-[#c4b9ff] drop-shadow-[0_0_6px_rgba(167,150,255,0.9)]" fill="currentColor" />
+              ) : look === 'done' ? (
+                <Check size={12} className="text-rec-green" strokeWidth={3} />
+              ) : (
+                <span
+                  className={cn(
+                    'h-2.5 w-2.5 rounded-full transition',
+                    look === 'yes'
+                      ? 'bg-rec-green shadow-[0_0_8px_2px_rgb(var(--rec-green)/0.75),0_0_18px_4px_rgb(var(--rec-green)/0.35)]'
+                      : look === 'maybe'
+                        ? 'bg-rec-yellow shadow-[0_0_8px_2px_rgb(var(--rec-yellow)/0.7),0_0_18px_4px_rgb(var(--rec-yellow)/0.3)]'
+                        : look === 'no'
+                          ? 'bg-rec-red shadow-[0_0_8px_2px_rgb(var(--rec-red)/0.75),0_0_18px_4px_rgb(var(--rec-red)/0.35)]'
+                          : 'bg-line/15',
+                  )}
+                />
               )}
-              {(done || planned) && (
+              {planned && !done && (
                 <span
                   className={cn(
                     'absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full px-1.5 text-[8.5px] font-bold uppercase leading-[14px]',
-                    done ? 'bg-rec-green text-bg' : planned!.tentative ? 'bg-raised text-muted' : 'bg-accent text-bg',
+                    planned.tentative ? 'bg-rec-yellow text-bg' : 'bg-accent text-bg',
                   )}
                 >
-                  {done ? '✓' : planned!.tentative ? 'evtl.' : 'Plan'}
+                  Plan
                 </span>
               )}
             </button>
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[11px] text-muted">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-[11px] text-muted">
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-rec-green shadow-[0_0_6px_2px_rgb(var(--rec-green)/0.6)]" /> Zeit
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-rec-red shadow-[0_0_6px_2px_rgb(var(--rec-red)/0.6)]" /> keine Zeit
+          <span className="h-2 w-2 rounded-full bg-rec-yellow shadow-[0_0_6px_2px_rgb(var(--rec-yellow)/0.6)]" /> Vielleicht
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-rec-red shadow-[0_0_6px_2px_rgb(var(--rec-red)/0.6)]" /> Keine Zeit
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Moon size={10} className="text-[#c4b9ff]" fill="currentColor" /> Ruhetag
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-line/20" /> offen
@@ -180,7 +205,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   const planned = plan.sessions.find((p) => p.date === day) ?? null;
   const restHere = plan.restDays?.find((r) => r.date === day);
   const nextPlanned = plan.sessions.find((p) => p.date > day);
-  const avail: Availability = s.availability[day] ?? (s.settings.preferredDays.includes(weekdayOf(day)) ? 'maybe' : 'no');
+  const avail: Availability | undefined = s.availability[day];
   const exMap = new Map(s.exercises.map((e) => [e.id, e]));
   const lead = planned?.exercises[0] ? exMap.get(planned.exercises[0].exerciseId) : undefined;
 
@@ -195,17 +220,18 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   };
 
   const availBar = (
-    <div className="grid grid-cols-2 gap-1 rounded-full bg-black/30 p-1 backdrop-blur">
+    <div className="grid grid-cols-3 gap-1 rounded-full bg-black/30 p-1 backdrop-blur">
       {(
         [
-          ['yes', 'Ich habe Zeit'],
+          ['yes', 'Zeit'],
+          ['maybe', 'Vielleicht'],
           ['no', 'Keine Zeit'],
         ] as const
       ).map(([v, l]) => (
         <button
           key={v}
           onClick={() => setAvail(v)}
-          className={cn('h-10 rounded-full px-3 text-[13.5px] font-semibold transition', avail === v ? (v === 'no' ? 'bg-rec-red text-bg shadow-[0_0_14px_rgb(var(--rec-red)/0.55)]' : 'bg-rec-green text-bg shadow-[0_0_14px_rgb(var(--rec-green)/0.55)]') : 'text-fg/70')}
+          className={cn('h-10 rounded-full px-3 text-[13.5px] font-semibold transition', avail === v ? (v === 'no' ? 'bg-rec-red text-bg shadow-[0_0_14px_rgb(var(--rec-red)/0.55)]' : v === 'maybe' ? 'bg-rec-yellow text-bg shadow-[0_0_14px_rgb(var(--rec-yellow)/0.5)]' : 'bg-rec-green text-bg shadow-[0_0_14px_rgb(var(--rec-green)/0.55)]') : 'text-fg/70')}
         >
           {l}
         </button>
@@ -265,7 +291,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
         ) : planned && !planned.rest ? (
           <>
             <div>
-              <div className="text-[13px] text-muted">{isToday ? 'Deine Empfehlung' : planned.tentative ? 'Vorläufig geplant' : 'Geplant'}</div>
+              <div className="text-[13px] text-muted">{planned.tentative ? 'Vielleicht – falls du Zeit hast' : isToday ? 'Deine Empfehlung' : 'Geplant'}</div>
               <h2 className="mt-0.5 text-[28px] font-semibold leading-[1.1] tracking-tight">{planned.label}</h2>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -338,8 +364,9 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
           </>
         ) : (
           <>
-            <h2 className="text-[24px] font-semibold leading-tight">
-              {avail === 'no' ? 'Keine Zeit – kein Training' : restHere || planned?.rest ? 'Ruhetag empfohlen 🌙' : 'Kein Training geplant'}
+            <h2 className="flex items-center gap-2 text-[24px] font-semibold leading-tight">
+              {(restHere || planned?.rest) && avail !== 'no' && <Moon size={22} className="text-[#c4b9ff] drop-shadow-[0_0_8px_rgba(167,150,255,0.8)]" fill="currentColor" />}
+              {avail === 'no' ? 'Keine Zeit – kein Training' : restHere || planned?.rest ? 'Ruhetag' : 'Kein Training geplant'}
             </h2>
             <p className="text-[13px] text-muted">
               {restHere && avail !== 'no'
@@ -384,6 +411,15 @@ function Pill({ icon, children }: { icon: React.ReactNode; children: React.React
     </span>
   );
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  yes: 'Zeit',
+  maybe: 'Vielleicht',
+  no: 'Keine Zeit',
+  rest: 'Ruhetag',
+  done: 'trainiert',
+  open: 'offen',
+};
 
 const QUICK: { id: TemplateId; title: string; pattern: AnimPattern; sub: string; img: string }[] = [
   { id: 'full', img: 'leg-press', title: 'Ganzkörper', pattern: 'legPress', sub: 'Alles in einer Einheit' },
@@ -528,14 +564,14 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
               <button
                 key={d}
                 onClick={() => setRestOpen(rest)}
-                className="flex h-[236px] w-[56%] max-w-[240px] shrink-0 snap-start flex-col justify-between rounded-[24px] border border-[#3b4a6b]/60 bg-[linear-gradient(160deg,#1d2433,rgb(var(--surface)))] p-4 text-left"
+                className="flex h-[236px] w-[56%] max-w-[240px] shrink-0 snap-start flex-col justify-between rounded-[24px] border border-[#8b7cf6]/45 bg-[linear-gradient(160deg,#241d3d,rgb(var(--surface)))] p-4 text-left"
               >
                 <div>
                   <div className="text-[13px] font-medium text-muted">{label}</div>
                   <div className="mt-1 text-[17px] font-semibold">Ruhetag</div>
-                  <div className="text-[12px] text-[#9fb2e6]">bewusst eingeplant</div>
+                  <div className="text-[12px] text-[#c4b9ff]">bewusst eingeplant</div>
                 </div>
-                <span className="grid h-12 w-12 place-items-center rounded-full bg-[#3b4a6b]/50 text-[20px] shadow-[0_0_18px_rgb(120_150_230/0.35)]">☾</span>
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-[#8b7cf6]/25 text-[#d6ceff] shadow-[0_0_22px_rgba(139,124,246,0.55)]"><Moon size={22} fill="currentColor" /></span>
                 <div className="line-clamp-3 text-[12px] text-muted">{rest.reason.replace(/^Ruhetag: /, '')}</div>
               </button>
             );
@@ -578,7 +614,7 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
                 <div>
                   <div className="text-[13px] font-medium text-white/70">
                     {label}
-                    {p.tentative && ' · Vorschlag'}
+                    {p.tentative && ' · Vielleicht'}
                   </div>
                   <div className="mt-1 max-w-[60%] text-[20px] font-semibold leading-tight text-white">{p.label.split(' (')[0]}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5">

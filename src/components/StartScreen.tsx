@@ -43,6 +43,8 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
   const days = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(today, i));
   const defaultOf = (d: string): Availability => (s.settings.preferredDays.includes(weekdayOf(d)) ? 'maybe' : 'no');
   const [draft, setDraft] = useState<Record<string, Availability>>(() => Object.fromEntries(days.map((d) => [d, s.availability[d] === 'yes' ? 'yes' : s.availability[d] === 'no' ? 'no' : 'maybe'])));
+  // „maybe“ ohne explizite Auswahl = offen; explizit gewählt = „Vielleicht“
+  const [explicit, setExplicit] = useState<Record<string, boolean>>(() => Object.fromEntries(days.map((d) => [d, s.availability[d] === 'maybe'])));
   const initialMin = s.planOptions.todayMinutes?.date === today ? s.planOptions.todayMinutes.minutes : s.settings.defaultMinutes;
   const [minutes, setMinutes] = useState(initialMin);
   const [uncertain, setUncertain] = useState(s.planOptions.uncertain);
@@ -51,7 +53,10 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
   const preview = useMemo(() => {
     const data = s as unknown as AppData;
     const avail = { ...data.availability };
-    days.forEach((d) => (avail[d] = draft[d]));
+    days.forEach((d) => {
+      if (draft[d] === 'maybe' && !explicit[d]) delete avail[d];
+      else avail[d] = draft[d];
+    });
     return buildPlan({
       ...data,
       availability: avail,
@@ -61,12 +66,12 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
         todayMinutes: { date: today, minutes },
       },
     });
-  }, [draft, uncertain, onlyOnce, minutes, s.sessions, s.exercises, s.settings, s.profile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [draft, explicit, uncertain, onlyOnce, minutes, s.sessions, s.exercises, s.settings, s.profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = () => {
     s.mutate((d) => {
       days.forEach((day) => {
-        if (draft[day] === 'maybe') delete d.availability[day];
+        if (draft[day] === 'maybe' && !explicit[day]) delete d.availability[day];
         else d.availability[day] = draft[day];
       });
       d.planOptions.uncertain = uncertain;
@@ -159,7 +164,7 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
           <div className="text-[17px] font-medium text-accent">{hello}!</div>
           <h1 className="mt-1 text-[30px] font-semibold leading-tight tracking-tight">Wann hast du Zeit?</h1>
           <div className="label mt-1">Nächste {PLAN_DAYS} Tage</div>
-          <p className="mt-1 text-[14px] text-muted">Nur die nächsten Tage – grün = Zeit, nochmal tippen: rot = keine Zeit. Der Plan wird genau dafür optimiert und rollt danach automatisch weiter.</p>
+          <p className="mt-1 text-[14px] text-muted">Antippen: grün = Zeit · gelb = Vielleicht (noch unsicher) · rot = Keine Zeit. Der Plan wird dafür optimiert und rollt danach automatisch weiter.</p>
         </div>
 
         <ul className="flex flex-col gap-2">
@@ -167,11 +172,13 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
             const v = draft[d];
             const planned = preview.sessions.find((p) => p.date === d);
             const on = v === 'yes';
+            const isMaybe = v === 'maybe' && explicit[d];
             return (
               <li key={d}>
                 <button
                   onClick={() => {
-                    setDraft({ ...draft, [d]: on ? 'no' : 'yes' }); // offen → Zeit → keine Zeit → Zeit
+                    setDraft({ ...draft, [d]: v === 'yes' ? 'maybe' : v === 'maybe' && explicit[d] ? 'no' : 'yes' }); // Zeit → Vielleicht → Keine Zeit → Zeit
+                    setExplicit({ ...explicit, [d]: true });
                     try {
                       navigator.vibrate?.(10);
                     } catch {
@@ -181,7 +188,13 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
                   aria-pressed={on}
                   className={cn(
                     'flex w-full items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition active:scale-[0.99]',
-                    on ? 'border-rec-green/40 bg-rec-green/[0.08]' : v === 'no' ? 'border-rec-red/35 bg-rec-red/[0.07]' : 'border-line/[0.07] bg-surface',
+                    on
+                      ? 'border-rec-green/40 bg-rec-green/[0.08]'
+                      : v === 'no'
+                        ? 'border-rec-red/35 bg-rec-red/[0.07]'
+                        : isMaybe
+                          ? 'border-rec-yellow/40 bg-rec-yellow/[0.07]'
+                          : 'border-line/[0.07] bg-surface',
                   )}
                 >
                   <span
@@ -191,7 +204,9 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
                         ? 'bg-rec-green shadow-[0_0_10px_3px_rgb(var(--rec-green)/0.7),0_0_22px_6px_rgb(var(--rec-green)/0.3)]'
                         : v === 'no'
                           ? 'bg-rec-red shadow-[0_0_10px_3px_rgb(var(--rec-red)/0.7),0_0_22px_6px_rgb(var(--rec-red)/0.3)]'
-                          : 'bg-line/15',
+                          : isMaybe
+                            ? 'bg-rec-yellow shadow-[0_0_10px_3px_rgb(var(--rec-yellow)/0.65),0_0_22px_6px_rgb(var(--rec-yellow)/0.28)]'
+                            : 'bg-line/15',
                     )}
                   />
                   <span className="min-w-0 flex-1">
@@ -200,7 +215,9 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
                       {fmtDate(d)} {planned ? `· ${planned.label.split(' (')[0]}` : ''}
                     </span>
                   </span>
-                  <span className={cn('text-[13.5px] font-semibold', on ? 'text-rec-green' : v === 'no' ? 'text-rec-red' : 'text-muted')}>{on ? 'Zeit' : v === 'no' ? 'Keine Zeit' : 'offen'}</span>
+                  <span className={cn('text-[13.5px] font-semibold', on ? 'text-rec-green' : v === 'no' ? 'text-rec-red' : isMaybe ? 'text-rec-yellow' : 'text-muted')}>
+                    {on ? 'Zeit' : v === 'no' ? 'Keine Zeit' : isMaybe ? 'Vielleicht' : 'offen'}
+                  </span>
                 </button>
               </li>
             );

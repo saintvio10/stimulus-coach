@@ -53,7 +53,7 @@ function PlanView() {
     <div className="flex flex-col gap-4">
       <PageHeader title="Dein Plan für heute" sub={s.profile.name ? `Hallo ${s.profile.name}` : 'Heute'} />
       {restToday && !trainedToday && (
-        <Card className="border-[#3b4a6b]/60 bg-[linear-gradient(160deg,#1d2433,rgb(var(--surface)))] text-[13px]">
+        <Card className="border-[#8b7cf6]/45 bg-[linear-gradient(160deg,#241d3d,rgb(var(--surface)))] text-[13px]">
           <div className="mb-1 text-[15px] font-semibold">Heute ist ein Ruhetag empfohlen 🌙</div>
           <p className="text-muted">{restToday.reason} Wenn du dich fit fühlst, kannst du den Plan unten trotzdem starten.</p>
         </Card>
