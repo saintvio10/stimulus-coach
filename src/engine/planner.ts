@@ -262,9 +262,10 @@ export function buildSession(o: BuildOpts): PlannedSession {
   for (let iter = 0; iter < 60; iter++) {
     let best: { ratio: number; apply: () => void } | null = null;
     for (const it of items) {
-      // Prioritätsmuskeln (Rang 1–3) dürfen bei Isolationsübungen 5 Sätze bekommen, statt eine fast gleiche 2. Variante zu nehmen
-      const top = !it.ex.compound && !short && MUSCLE[it.ex.primary].group != null && data.profile.priorities.indexOf(MUSCLE[it.ex.primary].group!) < 3;
-      if (it.sets >= (top && !isFull ? maxSets + 1 : maxSets)) continue;
+      // Max. 4 Sätze pro Übung. 5 nur bei Seitheben und Waden: kleine, wenig ermüdende Muskeln ohne sinnvolle andere Bewegung.
+      // Bei allen anderen Muskeln kommt stattdessen eine ergänzende 2. Übung (andere Bewegung) dazu.
+      const fiveOk = !it.ex.compound && !short && !isFull && (familyOf(it.ex) === 'lateral' || it.ex.pattern === 'calfRaise');
+      if (it.sets >= (fiveOk ? maxSets + 1 : maxSets)) continue;
       const t = setMinutes(it.ex, short) * tf;
       if (used + t > budget) continue;
       const v = valueOfSets(it.ex, 1);
