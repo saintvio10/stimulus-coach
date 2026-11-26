@@ -93,12 +93,17 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-white/10" aria-label="Fokusmodus schließen">
             <X size={18} />
           </button>
-          <div className="flex gap-1">
-            {list.map((e, i) => (
-              <span key={e.uid} className={cn('h-1 rounded-full transition-all', i === idx ? 'w-6 bg-white' : e.sets.every((x) => x.done) ? 'w-2 bg-rec-green' : 'w-2 bg-white/25')} />
-            ))}
+          <div className="mx-3 flex h-2 flex-1 gap-1">
+            {list.map((e, i) => {
+              const f = e.sets.filter((x) => x.done).length / (e.sets.length || 1);
+              return (
+                <span key={e.uid} className={cn('relative h-full overflow-hidden rounded-full bg-white/15', i === idx && 'ring-1 ring-white/60')} style={{ flex: e.sets.length || 1 }}>
+                  <span className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-500', f >= 1 ? 'bg-rec-green' : 'bg-white')} style={{ width: `${f * 100}%` }} />
+                </span>
+              );
+            })}
           </div>
-          <div className="w-10" />
+          <div className="tnum w-10 text-right text-[13px] font-semibold text-white/80">{Math.round(progress * 100)}%</div>
         </div>
 
         {/* Medienfläche */}

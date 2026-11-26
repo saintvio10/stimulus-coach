@@ -144,9 +144,7 @@ function Workout({ session }: { session: Session }) {
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="truncate text-[17px] font-semibold">{session.title}</div>
-            <div className="tnum text-[12px] text-muted">
-              {fmtClock((now - session.startedAt) / 1000)} · {doneN}/{total} Sätze
-            </div>
+            <div className="tnum text-[12px] text-muted">{fmtClock((now - session.startedAt) / 1000)} trainiert</div>
           </div>
           <div className="flex shrink-0 gap-2">
             <Button
@@ -165,9 +163,7 @@ function Workout({ session }: { session: Session }) {
             </Button>
           </div>
         </div>
-        <div className="mt-2 h-1 overflow-hidden rounded-full bg-raised">
-          <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${total ? (doneN / total) * 100 : 0}%` }} />
-        </div>
+        <WorkoutProgress session={session} now={now} onJump={(uid) => setOpenUid(uid)} />
       </div>
 
       {session.exercises.length === 0 && (
@@ -617,6 +613,84 @@ function ExerciseCard({
         </div>
       )}
     </Card>
+  );
+}
+
+/** Fortschrittsleiste: ein Segment pro Übung, Prozent, Sätze und geschätzte Restzeit */
+function WorkoutProgress({ session, now, onJump }: { session: Session; now: number; onJump: (uid: string) => void }) {
+  const exercises = useStore((s) => s.exercises);
+  const tf = useStore((s) => s.settings.timeFactor || 1);
+  const exMap = new Map(exercises.map((e) => [e.id, e]));
+  const list = session.exercises.filter((e) => !e.skipped && e.sets.length);
+  const total = list.reduce((a, e) => a + e.sets.length, 0);
+  const done = list.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  const remainingMin = Math.round(
+    list.reduce((a, e) => {
+      const ex = exMap.get(e.exerciseId);
+      const open = e.sets.filter((x) => !x.done).length;
+      return a + (open * ((ex?.compound ? 50 : 40) + e.restSec)) / 60;
+    }, 0) * tf,
+  );
+  const current = list.find((e) => e.sets.some((x) => !x.done));
+  const curIdx = current ? list.indexOf(current) : list.length;
+  const elapsedMin = Math.round((now - session.startedAt) / 60000);
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="tnum text-[26px] font-semibold leading-none tracking-tight">
+            {pct}
+            <span className="text-[15px] text-muted">%</span>
+          </div>
+        </div>
+        <div className="tnum flex gap-4 text-right text-[12px] text-muted">
+          <div>
+            <div className="text-[14px] font-semibold text-fg">
+              {done}/{total}
+            </div>
+            Sätze
+          </div>
+          <div>
+            <div className="text-[14px] font-semibold text-fg">
+              {Math.min(curIdx + 1, list.length)}/{list.length}
+            </div>
+            Übung
+          </div>
+          <div>
+            <div className="text-[14px] font-semibold text-fg">{done === total && total ? '✓' : `~${remainingMin}′`}</div>
+            {done === total && total ? 'fertig' : 'Rest'}
+          </div>
+        </div>
+      </div>
+      <div className="flex h-2.5 gap-1">
+        {list.map((e) => {
+          const d = e.sets.filter((x) => x.done).length;
+          const f = d / e.sets.length;
+          const isCur = e === current;
+          return (
+            <button
+              key={e.uid}
+              onClick={() => onJump(e.uid)}
+              aria-label={`${exMap.get(e.exerciseId)?.name ?? 'Übung'}: ${d} von ${e.sets.length} Sätzen`}
+              className={cn('relative h-full overflow-hidden rounded-full bg-raised', isCur && 'ring-1 ring-accent/60')}
+              style={{ flex: e.sets.length }}
+            >
+              <span
+                className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-500', f >= 1 ? 'bg-rec-green' : 'bg-accent')}
+                style={{ width: `${f * 100}%` }}
+              />
+            </button>
+          );
+        })}
+      </div>
+      <div className="tnum flex justify-between text-[11px] text-muted">
+        <span className="truncate">{current ? `Jetzt: ${exMap.get(current.exerciseId)?.name ?? ''}` : 'Alle Übungen erledigt – Training beenden'}</span>
+        <span className="shrink-0">
+          {elapsedMin}′ von ~{session.estMinutes ?? session.plannedMinutes}′
+        </span>
+      </div>
+    </div>
   );
 }
 
