@@ -48,7 +48,7 @@ export default function ExercisesPage() {
   const s = useStore();
   const toast = useToast((t) => t.show);
   const [q, setQ] = useState('');
-  const [filter, setFilter] = useState<MuscleId | 'all' | 'locked' | 'fav'>('all');
+  const [filter, setFilter] = useState<MuscleId | 'all' | 'locked' | 'fav' | 'home'>('all');
   const [edit, setEdit] = useState<Exercise | null>(null);
   const [replace, setReplace] = useState<Exercise | null>(null);
 
@@ -56,8 +56,9 @@ export default function ExercisesPage() {
     if (q && !e.name.toLowerCase().includes(q.toLowerCase())) return false;
     if (filter === 'locked') return e.locked;
     if (filter === 'fav') return e.favorite;
-    if (filter !== 'all') return (e.muscles[filter] ?? 0) > 0;
-    return true;
+    if (filter === 'home') return e.location === 'home';
+    if (filter === 'all') return e.location !== 'home';
+    return (e.muscles[filter] ?? 0) > 0;
   });
   const groups = MUSCLES.map((m) => ({ m, items: list.filter((e) => e.primary === m.id) })).filter((g) => g.items.length);
 
@@ -112,6 +113,9 @@ export default function ExercisesPage() {
         </Chip>
         <Chip active={filter === 'locked'} onClick={() => setFilter('locked')}>
           <Lock size={13} /> Gesperrt
+        </Chip>
+        <Chip active={filter === 'home'} onClick={() => setFilter('home')}>
+          Ohne Gym
         </Chip>
         {MUSCLES.filter((m) => !m.indirectOnly).map((m) => (
           <Chip key={m.id} active={filter === m.id} onClick={() => setFilter(m.id)}>

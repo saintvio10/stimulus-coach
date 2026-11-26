@@ -170,7 +170,7 @@ interface Store extends AppData {
   // Verfügbarkeit
   setAvailability: (date: string, a: Availability | null) => void;
   // Training
-  startSession: (plan: PlannedSession | null, title?: string) => string;
+  startSession: (plan: PlannedSession | null, title?: string, location?: 'home') => string;
   updateSet: (sessionId: string, exUid: string, setId: string, patch: Partial<SetLog>) => void;
   /** Gewicht setzen und in alle folgenden, noch offenen Sätze übernehmen */
   setWeightFrom: (sessionId: string, exUid: string, setId: string, weight: number | null) => void;
@@ -232,7 +232,7 @@ export const useStore = create<Store>()(
             if (a == null) delete d.availability[date];
             else d.availability[date] = a;
           }),
-        startSession: (plan, title) => {
+        startSession: (plan, title, location) => {
           const id = uid();
           const ex = new Map(get().exercises.map((e) => [e.id, e]));
           const session: Session = {
@@ -241,6 +241,7 @@ export const useStore = create<Store>()(
             startedAt: Date.now(),
             status: 'active',
             title: title ?? plan?.label ?? 'Freies Training',
+            location,
             split: plan?.templateId ?? 'custom',
             plannedMinutes: plan?.minutes ?? get().settings.defaultMinutes,
             estMinutes: plan?.estMinutes,

@@ -189,7 +189,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           <div className="flex flex-col gap-3 rounded-[24px] bg-white/[0.06] p-4">
             {ex.unilateral ? (
               <>
-                <Stepper label="Gewicht" value={w == null ? '–' : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
+                <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
                 <div className="grid grid-cols-2 gap-3">
                   <Stepper label="Links · Wdh." value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
                   <Stepper label="Rechts · Wdh." value={String(repsR)} onMinus={() => setRepsR(Math.max(0, repsR - 1))} onPlus={() => setRepsR(repsR + 1)} />
@@ -198,7 +198,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
               </>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                <Stepper label="Gewicht" value={w == null ? '–' : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
+                <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
                 <Stepper label="Wiederholungen" value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
               </div>
             )}

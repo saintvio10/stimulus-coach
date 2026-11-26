@@ -28,11 +28,12 @@ import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
 import { restAfterSet, transitionRest } from '../engine/rest';
 import { detectPRs, sessionSets, sessionVolume } from '../engine/stats';
-import { Badge, Button, Card, Confirm, GlowProgress, Input, PageHeader, Sheet } from '../components/ui';
+import { Badge, Button, Card, Chip, Confirm, GlowProgress, Input, PageHeader, Sheet } from '../components/ui';
 import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Coach';
 import { ExerciseAnimation, ExerciseIcon } from '../components/ExerciseAnimation';
 import { FocusPlayer } from '../components/FocusPlayer';
 import { SwipeRow } from '../components/SwipeRow';
+import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
 import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight } from '../lib/utils';
@@ -104,6 +105,7 @@ function PlanView() {
         <Button variant="outline" onClick={() => s.startSession(null, 'Freies Training')}>
           <Plus size={15} /> Freies Training starten
         </Button>
+        <HomeWorkoutButton className="h-10 text-[13.5px]" label="Ohne Gym (unterwegs)" />
         <Button variant="ghost" onClick={() => go('kalender')}>
           Woche planen
         </Button>
@@ -441,7 +443,7 @@ function ExerciseCard({
           <div className="grid grid-cols-4 gap-2">
             <Big label="Sätze" value={String(se.sets.length)} />
             <Big label="Wdh." value={`${se.repMin}–${se.repMax}`} />
-            <Big label="Gewicht" value={rec != null ? fmtNum(rec) : 'frei'} unit={rec != null ? 'kg' : undefined} accent />
+            <Big label="Gewicht" value={ex.equipment === 'bodyweight' && !rec ? 'Körper' : rec != null ? fmtNum(rec) : 'frei'} unit={rec != null && !(ex.equipment === 'bodyweight' && !rec) ? 'kg' : undefined} accent />
             <Big label="Pause" value={fmtClock(se.restSec)} />
           </div>
           <div className="flex flex-col gap-1 text-[12.5px] text-muted">
@@ -525,7 +527,7 @@ function ExerciseCard({
           <div className="flex flex-col gap-2">
             <div className="grid grid-cols-[1.75rem_1fr_1fr_3.25rem] gap-2 px-1 text-[10.5px] font-semibold uppercase tracking-wider text-muted">
               <span>#</span>
-              <span className="text-center">Gewicht (kg)</span>
+              <span className="text-center">{ex.equipment === 'bodyweight' ? 'Zusatz (kg)' : 'Gewicht (kg)'}</span>
               <span className="text-center">{ex.unilateral ? 'Wdh. L / R' : 'Wdh.'}</span>
               <span />
             </div>
@@ -550,7 +552,7 @@ function ExerciseCard({
                       invalid={missing === st.id && (st.weight == null || !(st.weight > 0))}
                       id={`w-${st.id}`}
                       value={st.weight}
-                      placeholder={rec != null ? fmtNum(rec) : 'kg'}
+                      placeholder={ex.equipment === 'bodyweight' ? '0' : rec != null ? fmtNum(rec) : 'kg'}
                       decimal
                       disabled={st.done}
                       onChange={(v) => s.setWeightFrom(session.id, se.uid, st.id, v)}
@@ -915,8 +917,13 @@ export function ExercisePicker({
   onPick: (e: Exercise) => void;
 }) {
   const exercises = useStore((s) => s.exercises);
+  const homeSession = useStore((s) => s.sessions.find((x) => x.status === 'active')?.location === 'home');
   const [q, setQ] = useState('');
-  const list = exercises.filter((e) => !e.locked && e.id !== current?.id && e.name.toLowerCase().includes(q.toLowerCase()));
+  const [where, setWhere] = useState<'gym' | 'home' | null>(null);
+  const loc = where ?? (homeSession ? 'home' : 'gym');
+  const list = exercises.filter(
+    (e) => !e.locked && e.id !== current?.id && (q ? true : loc === 'home' ? e.location === 'home' : e.location !== 'home') && e.name.toLowerCase().includes(q.toLowerCase()),
+  );
   const same = current ? list.filter((e) => e.primary === current.primary) : [];
   const rest = list.filter((e) => !same.includes(e));
   const groups = MUSCLES.map((m) => ({ m, items: rest.filter((e) => e.primary === m.id) })).filter((g) => g.items.length);
@@ -935,7 +942,15 @@ export function ExercisePicker({
   );
   return (
     <Sheet open={open} onClose={onClose} title={mode === 'swap' ? `${current?.name ?? 'Übung'} austauschen` : 'Übung hinzufügen'}>
-      <Input id="picker-q" placeholder="Suchen…" value={q} onChange={(e) => setQ(e.target.value)} className="mb-3" />
+      <Input id="picker-q" placeholder="Suchen…" value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />
+      <div className="mb-3 flex gap-1.5">
+        <Chip active={loc === 'gym'} onClick={() => setWhere('gym')} className="h-8">
+          Studio
+        </Chip>
+        <Chip active={loc === 'home'} onClick={() => setWhere('home')} className="h-8">
+          Ohne Gym
+        </Chip>
+      </div>
       {same.length > 0 && (
         <div className="mb-3">
           <div className="label mb-1 px-2">Gleicher Zielmuskel</div>

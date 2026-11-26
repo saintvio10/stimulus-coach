@@ -19,7 +19,8 @@ export function exposures(exerciseId: string, sessions: Session[]): Exposure[] {
     if (s.status !== 'done') continue;
     for (const se of s.exercises) {
       if (se.exerciseId !== exerciseId || se.skipped) continue;
-      const sets = se.sets.filter((x) => x.done && x.weight != null && x.reps != null && x.reps > 0);
+      // Sätze ohne Gewicht zählen nur bei Körpergewicht (Gewicht = 0); sonst kann ohne Gewicht gar nicht gespeichert werden
+      const sets = se.sets.filter((x) => x.done && x.reps != null && x.reps > 0).map((x) => (x.weight == null ? { ...x, weight: 0 } : x));
       if (!sets.length) continue;
       out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir, feedback: se.feedback, decision: se.decision });
     }
@@ -62,7 +63,10 @@ export function adviseExercise(
     type: 'new',
     weight: null,
     repTarget: Math.round((repMin + repMax) / 2),
-    text: `Erstes Training: wähle ein Gewicht, mit dem du ca. ${Math.round((repMin + repMax) / 2)} Wdh. bei ${targetRir} RIR schaffst. Die App lernt ab dann mit.`,
+    text:
+      ex.equipment === 'bodyweight'
+        ? `Erstes Mal: so viele saubere Wdh. wie möglich, ca. ${targetRir} Wdh. vor dem Versagen aufhören (Bereich ${repMin}–${repMax}). Zu leicht? Schwerere Variante oder Rucksack als Zusatzgewicht.`
+        : `Erstes Training: wähle ein Gewicht, mit dem du ca. ${Math.round((repMin + repMax) / 2)} Wdh. bei ${targetRir} RIR schaffst. Die App lernt ab dann mit.`,
     causes: [],
     setDelta: 0,
     rirDelta: 0,
@@ -81,6 +85,22 @@ export function adviseExercise(
   const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
   const res: ProgressionAdvice = { ...base, lastWeight: w, lastReps: last.sets.map((s) => s.reps ?? 0), lastDate: last.date, weight: w };
 
+  // Körpergewicht ohne Zusatzlast: über Wiederholungen steigern, dann schwerere Variante/Zusatzgewicht
+  if (ex.equipment === 'bodyweight' && w <= 0) {
+    res.weight = null;
+    res.lastWeight = null;
+    const target = Math.min(repMax, Math.min(...reps) + 1);
+    if (reps.every((r) => r >= repMax)) {
+      res.type = 'extend';
+      res.repTarget = repMax;
+      res.text = `Alle Sätze am oberen Ende (${reps.join('/')} Wdh.). Nächster Schritt: schwerere Variante (z. B. Füße erhöht, langsamer ablassen) oder Zusatzgewicht – Rucksack, Wasserflaschen – und als Gewicht eintragen.`;
+    } else {
+      res.type = 'hold';
+      res.repTarget = target;
+      res.text = `Körpergewicht: Wiederholungen steigern (letztes Mal ${reps.join('/')}). Ziel ${target}+ pro Satz, ca. ${targetRir} Wdh. vor dem Versagen aufhören – bis ${repMax} Wdh. wirkt das genauso aufs Muskelwachstum wie schweres Training.`;
+    }
+    return res;
+  }
   const next = nextWeight(w, ex, ctx.settings);
   const jump = w > 0 ? (next - w) / w : 0;
   const bigJump = jump > 0.12;

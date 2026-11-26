@@ -155,6 +155,7 @@ function setMinutes(ex: Exercise, short: boolean): number {
   return m;
 }
 function setupMinutes(ex: Exercise): number {
+  if (ex.location === 'home') return 0.5; // kein Geräte-Einstellen, kein Warten
   return ex.compound ? (ex.fatigue >= 3 ? 4 : 3) : 1;
 }
 
@@ -210,7 +211,11 @@ interface BuildOpts {
   sessionsPerWeek: number;
   tentative: boolean;
   nextDates: string[];
+  /** Training ohne Gym: 'bw' = nur Körpergewicht, 'weights' = auch Hantel/Rucksack */
+  home?: HomeMode;
 }
+
+export type HomeMode = 'bw' | 'weights';
 
 export function buildSession(o: BuildOpts): PlannedSession {
   const { data, at, templateId } = o;
@@ -223,7 +228,9 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const short = o.minutes <= 50 && data.settings.autoSuperset;
   const budget = Math.max(15, (o.minutes - WARMUP_MIN) * radj.volume);
 
-  const candidates = data.exercises.filter((e) => !e.locked);
+  const candidates = data.exercises.filter((e) =>
+    !e.locked && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home'),
+  );
   const history = new Set<string>();
   const recent = new Set<string>();
   for (const s of data.sessions) {
@@ -247,15 +254,17 @@ export function buildSession(o: BuildOpts): PlannedSession {
   }
 
   const sSets: Record<MuscleId, number> = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 0])) as Record<MuscleId, number>;
+  const sDirect: Record<MuscleId, number> = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 0])) as Record<MuscleId, number>;
 
   const isFull = templateId === 'full';
   const maxSets = isFull && o.minutes <= 60 ? 3 : MAX_SETS_PER_EXERCISE;
-  const muscleValue = (m: MuscleId, s: number) => {
+  const muscleValue = (m: MuscleId, s: number, sd: number) => {
     const sc = scores[m];
     if (s >= MUSCLE[m].sessionCap) return 0;
     const overWeek = states[m].vol7 + s >= sc.target * 1.3 ? 0.3 : 1;
-    // Breiten-Bonus: der erste Satz eines Muskels ist am wertvollsten (v. a. im Ganzkörpertraining)
-    const breadth = s < 1 ? (isFull ? 0.8 : 0.2) : 0;
+    // Breiten-Bonus: der erste DIREKTE Satz eines Muskels ist am wertvollsten (v. a. im Ganzkörpertraining).
+    // Indirekte Sätze (z. B. Bizeps beim Rudern) verbrauchen den Bonus nicht – sonst bekäme Priorität 1 evtl. gar keine eigene Übung.
+    const breadth = sd < 1 ? (isFull ? 0.8 : 0.2) : 0;
     return sc.score * (1 / (1 + s / (isFull ? 2 : 3))) * overWeek * (1 + breadth);
   };
 
@@ -264,12 +273,14 @@ export function buildSession(o: BuildOpts): PlannedSession {
 
   const valueOfSets = (ex: Exercise, k: number) => {
     const local = { ...sSets };
+    const localD = { ...sDirect };
     let v = 0;
     for (let i = 0; i < k; i++) {
       for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) {
-        v += c * muscleValue(m, local[m]);
+        v += c * muscleValue(m, local[m], localD[m]);
         v -= c * 0.25 * (1 - scores[m].rec);
         local[m] += c;
+        if (c >= 0.75) localD[m] += 1;
       }
     }
     return v * exMult(ex);
@@ -305,7 +316,10 @@ export function buildSession(o: BuildOpts): PlannedSession {
           apply: () => {
             it.sets += 1;
             used += t;
-            for (const [m, c] of Object.entries(it.ex.muscles) as [MuscleId, number][]) sSets[m] += c;
+            for (const [m, c] of Object.entries(it.ex.muscles) as [MuscleId, number][]) {
+              sSets[m] += c;
+              if (c >= 0.75) sDirect[m] += 1;
+            }
           },
         };
     }
@@ -330,7 +344,10 @@ export function buildSession(o: BuildOpts): PlannedSession {
             apply: () => {
               items.push({ ex, sets: startSets });
               used += t;
-              for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) sSets[m] += startSets * c;
+              for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) {
+                sSets[m] += startSets * c;
+                if (c >= 0.75) sDirect[m] += startSets;
+              }
             },
           };
       }
@@ -583,6 +600,7 @@ function pickSpread(cands: string[], fixed: string[], k: number): string[] {
 export interface PlanOpts {
   forceToday?: boolean;
   minutesToday?: number;
+  home?: HomeMode;
 }
 
 export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}): Plan {
@@ -744,6 +762,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         sessionsPerWeek: spw,
         tentative: tentativeSet.has(d),
         nextDates: allDates.slice(i + 1),
+        home: d === today ? opts.home : undefined,
       });
       let sc = s.value;
       if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
@@ -789,6 +808,16 @@ export function planToday(data: AppData, minutes?: number, now = Date.now()): Pl
   const withToday: AppData = { ...data, availability: { ...data.availability, [today]: 'yes' } };
   const p2 = buildPlan(withToday, now, { minutesToday: m });
   return p2.sessions.find((s) => s.date === today) ?? buildPlan(data, now, { forceToday: true, minutesToday: m }).sessions[0] ?? null;
+}
+
+/** Heutiges Training ohne Gym (unterwegs/zu Hause) – gleicher Coach, nur mit Körpergewicht- bzw. Hantel-/Rucksack-Übungen */
+export function planHome(data: AppData, minutes: number, mode: HomeMode, now = Date.now()): PlannedSession | null {
+  const today = dateKey(now);
+  const withToday: AppData = { ...data, availability: { ...data.availability, [today]: 'yes' } };
+  const p = buildPlan(withToday, now, { forceToday: true, minutesToday: minutes, home: mode });
+  const s = p.sessions.find((x) => x.date === today && !x.rest) ?? null;
+  if (!s) return null;
+  return { ...s, label: `Unterwegs · ${s.label.split(' (')[0]}` };
 }
 
 export function muscleLabelList(ms: MuscleId[]): string {

@@ -50,6 +50,8 @@ export interface Exercise {
   primary: MuscleId;
   /** Arme einzeln erfassen (z. B. Seitheben): Wdh. für links und rechts */
   unilateral?: boolean;
+  /** 'home' = Übung für Training ohne Gym (wird im Studio-Plan nie eingeplant) */
+  location?: 'home';
   equipment: Equipment;
   pattern: AnimPattern;
   compound: boolean;
@@ -152,6 +154,8 @@ export interface Session {
   estMinutes?: number;
   /** geplante Arbeitssätze beim Start */
   plannedSets?: number;
+  /** Training ohne Gym (unterwegs/zu Hause) */
+  location?: 'home';
 }
 
 export type Availability = 'yes' | 'no' | 'maybe';

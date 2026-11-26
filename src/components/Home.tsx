@@ -935,7 +935,7 @@ function DoneToday({ session, nextPlanned, onNext }: { session: Session; nextPla
       <div className="grid grid-cols-3 gap-2">
         {[
           ['Dauer', `${st.durationMin} min`],
-          ['Volumen', st.volume >= 1000 ? `${fmtNum(st.volume / 1000, 1)} t` : `${Math.round(st.volume)} kg`],
+          st.volume > 0 ? ['Volumen', st.volume >= 1000 ? `${fmtNum(st.volume / 1000, 1)} t` : `${Math.round(st.volume)} kg`] : ['Wdh.', `${st.reps}`],
           ['Pausen', st.restMin != null ? `${Math.round(st.restMin)} min` : `${st.reps} Wdh.`],
         ].map(([l, v], i) => (
           <div key={l} className="rounded-2xl bg-fg/[0.05] px-3 py-2.5">

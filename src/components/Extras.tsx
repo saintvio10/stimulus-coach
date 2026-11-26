@@ -10,6 +10,7 @@ import { MUSCLE } from '../lib/muscles';
 import { addDays, cn, dateKey, fmtDate, fmtNum, parseKey, relDayLabel, DAY } from '../lib/utils';
 import { Button, Chip, Field, Input, Sheet } from './ui';
 import { ChartTooltip, axisProps } from '../pages/Progress';
+import { HomeWorkoutButton } from './HomeWorkout';
 
 /** Aktivität außerhalb des Studios eintragen (Ski, Spazieren …) */
 export function ActivitySheet({ open, onClose, date: initialDate }: { open: boolean; onClose: () => void; date?: string }) {
@@ -252,6 +253,7 @@ export function QuickLog() {
         <button onClick={() => setWt(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line/10 px-3.5 text-[12.5px] font-medium text-muted hover:text-fg">
           <Scale size={13} /> {todayW ? `${fmtNum(todayW)} kg heute` : 'Gewicht eintragen'}
         </button>
+        <HomeWorkoutButton />
       </div>
       {recent.length > 0 && (
         <ul className="flex flex-col gap-1">

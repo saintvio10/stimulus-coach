@@ -141,8 +141,10 @@ export function SessionComplete({ session, prs, onClose }: { session: Session; p
           <Tile icon={<Clock size={12} />} label="Dauer" delay={250} sub={session.estMinutes ? `geplant ~${session.estMinutes} min` : undefined}>
             <Count value={st.durationMin} /> <span className="text-[15px] text-white/60">min</span>
           </Tile>
-          <Tile icon={<Dumbbell size={12} />} label="Volumen" delay={300} sub="Gewicht × Wdh.">
-            {st.volume >= 1000 ? (
+          <Tile icon={<Dumbbell size={12} />} label={st.volume > 0 ? 'Volumen' : 'Wiederholungen'} delay={300} sub={st.volume > 0 ? 'Gewicht × Wdh.' : 'mit Körpergewicht'}>
+            {st.volume <= 0 ? (
+              <Count value={st.reps} />
+            ) : st.volume >= 1000 ? (
               <>
                 <Count value={st.volume / 1000} digits={1} /> <span className="text-[15px] text-white/60">t</span>
               </>
