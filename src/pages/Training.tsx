@@ -23,6 +23,7 @@ import { useNow, useRouter, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
+import { restAfterSet } from '../engine/rest';
 import { detectPRs, sessionSets, sessionVolume } from '../engine/stats';
 import { Badge, Button, Card, Confirm, GlowProgress, Input, PageHeader, Sheet } from '../components/ui';
 import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Coach';
@@ -336,18 +337,21 @@ function ExerciseCard({
       s.updateSet(session.id, se.uid, setId, { done: false });
       return;
     }
+    const doneReps = st.reps ?? advice.repTarget;
+    const doneRir = st.rir ?? se.targetRir;
+    const rest = restAfterSet(se, doneReps, doneRir, st.failure);
     s.updateSet(session.id, se.uid, setId, {
       done: true,
       weight: st.weight ?? rec ?? null,
-      reps: st.reps ?? advice.repTarget,
-      rir: st.rir ?? se.targetRir,
+      reps: doneReps,
+      rir: doneRir,
     });
     const isLast = idx === se.sets.length - 1;
     // Supersatz: kurzer Wechsel zur Partnerübung, sonst volle Pause
     if (partner && partner.sets.some((x) => !x.done)) {
       s.startTimer(20, `Wechsel: ${s.exercises.find((e) => e.id === partner.exerciseId)?.name ?? 'Partnerübung'}`);
     } else {
-      s.startTimer(se.restSec, isLast ? 'nächste Übung' : `${ex.name} · Satz ${idx + 2}`);
+      s.startTimer(rest.sec, `${isLast ? 'nächste Übung' : `${ex.name} · Satz ${idx + 2}`}${rest.note ? ` · ${rest.note}` : ''}`);
     }
     if (isLast && !partner) setTimeout(onNext, 300);
   };

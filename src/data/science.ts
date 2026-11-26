@@ -79,8 +79,8 @@ export const TOPICS: Topic[] = [
     evidence: 'moderat belegt',
     finding:
       'Pausen über 60 Sekunden zeigen einen kleinen Vorteil für Hypertrophie, vermutlich weil mehr Wiederholungen möglich sind. Jenseits von ~90 Sekunden waren in der Bayes-Meta-Analyse keine nennenswerten Unterschiede mehr erkennbar – die Unsicherheit ist allerdings groß.',
-    practice: 'Isolation 60–90 s, Mehrgelenksübungen 2–3 min. Lieber so lange pausieren, dass die Leistung im nächsten Satz nicht stark einbricht.',
-    app: 'Pausen je Übung voreingestellt (60–180 s) und im Timer mit ±15 s anpassbar. Die Zeitplanung einer Einheit rechnet mit diesen Pausen.',
+    practice: 'Isolation ca. 90–120 s, schwere Mehrgelenksübungen 2–3 min. Lieber so lange pausieren, dass die Leistung im nächsten Satz nicht stark einbricht – zu kurze Pausen kosten Wiederholungen und damit Reiz.',
+    app: 'Pausen je Übung: Isolation 90–120 s (Bauch 75 s), Mehrgelenksübungen 150–180 s – also überall über der 60–90-s-Schwelle. Autoreguliert: +30 s nach einem Satz bis Versagen und +30 s, wenn die Wiederholungen schon ≥ 3 unter dem ersten Satz liegen. Im Timer mit ±15 s anpassbar; die Zeitplanung rechnet mit diesen Pausen. Nur im Zeitmodus (≤ 50 min) werden Antagonisten als Supersatz gepaart.',
     refs: [{ label: 'Singer et al. (2024), Front Sports Act Living – „Give it a rest“', url: 'https://www.frontiersin.org/articles/10.3389/fspor.2024.1429789/full' }],
   },
   {

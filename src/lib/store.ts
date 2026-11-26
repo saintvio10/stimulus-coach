@@ -9,7 +9,9 @@ import { addDays, dateKey, endOfWeek, uid } from './utils';
 import { optimalSetsFor, type PlannedSession } from '../engine/planner';
 import { calibrateTime, computeVolumeAdjust } from '../engine/adapt';
 
-const DATA_VERSION = 1;
+const DATA_VERSION = 2;
+/** Pausenzeiten vor Version 2 – werden nur ersetzt, wenn sie unverändert vom Standard sind */
+const OLD_REST: Record<string, number> = {"pushdown": 75, "dip-machine": 120, "incline-press": 150, "chest-press": 150, "butterfly": 90, "lat-pulldown": 120, "chest-supported-row": 120, "cable-row": 120, "cable-lateral": 75, "db-lateral": 75, "reverse-cable-fly": 75, "seated-leg-curl": 90, "leg-extension": 90, "calf-raise": 60, "cable-crunch": 60, "ab-machine": 60, "reverse-butterfly": 75};
 
 export function defaultData(): AppData {
   return {
@@ -126,6 +128,13 @@ export function migrate(raw: Partial<AppData>): AppData {
     version: DATA_VERSION,
   };
   if (!d.profile.name) d.profile.name = 'Dominic';
+  // Migration v2: neue, studienbasierte Pausenzeiten für unveränderte Standardübungen
+  if ((raw.version ?? 1) < 2) {
+    d.exercises = d.exercises.map((x) => {
+      const def = DEFAULT_EXERCISES.find((e) => e.id === x.id);
+      return def && !x.custom && OLD_REST[x.id] === x.restSec ? { ...x, restSec: def.restSec } : x;
+    });
+  }
   // Bestehende Nutzer nicht erneut durch das Onboarding schicken
   if (raw.settings && raw.settings.onboarded === undefined && (raw.sessions?.length ?? 0) > 0) d.settings.onboarded = true;
   // neue Standardübungen ergänzen, falls sie fehlen
@@ -418,6 +427,8 @@ export const useStore = create<Store>()(
     {
       name: 'stimulus-data',
       version: DATA_VERSION,
+      // Ältere Speicherstände unverändert übernehmen – die eigentliche Migration passiert in merge()/migrate()
+      migrate: (persisted) => persisted as Store,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => {
         const { hydrated, ...rest } = s;

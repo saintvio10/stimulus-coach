@@ -10,6 +10,7 @@ import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
 import { cn, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 import { unlockAudio } from './RestTimer';
+import { restAfterSet } from '../engine/rest';
 import { GlowProgress } from './ui';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
@@ -78,7 +79,8 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
     s.setWeightFrom(session.id, se.uid, cur.id, w);
     s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps, rir, failure: rir === 0 ? cur.failure : false });
     const last = setIndex === se.sets.length - 1;
-    s.startTimer(se.restSec, last ? 'nächste Übung' : `${ex.name} · Satz ${setIndex + 2}`);
+    const rest = restAfterSet(se, reps, rir, rir === 0);
+    s.startTimer(rest.sec, `${last ? 'nächste Übung' : `${ex.name} · Satz ${setIndex + 2}`}${rest.note ? ` · ${rest.note}` : ''}`);
     if (last && idx < list.length - 1) setTimeout(() => setIdx((i) => Math.min(list.length - 1, i + 1)), 500);
   };
   const stepW = (dir: 1 | -1) => {
