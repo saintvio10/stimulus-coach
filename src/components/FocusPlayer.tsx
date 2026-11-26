@@ -156,6 +156,28 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             <button onClick={completeSet} className="flex h-14 items-center justify-center gap-2 rounded-full bg-white text-[16px] font-semibold text-black active:scale-[0.98]">
               <Check size={18} /> Satz {setIndex + 1} erledigt
             </button>
+            <div className="flex justify-center gap-5 text-[13px] font-medium text-white/60">
+              {se.sets.length > 1 && (
+                <button
+                  onClick={() => {
+                    const last = [...se.sets].reverse().find((x) => !x.done);
+                    if (last) s.removeSet(session.id, se.uid, last.id);
+                  }}
+                >
+                  − Satz entfernen
+                </button>
+              )}
+              {setIndex > 0 && (
+                <button
+                  onClick={() => {
+                    se.sets.filter((x) => !x.done).forEach((x) => s.removeSet(session.id, se.uid, x.id));
+                    if (idx < list.length - 1) setIdx(idx + 1);
+                  }}
+                >
+                  Übung hier beenden
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <div className="rounded-[24px] bg-rec-green/10 p-4 text-[14px] text-rec-green">

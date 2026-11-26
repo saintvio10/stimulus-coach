@@ -112,6 +112,8 @@ export interface Plan {
   trainedToday: boolean;
   notes: string[];
   horizonDays: string[];
+  /** Tage mit Zeit, an denen bewusst pausiert wird */
+  restDays: { date: string; reason: string }[];
 }
 
 // ───────────────────────── Konstanten der Heuristik ─────────────────────────
@@ -480,6 +482,13 @@ export function chooseStrategy(dates: string[], uncertain: boolean): Strategy {
       templates: ['fbA', 'fbB', 'fbC'],
     };
   }
+  if (consecutive === 0)
+    return {
+      id: 'ulSpread',
+      label: 'Oberkörper/Unterkörper im Wechsel',
+      reason: `${n} Einheiten mit Ruhetagen dazwischen → Ober- und Unterkörper im Wechsel, ergänzt um Ganzkörper; jeder Muskel ~2× pro Woche.`,
+      templates: ['upper', 'lowerPlus', 'fbA', 'fbB'],
+    };
   return {
     id: 'flex',
     label: 'Flexibel (PPL+ / OK-UK)',
@@ -559,6 +568,61 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     dates2 = [];
   }
 
+  // ───── Sinnvolle Ruhetage ─────
+  // Regeln: max. maxConsecutive Trainingstage am Stück (inkl. bereits absolvierter Tage davor),
+  // max. maxSessionsPerWeek Einheiten in den 7 Tagen (inkl. Trainings der letzten Tage im rollierenden Fenster).
+  const restDays: { date: string; reason: string }[] = [];
+  if (!opts.forceToday && !uncertain && dates.length > 1) {
+    const maxCons = Math.max(2, data.settings.maxConsecutive || 3);
+    const doneDates = new Set(doneSessions.map((s) => s.date));
+    // bereits trainierte Tage im rollierenden Fenster (letzte 6 Tage vor start)
+    const recentDone = Array.from({ length: 6 }, (_, i) => addDays(start, -(i + 1))).filter((d) => doneDates.has(d));
+    const cap = Math.max(1, (data.settings.maxSessionsPerWeek || 4) - Math.max(0, recentDone.length - 2));
+    const fixedTentative = new Set(dates.filter((d) => tentativeSet.has(d)));
+    const n = dates.length;
+    let best: string[] = dates;
+    let bestScore = -Infinity;
+    for (let mask = 1; mask < 1 << n; mask++) {
+      const pick = dates.filter((_, i) => mask & (1 << i));
+      if (pick.length > cap) continue;
+      // längste Kette prüfen (inkl. Historie)
+      const all = new Set([...pick, ...doneDates]);
+      let ok = true;
+      for (const d of pick) {
+        let run = 1;
+        for (let k = 1; k <= maxCons; k++) {
+          if (all.has(addDays(d, -k))) run++;
+          else break;
+        }
+        if (run > maxCons) ok = false;
+      }
+      if (!ok) continue;
+      const seq = [...(recentDone.length ? [recentDone[0]] : []), ...pick].sort();
+      const gaps = seq.slice(1).map((d, i) => diffDays(d, seq[i]));
+      const minGap = gaps.length ? Math.min(...gaps) : 7;
+      const consecutive = gaps.filter((g) => g === 1).length;
+      const score = pick.length * 100 + minGap * 8 - consecutive * 3 + (pick.includes(today) ? 2 : 0) - pick.filter((d) => fixedTentative.has(d)).length * 5;
+      if (score > bestScore) (bestScore = score), (best = pick);
+    }
+    for (const d of dates) {
+      if (best.includes(d) || tentativeSet.has(d)) continue;
+      const set = new Set([...best, ...doneDates, d]);
+      let run = 1;
+      for (let k = 1; set.has(addDays(d, -k)); k++) run++;
+      for (let k = 1; set.has(addDays(d, k)); k++) run++;
+      restDays.push({
+        date: d,
+        reason:
+          run > maxCons
+            ? `Ruhetag: Sonst wären es ${run} Trainingstage am Stück. Eine Pause dazwischen gibt Muskeln, Sehnen und Nervensystem Zeit – die folgenden Einheiten werden dadurch leistungsfähiger.`
+            : best.length >= cap
+              ? `Ruhetag: Mit ${best.length} Einheiten in 7 Tagen ist dein Volumen gut verteilt (Obergrenze ${cap}×). Eine weitere Einheit brächte kaum Zusatznutzen, verkürzt aber die Erholung.`
+              : 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – jeder Muskel ist beim nächsten Reiz besser erholt.',
+      });
+    }
+    dates = best;
+  }
+
   // Wochenlimit ("Diese Woche nur 1×")
   if (!opts.forceToday && weekCap && weekCap.until >= start) {
     const from = startOfWeek(today);
@@ -605,8 +669,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         nextDates: allDates.slice(i + 1),
       });
       let sc = s.value;
-      if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.8;
-      else if (usedTemplates.includes(tid)) sc *= 0.92;
+      if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
+      else if (usedTemplates.includes(tid)) sc *= 0.85;
       if (sc > bestScore) (bestScore = sc), (best = s);
     }
     if (!best) continue;
@@ -633,7 +697,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
 
   if (!dates.length) notes.push(`Keine Trainingstage in den nächsten ${PLAN_DAYS} Tagen. Tippe oben an, wann du Zeit hast.`);
 
-  return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2] };
+  return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays };
 }
 
 /** Plan für ein spontanes Training heute (auch wenn nicht eingeplant) */

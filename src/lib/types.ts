@@ -189,6 +189,10 @@ export interface Profile {
 export interface Settings {
   preferredDays: number[]; // 0 = So … 6 = Sa
   sessionsPerWeek: number; // 1–3 (erwartet)
+  /** Obergrenze Einheiten pro 7 Tage (Rest wird zu Ruhetagen) */
+  maxSessionsPerWeek: number;
+  /** max. Trainingstage am Stück */
+  maxConsecutive: number;
   defaultMinutes: number;
   orderMode: 'priority' | 'compound';
   autoSuperset: boolean;

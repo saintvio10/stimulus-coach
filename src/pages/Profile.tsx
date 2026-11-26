@@ -92,6 +92,14 @@ export default function ProfilePage() {
               </Select>
             </Field>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Max. Einheiten pro 7 Tage" hint="Weitere Tage mit Zeit werden zu Ruhetagen">
+              <Segmented value={String(st.maxSessionsPerWeek ?? 4)} onChange={(v) => setS({ maxSessionsPerWeek: +v })} options={['2', '3', '4', '5', '6'].map((v) => ({ value: v, label: `${v}×` }))} />
+            </Field>
+            <Field label="Max. Trainingstage am Stück" hint="Danach plant die App einen Ruhetag">
+              <Segmented value={String(st.maxConsecutive ?? 3)} onChange={(v) => setS({ maxConsecutive: +v })} options={['2', '3', '4'].map((v) => ({ value: v, label: `${v} Tage` }))} />
+            </Field>
+          </div>
           <Row label="Supersätze bei wenig Zeit (≤ 50 min)" hint="Bizeps/Trizeps und seitliche/hintere Schulter im Wechsel">
             <Switch id="s-ss" checked={st.autoSuperset} onChange={(v) => setS({ autoSuperset: v })} label="Supersätze" />
           </Row>

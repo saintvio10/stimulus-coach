@@ -97,6 +97,7 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
           const a = s.availability[d] ?? 'maybe'; // nicht gewählt = neutral
           const done = s.sessions.some((x) => x.date === d && x.status === 'done');
           const planned = plan.sessions.find((x) => x.date === d);
+          const rest = plan.restDays?.find((x) => x.date === d);
           const isToday = d === today;
           return (
             <button
@@ -131,6 +132,11 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
                       : 'bg-line/15',
                 )}
               />
+              {rest && !done && (
+                <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 rounded-full bg-[#3b4a6b] px-1.5 text-[8.5px] font-bold uppercase leading-[14px] text-[#c9d6ff]">
+                  Ruhe
+                </span>
+              )}
               {(done || planned) && (
                 <span
                   className={cn(
@@ -172,6 +178,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   const active = s.sessions.find((x) => x.status === 'active');
   const doneHere = s.sessions.filter((x) => x.date === day && x.status === 'done');
   const planned = plan.sessions.find((p) => p.date === day) ?? null;
+  const restHere = plan.restDays?.find((r) => r.date === day);
   const nextPlanned = plan.sessions.find((p) => p.date > day);
   const avail: Availability = s.availability[day] ?? (s.settings.preferredDays.includes(weekdayOf(day)) ? 'maybe' : 'no');
   const exMap = new Map(s.exercises.map((e) => [e.id, e]));
@@ -332,10 +339,12 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
         ) : (
           <>
             <h2 className="text-[24px] font-semibold leading-tight">
-              {avail === 'no' ? 'Keine Zeit – kein Training' : planned?.rest ? 'Ruhetag empfohlen' : 'Kein Training geplant'}
+              {avail === 'no' ? 'Keine Zeit – kein Training' : restHere || planned?.rest ? 'Ruhetag empfohlen 🌙' : 'Kein Training geplant'}
             </h2>
             <p className="text-[13px] text-muted">
-              {avail === 'no'
+              {restHere && avail !== 'no'
+                ? restHere.reason
+                : avail === 'no'
                 ? 'Der Plan verteilt dein Volumen auf die anderen Tage.'
                 : planned?.rest
                   ? 'Laut Schätzung sind die relevanten Muskeln noch stark ermüdet.'
@@ -498,6 +507,7 @@ export function MoreAvailability() {
 export function UpcomingDays({ plan }: { plan: Plan }) {
   const s = useStore();
   const [open, setOpen] = useState<PlannedSession | null>(null);
+  const [restOpen, setRestOpen] = useState<{ date: string; reason: string } | null>(null);
   const today = dateKey();
   const days = Array.from({ length: PLAN_DAYS - 1 }, (_, i) => addDays(today, i + 1));
   const exMap = new Map(s.exercises.map((e) => [e.id, e]));
@@ -511,7 +521,24 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
         {days.map((d) => {
           const p = plan.sessions.find((x) => x.date === d);
           const a = s.availability[d];
+          const rest = plan.restDays?.find((r) => r.date === d);
           const label = d === addDays(today, 1) ? 'Morgen' : `${WEEKDAYS_LONG[weekdayOf(d)]}, ${Number(d.slice(8))}.`;
+          if (!p && rest)
+            return (
+              <button
+                key={d}
+                onClick={() => setRestOpen(rest)}
+                className="flex h-[236px] w-[56%] max-w-[240px] shrink-0 snap-start flex-col justify-between rounded-[24px] border border-[#3b4a6b]/60 bg-[linear-gradient(160deg,#1d2433,rgb(var(--surface)))] p-4 text-left"
+              >
+                <div>
+                  <div className="text-[13px] font-medium text-muted">{label}</div>
+                  <div className="mt-1 text-[17px] font-semibold">Ruhetag</div>
+                  <div className="text-[12px] text-[#9fb2e6]">bewusst eingeplant</div>
+                </div>
+                <span className="grid h-12 w-12 place-items-center rounded-full bg-[#3b4a6b]/50 text-[20px] shadow-[0_0_18px_rgb(120_150_230/0.35)]">☾</span>
+                <div className="line-clamp-3 text-[12px] text-muted">{rest.reason.replace(/^Ruhetag: /, '')}</div>
+              </button>
+            );
           if (!p)
             return (
               <div key={d} className="flex h-[236px] w-[44%] max-w-[200px] shrink-0 snap-start flex-col justify-between rounded-[24px] border border-line/[0.07] bg-surface p-4">
@@ -581,6 +608,26 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
       </div>
       <Sheet open={!!open} onClose={() => setOpen(null)} title={open ? `${relDayLabel(open.date)}: ${open.label}` : ''}>
         {open && <SessionPreview s={open} />}
+      </Sheet>
+      <Sheet open={!!restOpen} onClose={() => setRestOpen(null)} title={restOpen ? `${relDayLabel(restOpen.date)}: Ruhetag` : ''}>
+        {restOpen && (
+          <div className="flex flex-col gap-3 text-[14px]">
+            <p>{restOpen.reason}</p>
+            <p className="text-[13px] text-muted">
+              Du kannst trotzdem trainieren – tippe den Tag dann einfach erneut an oder starte ihn über „Training“. Regeln (max. Tage am Stück, max. Einheiten pro Woche)
+              lassen sich im Profil anpassen.
+            </p>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                s.setAvailability(restOpen.date, 'no');
+                setRestOpen(null);
+              }}
+            >
+              Als „keine Zeit“ markieren
+            </Button>
+          </div>
+        )}
       </Sheet>
     </section>
   );

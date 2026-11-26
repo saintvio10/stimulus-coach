@@ -21,7 +21,7 @@ import {
 import { useStore } from '../lib/store';
 import { useNow, useRouter, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
-import { planToday } from '../engine/planner';
+import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
 import { detectPRs, sessionSets, sessionVolume } from '../engine/stats';
 import { Badge, Button, Card, Confirm, Input, PageHeader, Sheet } from '../components/ui';
@@ -48,9 +48,16 @@ function PlanView() {
   const minutes = s.planOptions.todayMinutes?.date === today ? s.planOptions.todayMinutes.minutes : s.settings.defaultMinutes;
   const plan = useMemo(() => planToday(data, minutes), [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns]); // eslint-disable-line react-hooks/exhaustive-deps
   const trainedToday = s.sessions.some((x) => x.status === 'done' && x.date === today);
+  const restToday = useMemo(() => buildPlan(data).restDays.find((r) => r.date === today), [s.sessions, s.availability, s.settings, s.planOptions]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="Dein Plan für heute" sub={s.profile.name ? `Hallo ${s.profile.name}` : 'Heute'} />
+      {restToday && !trainedToday && (
+        <Card className="border-[#3b4a6b]/60 bg-[linear-gradient(160deg,#1d2433,rgb(var(--surface)))] text-[13px]">
+          <div className="mb-1 text-[15px] font-semibold">Heute ist ein Ruhetag empfohlen 🌙</div>
+          <p className="text-muted">{restToday.reason} Wenn du dich fit fühlst, kannst du den Plan unten trotzdem starten.</p>
+        </Card>
+      )}
       {trainedToday && (
         <Card className="border-rec-yellow/20 text-[13px] text-muted">
           Du hast heute bereits trainiert. Eine zweite Einheit wird so geplant, dass sie die heute belasteten Muskeln möglichst schont.
@@ -540,6 +547,31 @@ function ExerciseCard({
             <Button size="sm" variant={complete ? 'ghost' : 'secondary'} onClick={() => s.addSet(session.id, se.uid)} title="Zusätzlicher Satz (über der Empfehlung)">
               <Plus size={14} /> {complete ? 'Extra-Satz' : 'Satz'}
             </Button>
+            {se.sets.some((x) => !x.done) && se.sets.length > 1 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const last = [...se.sets].reverse().find((x) => !x.done);
+                  if (last) s.removeSet(session.id, se.uid, last.id);
+                }}
+                aria-label="Letzten offenen Satz entfernen"
+              >
+                <Minus size={14} /> Satz
+              </Button>
+            )}
+            {doneN > 0 && se.sets.some((x) => !x.done) && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  se.sets.filter((x) => !x.done).forEach((x) => s.removeSet(session.id, se.uid, x.id));
+                  setTimeout(onNext, 200);
+                }}
+              >
+                <Check size={14} /> Übung fertig ({doneN} Sätze)
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={onSwap}>
               <Repeat size={14} /> Austauschen
             </Button>

@@ -27,6 +27,8 @@ export function defaultData(): AppData {
     settings: {
       preferredDays: [3, 4, 5, 6, 0],
       sessionsPerWeek: 2,
+      maxSessionsPerWeek: 4,
+      maxConsecutive: 3,
       defaultMinutes: 75,
       orderMode: 'priority',
       autoSuperset: true,
