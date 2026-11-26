@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, BookOpen, Cloud, Copy, Download, Upload } from 'lucide-react';
 import { defaultData, exportData, migrate, useStore } from '../lib/store';
 import { useRouter, useToast } from '../lib/hooks';
-import { Button, Card, Chip, Confirm, Field, Input, PageHeader, SectionTitle, Segmented, Select, Switch } from '../components/ui';
+import { Button, Card, Chip, Confirm, Field, Input, PageHeader, SectionTitle, Segmented, Select, Sheet, Switch } from '../components/ui';
 import { GROUP_LABEL, weeklyTarget, MUSCLES } from '../lib/muscles';
 import { WEEKDAYS_SHORT, dateKey, downloadFile, fmtNum } from '../lib/utils';
 import { clearDemo, generateDemo, hasDemo } from '../lib/demo';
+import { mergeData, parseExport } from '../lib/merge';
 import type { AppData } from '../lib/types';
 import { requestNotify } from '../components/RestTimer';
 import { SUPABASE_SQL, currentUser, pullState, pushState, signIn, signOut } from '../lib/sync';
@@ -282,44 +283,83 @@ function DataCard({ onReset }: { onReset: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [showJson, setShowJson] = useState(false);
   const [paste, setPaste] = useState('');
-  const json = () => JSON.stringify({ app: 'stimulus', exportedAt: new Date().toISOString(), data: exportData() }, null, 2);
-  const importText = (t: string) => {
+  const [pending, setPending] = useState<AppData | null>(null);
+  const [replaceConfirm, setReplaceConfirm] = useState(false);
+  const json = () => JSON.stringify({ app: 'stimulus', exportedAt: new Date().toISOString(), data: exportData() });
+  const filename = () => `stimulus-backup-${dateKey()}.json`;
+
+  const prepare = (t: string) => {
     try {
-      const parsed = JSON.parse(t);
-      const d = (parsed.data ?? parsed) as AppData;
-      if (!d || typeof d !== 'object' || !('sessions' in d)) throw new Error('Kein gültiger Export');
-      s.replaceAll(migrate(d));
-      toast(`Import erfolgreich: ${d.sessions.length} Trainings`);
-      setPaste('');
+      setPending(parseExport(t));
     } catch (e) {
       toast(`Import fehlgeschlagen: ${(e as Error).message}`);
     }
   };
+  const doMerge = () => {
+    if (!pending) return;
+    const local = exportData();
+    const { data, report } = mergeData(local, migrate(pending));
+    s.replaceAll(data);
+    s.runAdaptation();
+    setPending(null);
+    setPaste('');
+    setShowJson(false);
+    toast(
+      `Zusammengeführt: ${report.added} neue Trainings${report.updated ? `, ${report.updated} aktualisiert` : ''}${report.activeImported === 'active' ? ', laufendes Training übernommen' : report.activeImported === 'closed' ? ', importiertes Training abgeschlossen' : ''}`,
+    );
+  };
+  const doReplace = () => {
+    if (!pending) return;
+    s.replaceAll(migrate(pending));
+    s.runAdaptation();
+    toast(`Ersetzt: ${pending.sessions.length} Trainings`);
+    setPending(null);
+    setPaste('');
+  };
+  const share = async () => {
+    const text = json();
+    try {
+      const file = new File([text], filename(), { type: 'application/json' });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Stimulus Backup' });
+        return;
+      }
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') return;
+    }
+    try {
+      downloadFile(filename(), text);
+      toast('Backup gespeichert');
+    } catch {
+      setShowJson(true);
+    }
+  };
+  const preview = pending
+    ? (() => {
+        const ids = new Set(s.sessions.map((x) => x.id));
+        const newOnes = pending.sessions.filter((x) => !ids.has(x.id)).length;
+        const act = pending.sessions.find((x) => x.status === 'active');
+        return { total: pending.sessions.length, newOnes, act };
+      })()
+    : null;
   const demo = hasDemo(s as unknown as AppData);
   return (
     <Card>
-      <SectionTitle>Daten</SectionTitle>
-      <p className="mb-3 text-[13px] text-muted">Alle Daten werden lokal in IndexedDB auf diesem Gerät gespeichert und überstehen Neuladen und Schließen. Für Backups oder Gerätewechsel: JSON-Export.</p>
+      <SectionTitle>Daten & Backup</SectionTitle>
+      <p className="mb-3 text-[13px] text-muted">
+        Alle Daten liegen lokal auf diesem Gerät (IndexedDB) und überstehen Neuladen, Schließen und App-Updates unter derselben Adresse. Zum Umziehen (z. B. Safari → Home-Bildschirm,
+        neues Gerät): hier sichern und in der anderen App „Importieren“ → „Zusammenführen“.
+      </p>
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          onClick={() => {
-            try {
-              downloadFile(`stimulus-backup-${dateKey()}.json`, json());
-              toast('Export gestartet');
-            } catch {
-              setShowJson(true);
-            }
-          }}
-        >
-          <Download size={15} /> Export (JSON)
+        <Button variant="primary" onClick={share}>
+          <Download size={15} /> Backup teilen / speichern
         </Button>
         <Button
           variant="secondary"
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(json());
-              toast('In Zwischenablage kopiert');
+              toast('Backup in Zwischenablage kopiert');
             } catch {
               setShowJson(true);
             }
@@ -328,38 +368,54 @@ function DataCard({ onReset }: { onReset: () => void }) {
           <Copy size={15} /> Kopieren
         </Button>
         <Button variant="secondary" onClick={() => fileRef.current?.click()}>
-          <Upload size={15} /> Import
+          <Upload size={15} /> Aus Datei importieren
         </Button>
         <input
           ref={fileRef}
           type="file"
-          accept="application/json,.json"
+          accept="application/json,.json,text/plain"
           className="hidden"
           onChange={async (e) => {
             const f = e.target.files?.[0];
-            if (f) importText(await f.text());
+            if (f) prepare(await f.text());
             e.target.value = '';
           }}
         />
-        <Button variant="ghost" onClick={() => setShowJson(!showJson)}>
-          JSON anzeigen / einfügen
+        <Button variant="secondary" onClick={() => setShowJson(!showJson)}>
+          Text einfügen
         </Button>
       </div>
       {showJson && (
         <div className="mt-3 flex flex-col gap-2">
-          <textarea readOnly className="tnum h-32 w-full rounded-xl border border-line/10 bg-bg p-3 font-mono text-[11px]" value={json()} onFocus={(e) => e.target.select()} />
           <textarea
             id="paste-json"
-            placeholder="Export hier einfügen und „Importieren“ tippen"
-            className="h-24 w-full rounded-xl border border-line/10 bg-bg p-3 font-mono text-[11px]"
+            placeholder="Kopiertes Backup hier einfügen (lange tippen → Einsetzen)"
+            className="h-28 w-full rounded-xl border border-line/10 bg-bg p-3 font-mono text-[11px]"
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
           />
-          <div>
-            <Button size="sm" variant="primary" disabled={!paste.trim()} onClick={() => importText(paste)}>
-              Importieren
+          <div className="flex gap-2">
+            <Button size="sm" variant="primary" disabled={!paste.trim()} onClick={() => prepare(paste)}>
+              Prüfen & importieren
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                try {
+                  setPaste(await navigator.clipboard.readText());
+                } catch {
+                  toast('Bitte manuell einfügen (lange tippen → Einsetzen)');
+                }
+              }}
+            >
+              Aus Zwischenablage
             </Button>
           </div>
+          <details className="text-[12px] text-muted">
+            <summary className="cursor-pointer">Eigenes Backup als Text anzeigen</summary>
+            <textarea readOnly className="mt-2 h-28 w-full rounded-xl border border-line/10 bg-bg p-3 font-mono text-[11px]" value={json()} onFocus={(e) => e.target.select()} />
+          </details>
         </div>
       )}
       <div className="mt-4 flex flex-wrap gap-2 border-t border-line/[0.06] pt-4">
@@ -388,7 +444,56 @@ function DataCard({ onReset }: { onReset: () => void }) {
           Alle Daten löschen
         </Button>
       </div>
-      <p className="mt-2 text-[12px] text-muted">Beispieldaten sind markiert und lassen sich jederzeit wieder entfernen, ohne deine echten Trainings zu berühren.</p>
+
+      <Sheet
+        open={!!pending}
+        onClose={() => setPending(null)}
+        title="Backup importieren"
+        footer={
+          <div className="flex flex-col gap-2">
+            <Button variant="primary" size="lg" onClick={doMerge}>
+              Zusammenführen (empfohlen)
+            </Button>
+            <Button variant="ghost" onClick={() => setReplaceConfirm(true)}>
+              Alles ersetzen
+            </Button>
+          </div>
+        }
+      >
+        {preview && (
+          <div className="flex flex-col gap-3 text-[14px]">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-raised p-3">
+                <div className="label">Trainings im Backup</div>
+                <div className="tnum mt-1 text-[22px] font-semibold">{preview.total}</div>
+              </div>
+              <div className="rounded-2xl bg-raised p-3">
+                <div className="label">Davon neu</div>
+                <div className="tnum mt-1 text-[22px] font-semibold text-rec-green">{preview.newOnes}</div>
+              </div>
+            </div>
+            {preview.act && (
+              <p className="rounded-xl bg-accent/10 px-3 py-2 text-[13px]">
+                Enthält ein laufendes Training „{preview.act.title}“ ({preview.act.exercises.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0)} Sätze erledigt). Es wird übernommen
+                und du kannst direkt weitermachen{s.sessions.some((x) => x.status === 'active') ? ' – da hier schon eines läuft, wird es als abgeschlossen gespeichert' : ''}.
+              </p>
+            )}
+            <p className="text-[13px] text-muted">
+              <b className="text-fg">Zusammenführen</b> ergänzt Trainings, Körperdaten, Check-ins und Ernährung aus dem Backup. Nichts Vorhandenes wird gelöscht, Doppelte werden erkannt; Profil und
+              Einstellungen dieser App bleiben. <b className="text-fg">Alles ersetzen</b> überschreibt alle Daten hier mit dem Backup.
+            </p>
+          </div>
+        )}
+      </Sheet>
+      <Confirm
+        open={replaceConfirm}
+        onClose={() => setReplaceConfirm(false)}
+        onConfirm={doReplace}
+        title="Alle Daten ersetzen?"
+        text="Alle Daten in dieser App werden durch das Backup überschrieben. Zusammenführen ist meist die bessere Wahl."
+        confirmLabel="Ersetzen"
+        danger
+      />
     </Card>
   );
 }
