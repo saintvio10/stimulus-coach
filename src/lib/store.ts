@@ -144,6 +144,8 @@ interface Store extends AppData {
   // Training
   startSession: (plan: PlannedSession | null, title?: string) => string;
   updateSet: (sessionId: string, exUid: string, setId: string, patch: Partial<SetLog>) => void;
+  /** Gewicht setzen und in alle folgenden, noch offenen Sätze übernehmen */
+  setWeightFrom: (sessionId: string, exUid: string, setId: string, weight: number | null) => void;
   addSet: (sessionId: string, exUid: string) => void;
   removeSet: (sessionId: string, exUid: string, setId: string) => void;
   patchExercise: (sessionId: string, exUid: string, patch: Partial<SessionExercise>) => void;
@@ -242,6 +244,15 @@ export const useStore = create<Store>()(
             const se = s.exercises.find((e) => e.uid === xu);
             const st = se?.sets.find((x) => x.id === setId);
             if (st) Object.assign(st, patch);
+          }),
+        setWeightFrom: (sid, xu, setId, weight) =>
+          mutSession(sid, (s) => {
+            const se = s.exercises.find((e) => e.uid === xu);
+            if (!se) return;
+            const i = se.sets.findIndex((x) => x.id === setId);
+            if (i < 0) return;
+            se.sets[i].weight = weight;
+            for (let k = i + 1; k < se.sets.length; k++) if (!se.sets[k].done) se.sets[k].weight = weight;
           }),
         addSet: (sid, xu) =>
           mutSession(sid, (s) => {

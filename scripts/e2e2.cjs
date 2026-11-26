@@ -33,7 +33,7 @@ const OUT = '/tmp/claude-0/-home-user/77587700-1482-5af7-9d38-099b28ee21ee/scrat
   console.log('route', await p.evaluate(() => location.hash));
   await p.waitForTimeout(600); await p.screenshot({ path: OUT + 'a4a-start.png' }); await p.screenshot({ path: OUT + 'a4b-start-full.png', fullPage: true });
   await p.getByRole('button', { name: 'Gewicht erhöhen' }).first().click(); await p.getByRole('button', { name: 'Wiederholungen verringern' }).first().click(); await p.waitForTimeout(200);
-  console.log('first weight', await p.locator('input[aria-label=Gewicht]').first().inputValue(), 'reps', await p.locator('input[aria-label=Wiederholungen]').first().inputValue());
+  console.log('weights', await p.locator('input[aria-label=Gewicht]').evaluateAll(es => es.slice(0,4).map(e => e.value)), 'reps', await p.locator('input[aria-label=Wiederholungen]').evaluateAll(es => es.slice(0,4).map(e => e.value)));
   await p.getByRole('button', { name: /Fokus/ }).first().click(); await p.waitForTimeout(800);
   await p.getByRole('button', { name: /Satz 1 erledigt/ }).click(); await p.waitForTimeout(1500);
   await p.screenshot({ path: OUT + 'a4-focus.png' });

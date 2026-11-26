@@ -24,7 +24,7 @@ import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
 import { detectPRs, sessionSets, sessionVolume } from '../engine/stats';
-import { Badge, Button, Card, Confirm, Input, PageHeader, Sheet } from '../components/ui';
+import { Badge, Button, Card, Confirm, GlowProgress, Input, PageHeader, Sheet } from '../components/ui';
 import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Coach';
 import { ExerciseAnimation, ExerciseIcon } from '../components/ExerciseAnimation';
 import { FocusPlayer } from '../components/FocusPlayer';
@@ -459,10 +459,10 @@ function ExerciseCard({
                       placeholder={rec != null ? fmtNum(rec) : 'kg'}
                       decimal
                       disabled={st.done}
-                      onChange={(v) => s.updateSet(session.id, se.uid, st.id, { weight: v })}
+                      onChange={(v) => s.setWeightFrom(session.id, se.uid, st.id, v)}
                       onStep={(d) => {
                         const base = st.weight ?? rec ?? 0;
-                        s.updateSet(session.id, se.uid, st.id, { weight: d > 0 ? nextWeight(base, ex, s.settings) : prevWeight(base, ex, s.settings) });
+                        s.setWeightFrom(session.id, se.uid, st.id, d > 0 ? nextWeight(base, ex, s.settings) : prevWeight(base, ex, s.settings));
                       }}
                       label="Gewicht"
                     />
@@ -531,7 +531,7 @@ function ExerciseCard({
                 </div>
               );
             })}
-            <p className="px-1 text-[11px] text-muted">Werte sind mit der Empfehlung vorausgefüllt. ± springt in den echten Gewichtsstufen des Geräts. Tippe auf die Satznummer für Notiz/Löschen.</p>
+            <p className="px-1 text-[11px] text-muted">Vorausgefüllt mit der Empfehlung. Ein geändertes Gewicht wird automatisch in die folgenden Sätze übernommen – meist musst du nur die Wiederholungen anpassen. Tippe auf die Satznummer für Notiz/Löschen.</p>
           </div>
 
           {complete && (
@@ -637,33 +637,29 @@ function WorkoutProgress({ session, now, onJump }: { session: Session; now: numb
   const elapsedMin = Math.round((now - session.startedAt) / 60000);
   return (
     <div className="mt-3 flex flex-col gap-2">
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <div className="tnum text-[26px] font-semibold leading-none tracking-tight">
-            {pct}
-            <span className="text-[15px] text-muted">%</span>
-          </div>
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="tnum text-[22px] font-semibold leading-none tracking-tight">
+          {pct}
+          <span className="text-[14px] text-muted">%</span>
         </div>
-        <div className="tnum flex gap-4 text-right text-[12px] text-muted">
-          <div>
-            <div className="text-[14px] font-semibold text-fg">
-              {done}/{total}
-            </div>
-            Sätze
-          </div>
-          <div>
-            <div className="text-[14px] font-semibold text-fg">
-              {Math.min(curIdx + 1, list.length)}/{list.length}
-            </div>
-            Übung
-          </div>
-          <div>
-            <div className="text-[14px] font-semibold text-fg">{done === total && total ? '✓' : `~${remainingMin}′`}</div>
-            {done === total && total ? 'fertig' : 'Rest'}
-          </div>
+        <div className="tnum text-[12.5px] text-muted">
+          Übung <span className="font-semibold text-fg">{Math.min(curIdx + 1, list.length)}</span>/{list.length} · Satz{' '}
+          <span className="font-semibold text-fg">{done}</span>/{total}
         </div>
       </div>
-      <div className="flex h-2.5 gap-1">
+      <GlowProgress
+        value={total ? done / total : 0}
+        label={
+          done === total && total ? (
+            'Geschafft – Training beenden'
+          ) : (
+            <>
+              Noch&nbsp;<span className="font-semibold">{total - done}</span>&nbsp;Sätze · ~{remainingMin}′
+            </>
+          )
+        }
+      />
+      <div className="flex h-1.5 gap-1">
         {list.map((e) => {
           const d = e.sets.filter((x) => x.done).length;
           const f = d / e.sets.length;

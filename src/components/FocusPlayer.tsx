@@ -10,6 +10,7 @@ import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
 import { cn, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 import { unlockAudio } from './RestTimer';
+import { GlowProgress } from './ui';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
 export function FocusPlayer({ session, startUid, onClose }: { session: Session; startUid?: string; onClose: () => void }) {
@@ -74,6 +75,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const completeSet = () => {
     if (!cur) return;
     unlockAudio();
+    s.setWeightFrom(session.id, se.uid, cur.id, w);
     s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps, rir, failure: rir === 0 ? cur.failure : false });
     const last = setIndex === se.sets.length - 1;
     s.startTimer(se.restSec, last ? 'nächste Übung' : `${ex.name} · Satz ${setIndex + 2}`);
@@ -93,17 +95,9 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-white/10" aria-label="Fokusmodus schließen">
             <X size={18} />
           </button>
-          <div className="mx-3 flex h-2 flex-1 gap-1">
-            {list.map((e, i) => {
-              const f = e.sets.filter((x) => x.done).length / (e.sets.length || 1);
-              return (
-                <span key={e.uid} className={cn('relative h-full overflow-hidden rounded-full bg-white/15', i === idx && 'ring-1 ring-white/60')} style={{ flex: e.sets.length || 1 }}>
-                  <span className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-500', f >= 1 ? 'bg-rec-green' : 'bg-white')} style={{ width: `${f * 100}%` }} />
-                </span>
-              );
-            })}
+          <div className="mx-3 flex-1">
+            <GlowProgress value={progress} height={30} label={<span className="text-[12.5px]">{Math.round(progress * 100)} %</span>} />
           </div>
-          <div className="tnum w-10 text-right text-[13px] font-semibold text-white/80">{Math.round(progress * 100)}%</div>
         </div>
 
         {/* Medienfläche */}
