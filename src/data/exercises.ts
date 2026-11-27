@@ -186,7 +186,7 @@ const defs: Def[] = [
   // Rücken
   {
     id: 'lat-pulldown',
-    name: 'Latzug mit neutralem Griff',
+    name: 'Latzug breit (Selection 900)',
     muscles: { lats: 1, upperBack: 0.5, biceps: 0.5, rearDelts: 0.25 },
     primary: 'lats',
     equipment: 'machine',
@@ -198,7 +198,25 @@ const defs: Def[] = [
     targetRir: 1,
     stretch: 2,
     fatigue: 2,
-    cues: ['Oben voll ausstrecken lassen (Lat-Dehnung).', 'Ellbogen Richtung Hüfte ziehen, Brust zur Stange.', 'Kein Zurücklehnen mit Schwung.'],
+    cues: ['Griffe breit fassen, oben voll ausstrecken lassen (Lat-Dehnung).', 'Ellbogen nach unten Richtung Hüfte ziehen, Brust raus.', 'Kein Zurücklehnen mit Schwung.'],
+  },
+  {
+    // Zweites Gerät (Seilzug mit Stange): eigener Gewichtsverlauf, weil Gewichte zwischen Maschinen nicht vergleichbar sind.
+    // Gleiche Bewegungsfamilie („pulldown“) → nie zusammen mit dem Selection-900-Latzug in derselben Einheit.
+    id: 'lat-pulldown-bar',
+    name: 'Latzug breit an der Stange (Selection 700)',
+    muscles: { lats: 1, upperBack: 0.5, biceps: 0.5, rearDelts: 0.25 },
+    primary: 'lats',
+    equipment: 'cable',
+    pattern: 'pulldown',
+    compound: true,
+    repMin: 8,
+    repMax: 12,
+    restSec: 180,
+    targetRir: 1,
+    stretch: 2,
+    fatigue: 2,
+    cues: ['Stange breit im Obergriff fassen, Knie unter dem Polster fixieren.', 'Oben voll ausstrecken lassen, dann Ellbogen nach unten ziehen, Stange zur oberen Brust.', 'Gewichte nicht mit der Selection 900 vergleichen – eigener Verlauf.'],
   },
   {
     id: 'chest-supported-row',

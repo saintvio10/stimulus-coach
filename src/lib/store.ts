@@ -151,6 +151,12 @@ export function migrate(raw: Partial<AppData>): AppData {
   }
   // Bestehende Nutzer nicht erneut durch das Onboarding schicken
   if (raw.settings && raw.settings.onboarded === undefined && (raw.sessions?.length ?? 0) > 0) d.settings.onboarded = true;
+  // Latzug: Gerät statt Griff im Namen (dein Studio: Selection 900 mit breitem Griff); eigene Umbenennungen bleiben
+  d.exercises = d.exercises.map((x) => {
+    if (x.id !== 'lat-pulldown' || x.custom || x.name !== 'Latzug mit neutralem Griff') return x;
+    const def = DEFAULT_EXERCISES.find((e) => e.id === x.id)!;
+    return { ...x, name: def.name, cues: def.cues };
+  });
   // neue Standardübungen ergänzen, falls sie fehlen
   for (const e of DEFAULT_EXERCISES) {
     const ex = d.exercises.find((x) => x.id === e.id);
