@@ -107,15 +107,35 @@ export const TOPICS: Topic[] = [
   },
   {
     id: 'variation',
-    title: 'Übungsauswahl & Variation',
+    title: 'Übungsauswahl, Variation & Muskelbereiche',
     evidence: 'moderat belegt',
     finding:
-      'Ein systematischer Review fand: Gezielte Variation – verschiedene Übungen für unterschiedliche Muskelanteile – kann regionales Wachstum und Kraft verbessern; zufälliges, ständiges Wechseln kann dagegen schaden. Neuere Einzelstudien zeigen bei konstanter vs. variierter Übungsauswahl oft ähnliche Ergebnisse.',
-    practice: 'Wenige, gut gewählte Übungen konstant nutzen (für messbare Progression). Für Prioritätsmuskeln zwei sich ergänzende Übungen (z. B. Bizeps: Preacher + Hammer Curls; Trizeps: Überkopf + Pushdown), aber keine fast identischen Varianten in derselben Einheit.',
-    app: 'Max. 4 Sätze pro Übung (5 nur bei Seitheben und Waden). Braucht ein Muskel mehr, kommt eine 2. Übung mit anderer Bewegung dazu; Übungen derselben Bewegungsfamilie (z. B. Seitheben Kabel + Kurzhantel, zwei Ruder-Varianten) werden nicht kombiniert. Bekannte Übungen bekommen einen kleinen Bonus, damit Fortschritt vergleichbar bleibt.',
+      'Muskeln wachsen regional unterschiedlich – je nach Übung. Beispiele: Trizepsstrecken über Kopf ließ den Trizeps (v. a. den langen Kopf) deutlich stärker wachsen als Pushdowns (Maeo 2023). Beinstrecker trifft den Rectus femoris, den Kniebeuge/Beinpresse kaum trainiert (Ema 2013). Sitzender Beinbeuger (Hüfte gebeugt) brachte mehr Wachstum als liegend (Maeo 2021). Schrägbankdrücken betont die obere Brust (Chaves 2024). Hammer Curls treffen zusätzlich Brachialis und Brachioradialis. Reviews: gezielte Variation (z. B. über die Woche rotieren) fördert regionales Wachstum; zufälliges, ständiges Wechseln bringt dagegen nichts oder schadet der messbaren Progression.',
+    practice:
+      'Pro Muskel 2–3 sich ergänzende Übungen, die über die Woche rotieren und jede Woche wiederkehren. Bizeps: Preacher (unterer Bizeps in Dehnung), Bayesian (langer Kopf), Kurzhantel-Curls, Hammer Curls (Brachialis). Trizeps: Überkopf + Pushdown + Dips. Brust: Schrägbank + Brustpresse + Butterfly. Quads: Beinpresse + Beinstrecker. Beinbeuger: Beinbeuger-Maschine + RDL.',
+    app: 'Jede Übung hat einen „Bereich“ des Zielmuskels. Der Planer merkt sich, wann welcher Bereich zuletzt dran war (auch im laufenden Wochenplan) und bevorzugt den am längsten nicht trainierten (×1,22), wenn er ≥ 6 Tage her ist; ein gerade trainierter Bereich wird leicht abgewertet. Zweite Übung für denselben Muskel in einer Einheit: anderer Bereich bevorzugt. Bekannte Übungen bekommen weiter einen kleinen Bonus – sie kehren wöchentlich wieder, damit Fortschritt messbar bleibt. Max. 4 Sätze pro Übung (5 nur bei Seitheben und Waden), keine fast identischen Varianten in einer Einheit.',
     refs: [
       { label: 'Kassiano et al. (2022), J Strength Cond Res – Variation von Übungen, systematischer Review', url: 'https://pubmed.ncbi.nlm.nih.gov/35438660/' },
-      { label: 'Remmert et al. (2025), Preprint – Volumen pro Einheit', url: 'https://sportrxiv.org/index.php/server/preprint/view/537' },
+      { label: 'Zabaleta-Korta et al. (2021), Eur J Sport Sci – Regionale Hypertrophie, Review', url: pm('Zabaleta-Korta regional hypertrophy review 2021') },
+      { label: 'Maeo et al. (2023), Eur J Sport Sci – Trizeps über Kopf vs. Pushdown', url: pm('Maeo 2023 triceps overhead extension hypertrophy') },
+      { label: 'Maeo et al. (2021), MSSE – Beinbeuger sitzend vs. liegend', url: pm('Maeo 2021 seated lying leg curl hypertrophy') },
+      { label: 'Ema et al. (2013), Eur J Appl Physiol – Rectus femoris durch Beinstrecker', url: pm('Ema 2013 rectus femoris knee extension training hypertrophy') },
+      { label: 'Chaves et al. (2024) – Schrägbank vs. Flachbank, regionale Brustmuskulatur', url: pm('Chaves 2024 incline bench press regional pectoralis hypertrophy') },
+      { label: 'Fonseca et al. (2014), J Strength Cond Res – Variation vs. konstante Übungen', url: pm('Fonseca 2014 exercise variation quadriceps hypertrophy') },
+    ],
+  },
+  {
+    id: 'concurrent',
+    title: 'Ausdauer/Skifahren & Krafttraining am selben Tag',
+    evidence: 'moderat belegt',
+    finding:
+      'Ausdauerbelastung derselben Muskeln vor dem Krafttraining senkt die Leistung: Nach Radfahren war die Beinkraft-Ausdauer (Wdh. an der Beinpresse) bis zu ~8 h reduziert, Oberkörper nicht (Sporer & Wenger 2003). Skifahren belastet Quads und Gesäß stark exzentrisch – das erzeugt Muskelermüdung/Muskelkater. Über Wochen schmälert kombiniertes Training die Hypertrophie meist kaum (Schumann 2022), die einzelne Beineinheit direkt danach ist aber weniger produktiv.',
+    practice: 'An Ski- oder langen Wandertagen Oberkörper trainieren, Beine frühestens 24–48 h danach (je nach Dauer und Intensität). Aktivitäten trotzdem eintragen – sie zählen als Ermüdung, nicht als Muskelaufbau-Sätze.',
+    app: 'Eingetragene Aktivitäten (auch geplante, z. B. Skitag morgen) erzeugen Ermüdung in den belasteten Muskeln. Heute eingetragen zählt sofort. Der Planer lässt diese Muskeln aus, bis sie erholt sind, und legt stattdessen Oberkörper. Lange/intensive Aktivitäten zählen bei der Ruhetag-Regel als Trainingstag.',
+    refs: [
+      { label: 'Sporer & Wenger (2003), J Strength Cond Res – Kraftleistung nach Ausdauerbelastung', url: pm('Sporer Wenger 2003 aerobic exercise strength performance recovery') },
+      { label: 'Schumann et al. (2022), Sports Med – Concurrent Training, Meta-Analyse', url: pm('Schumann 2022 compatibility concurrent aerobic strength training meta-analysis') },
+      { label: 'Wilson et al. (2012), J Strength Cond Res – Interferenz-Effekt, Meta-Analyse', url: pm('Wilson 2012 concurrent training meta-analysis interference') },
     ],
   },
   {

@@ -111,6 +111,13 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 /** Verfügbare Gewichtsstufen einer Übung */
 export function weightSteps(ex: Exercise, s: Settings): { list?: number[]; step: number } {
   if (ex.weights && ex.weights.length) return { list: [...ex.weights].sort((a, b) => a - b), step: 0 };
+  // Unterwegs: nur was du dabei hast – Flasche(n) und deine eine Hantel
+  if (ex.location === 'home') {
+    const b = s.homeBottle || 1;
+    const h = s.homeDumbbell || 10;
+    const base = ex.equipment === 'bodyweight' ? [0] : [];
+    return { list: [...new Set([...base, b, 2 * b, h])].sort((x, y) => x - y), step: 0 };
+  }
   if (ex.increment) return { step: ex.increment };
   switch (ex.equipment) {
     case 'dumbbell':

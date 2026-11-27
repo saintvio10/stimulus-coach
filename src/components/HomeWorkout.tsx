@@ -9,12 +9,12 @@ import { SessionPreview } from './Coach';
 import { unlockAudio } from './RestTimer';
 import { cn } from '../lib/utils';
 
-/** Training ohne Gym: der Coach plant mit Körpergewicht (optional Hantel/Rucksack) passend zu Erholung und Wochenvolumen */
+/** Training ohne Gym: der Coach plant mit Körpergewicht (optional deine Hantel und Flaschen) passend zu Erholung und Wochenvolumen */
 export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const s = useStore();
   const go = useRouter((r) => r.go);
   const [minutes, setMinutes] = useState(45);
-  const [mode, setMode] = useState<HomeMode>('bw');
+  const [mode, setMode] = useState<HomeMode>('weights');
   const plan = useMemo(
     () => (open ? planHome(s as unknown as AppData, minutes, mode) : null),
     [open, minutes, mode, s.sessions, s.exercises, s.settings, s.checkIns, s.activities], // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,7 +54,7 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
             {(
               [
                 ['bw', 'Nur Körpergewicht', 'Liegestütze, Dips, Split Squats …'],
-                ['weights', 'Auch Gewichte', 'Kurzhantel, Rucksack, Flaschen'],
+                ['weights', 'Hantel & Flaschen', `Hantel ${s.settings.homeDumbbell ?? 10} kg · Flaschen à ${s.settings.homeBottle ?? 1} kg`],
               ] as const
             ).map(([v, t, sub]) => (
               <button
@@ -68,6 +68,20 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
             ))}
           </div>
         </div>
+        {mode === 'weights' && (
+          <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2">
+            <span className="text-[13px]">Gewicht deiner Hantel</span>
+            <div className="flex items-center gap-2">
+              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel leichter" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = Math.max(1, (d.settings.homeDumbbell ?? 10) - 1)))}>
+                −
+              </button>
+              <span className="tnum w-14 text-center text-[15px] font-semibold">{s.settings.homeDumbbell ?? 10} kg</span>
+              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel schwerer" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = (d.settings.homeDumbbell ?? 10) + 1))}>
+                +
+              </button>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap gap-1.5">
           {[20, 30, 45, 60, 75].map((m) => (
             <Chip key={m} active={minutes === m} onClick={() => setMinutes(m)} className="h-8">
@@ -77,8 +91,8 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
         </div>
         {plan ? <SessionPreview s={plan} /> : <p className="py-6 text-center text-[13px] text-muted">Gerade kein sinnvolles Training möglich – deine Muskeln brauchen noch Erholung.</p>}
         <p className="text-[11.5px] text-muted">
-          Gewicht bei Körpergewicht-Übungen = Zusatzgewicht (leer lassen = ohne). Bei Hantel/Rucksack trägst du das echte Gewicht in 0,5–1-kg-Schritten ein. Unter „Übungen“ kannst du weitere eigene
-          Übungen anlegen.
+          Gewichtsauswahl unterwegs: 1 Flasche, 2 Flaschen oder deine Hantel. Bei Körpergewicht-Übungen ist das Zusatzgewicht (leer = ohne). Tage ohne Gym kannst du auch vorab markieren:
+          in der Tagesleiste zweimal antippen (🏠) – dann plant der Coach diese Tage automatisch so und der Studio-Plan läuft danach weiter.
         </p>
       </div>
     </Sheet>

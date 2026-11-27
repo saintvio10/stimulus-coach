@@ -435,29 +435,33 @@ const defs: Def[] = [
 ];
 
 // ───── Ohne Gym (unterwegs, zu Hause, Hotel) ─────
-// Körpergewicht-Übungen: Gewicht = Zusatzgewicht (0 = ohne). Mit Gegenstand (Kurzhantel, Rucksack, Flaschen): Gewicht frei in 1-kg-Schritten.
+// Körpergewicht-Übungen: Gewicht = Zusatzgewicht (0 = ohne, sonst Flasche/Hantel). Gewichtsauswahl unterwegs: 1 Flasche, 2 Flaschen, deine Hantel (Einstellungen).
 const bw = (d: Omit<(typeof defs)[number], 'location'>) => ({ ...d, location: 'home' as const });
 const homeDefs: typeof defs = [
   bw({ id: 'pushup', name: 'Liegestütze', muscles: { chest: 1, triceps: 0.5, frontDelts: 0.5 }, primary: 'chest', equipment: 'bodyweight', pattern: 'chestPress', compound: true, repMin: 10, repMax: 30, restSec: 120, targetRir: 1, stretch: 1, fatigue: 2, cues: ['Hände etwas breiter als schulterbreit, Körper bildet eine Linie.', 'Brust bis knapp über den Boden absenken.', 'Ellbogen ca. 45° vom Körper.'] }),
   bw({ id: 'pushup-wide', name: 'Breite Liegestütze (tief, z. B. zwischen Stühlen)', muscles: { chest: 1, frontDelts: 0.5, triceps: 0.25 }, primary: 'chest', equipment: 'bodyweight', pattern: 'fly', compound: true, repMin: 10, repMax: 30, restSec: 120, targetRir: 1, stretch: 2, fatigue: 2, cues: ['Hände breit, auf Erhöhungen (Bücher, Stühle) für mehr Tiefe.', 'Unten bewusst dehnen, 1 s Pause.', 'Ellbogen weiter außen als bei normalen Liegestützen.'] }),
   bw({ id: 'pushup-decline', name: 'Liegestütze, Füße erhöht', muscles: { chest: 1, frontDelts: 0.5, triceps: 0.5 }, primary: 'chest', equipment: 'bodyweight', pattern: 'inclinePress', compound: true, repMin: 8, repMax: 25, restSec: 120, targetRir: 1, stretch: 1, fatigue: 2, cues: ['Füße auf Bett/Stuhl – schwerer und mehr obere Brust.', 'Rumpf fest, kein Hohlkreuz.', 'Kontrolliert absenken.'] }),
   bw({ id: 'pushup-diamond', name: 'Enge Liegestütze (Trizeps)', muscles: { triceps: 1, chest: 0.5, frontDelts: 0.5 }, primary: 'triceps', equipment: 'bodyweight', pattern: 'pushdown', compound: true, repMin: 8, repMax: 25, restSec: 120, targetRir: 1, stretch: 0, fatigue: 2, cues: ['Hände eng unter der Brust (Daumen/Zeigefinger bilden ein Dreieck).', 'Ellbogen eng am Körper führen.', 'Oben Arme ganz strecken.'] }),
-  bw({ id: 'bench-dip', name: 'Dips an Stuhl/Bank', muscles: { triceps: 1, frontDelts: 0.5, chest: 0.25 }, primary: 'triceps', equipment: 'bodyweight', pattern: 'dip', compound: true, repMin: 10, repMax: 25, restSec: 90, targetRir: 1, stretch: 1, fatigue: 1, cues: ['Hände auf stabiler Kante, Po nah an der Bank.', 'Bis ca. 90° im Ellbogen absenken – nicht tiefer, wenn die Schulter zwickt.', 'Schwerer: Füße erhöht oder Rucksack auf dem Schoß.'] }),
+  bw({ id: 'bench-dip', name: 'Dips an Stuhl/Bank', muscles: { triceps: 1, frontDelts: 0.5, chest: 0.25 }, primary: 'triceps', equipment: 'bodyweight', pattern: 'dip', compound: true, repMin: 10, repMax: 25, restSec: 90, targetRir: 1, stretch: 1, fatigue: 1, cues: ['Hände auf stabiler Kante, Po nah an der Bank.', 'Bis ca. 90° im Ellbogen absenken – nicht tiefer, wenn die Schulter zwickt.', 'Schwerer: Füße auf einen zweiten Stuhl legen.'] }),
   bw({ id: 'pike-pushup', name: 'Pike-Liegestütze (Schulter)', muscles: { frontDelts: 1, sideDelts: 0.5, triceps: 0.5 }, primary: 'frontDelts', equipment: 'bodyweight', pattern: 'shoulderPress', compound: true, repMin: 6, repMax: 20, restSec: 120, targetRir: 1, stretch: 0, fatigue: 2, cues: ['Hüfte hoch, Körper wie ein umgedrehtes V.', 'Kopf Richtung Boden vor die Hände absenken.', 'Schwerer: Füße auf einen Stuhl.'] }),
   bw({ id: 'pullup', name: 'Klimmzüge (Stange/Spielplatz)', muscles: { lats: 1, upperBack: 0.5, biceps: 0.5, rearDelts: 0.25 }, primary: 'lats', equipment: 'bodyweight', pattern: 'pulldown', compound: true, repMin: 5, repMax: 15, restSec: 150, targetRir: 1, stretch: 2, fatigue: 2, cues: ['Aus ganz gestreckten Armen starten.', 'Brust zur Stange, Ellbogen nach unten ziehen.', 'Zu schwer? Nur langsam ablassen (Negativ-Wdh.).'] }),
   bw({ id: 'inverted-row', name: 'Rudern unter Tisch/Stange', muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 }, primary: 'upperBack', equipment: 'bodyweight', pattern: 'row', compound: true, repMin: 8, repMax: 25, restSec: 120, targetRir: 1, stretch: 1, fatigue: 2, cues: ['Unter einen stabilen Tisch legen, Kante greifen.', 'Körper gerade, Brust zur Kante ziehen.', 'Schwerer: Beine strecken oder Füße erhöhen.'] }),
-  bw({ id: 'split-squat', name: 'Bulgarische Split Squats', muscles: { quads: 1, glutes: 1, hamstrings: 0.25 }, primary: 'quads', equipment: 'bodyweight', pattern: 'legPress', compound: true, repMin: 8, repMax: 20, restSec: 120, targetRir: 1, stretch: 2, fatigue: 2, unilateral: true, cues: ['Hinterer Fuß auf Bett/Stuhl.', 'Tief absenken, vorderes Knie darf nach vorn.', 'Schwerer: Rucksack oder Wasserflaschen in den Händen.'] }),
+  bw({ id: 'split-squat', name: 'Bulgarische Split Squats', muscles: { quads: 1, glutes: 1, hamstrings: 0.25 }, primary: 'quads', equipment: 'bodyweight', pattern: 'legPress', compound: true, repMin: 8, repMax: 20, restSec: 120, targetRir: 1, stretch: 2, fatigue: 2, unilateral: true, cues: ['Hinterer Fuß auf Bett/Stuhl.', 'Tief absenken, vorderes Knie darf nach vorn.', 'Schwerer: Hantel in die Hand auf der Seite des hinteren Beins.'] }),
   bw({ id: 'lunge', name: 'Ausfallschritte', muscles: { quads: 1, glutes: 0.5 }, primary: 'quads', equipment: 'bodyweight', pattern: 'legPress', compound: true, repMin: 10, repMax: 25, restSec: 90, targetRir: 1, stretch: 1, fatigue: 2, unilateral: true, cues: ['Großer Schritt, hinteres Knie fast bis zum Boden.', 'Oberkörper aufrecht.', 'Abwechselnd oder pro Bein am Stück.'] }),
   bw({ id: 'single-hip-thrust', name: 'Einbeiniger Hip Thrust (Sofa/Bett)', muscles: { glutes: 1, hamstrings: 0.5 }, primary: 'glutes', equipment: 'bodyweight', pattern: 'rdl', compound: false, repMin: 10, repMax: 25, restSec: 90, targetRir: 1, stretch: 0, fatigue: 1, unilateral: true, cues: ['Schulterblätter auf der Kante, ein Fuß am Boden.', 'Hüfte ganz strecken, oben 1 s halten.', 'Kinn leicht zur Brust.'] }),
   bw({ id: 'nordic-curl', name: 'Nordic Curls (Füße fixiert)', muscles: { hamstrings: 1 }, primary: 'hamstrings', equipment: 'bodyweight', pattern: 'legCurl', compound: false, repMin: 3, repMax: 10, restSec: 120, targetRir: 1, stretch: 2, fatigue: 2, cues: ['Fersen unter Sofa/Bett klemmen oder halten lassen.', 'So langsam wie möglich nach vorn absenken.', 'Mit den Händen abfangen und abdrücken.'] }),
   bw({ id: 'single-calf', name: 'Einbeiniges Wadenheben (Treppe)', muscles: { calves: 1 }, primary: 'calves', equipment: 'bodyweight', pattern: 'calfRaise', compound: false, repMin: 10, repMax: 25, restSec: 60, targetRir: 1, stretch: 2, fatigue: 1, unilateral: true, cues: ['Ferse über der Stufenkante ganz absenken, 1 s Pause.', 'Ganz nach oben drücken.', 'Mit einer Hand festhalten.'] }),
   bw({ id: 'leg-raise', name: 'Beinheben liegend', muscles: { abs: 1 }, primary: 'abs', equipment: 'bodyweight', pattern: 'cableCrunch', compound: false, repMin: 10, repMax: 25, restSec: 60, targetRir: 1, stretch: 1, fatigue: 1, cues: ['Unterer Rücken bleibt am Boden.', 'Beine langsam absenken.', 'Am Ende das Becken leicht einrollen.'] }),
-  // mit Gegenstand (Kurzhantel, Rucksack, Wasserflaschen …): Gewicht wird frei gewählt
-  bw({ id: 'home-curl', name: 'Bizeps-Curls (Hantel/Rucksack)', muscles: { biceps: 1 }, primary: 'biceps', equipment: 'dumbbell', increment: 1, pattern: 'curl', compound: false, repMin: 8, repMax: 20, restSec: 90, targetRir: 1, stretch: 1, fatigue: 1, cues: ['Ellbogen bleiben seitlich am Körper.', 'Voller Bewegungsweg, langsam ablassen.', 'Rucksack am Griff oder gefüllte Flaschen gehen auch.'] }),
-  bw({ id: 'home-oh-ext', name: 'Trizeps über Kopf (Hantel/Rucksack)', muscles: { triceps: 1 }, primary: 'triceps', equipment: 'dumbbell', increment: 1, pattern: 'overheadExt', compound: false, repMin: 10, repMax: 20, restSec: 90, targetRir: 1, stretch: 2, fatigue: 1, cues: ['Gewicht mit beiden Händen hinter den Kopf.', 'Tief absenken für maximale Dehnung des langen Kopfes.', 'Ellbogen zeigen nach vorn-oben.'] }),
-  bw({ id: 'home-lateral', name: 'Seitheben (Hanteln/Flaschen)', muscles: { sideDelts: 1 }, primary: 'sideDelts', equipment: 'dumbbell', increment: 0.5, pattern: 'lateralRaise', compound: false, repMin: 12, repMax: 25, restSec: 90, targetRir: 1, stretch: 0, fatigue: 1, cues: ['Leicht vorgebeugt, Arme seitlich bis Schulterhöhe.', 'Kein Schwung.', 'Volle Wasserflaschen (1,5 l ≈ 1,5 kg) funktionieren gut.'] }),
-  bw({ id: 'home-row', name: 'Einarmiges Rudern (Hantel/Rucksack)', muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 }, primary: 'upperBack', equipment: 'dumbbell', increment: 1, pattern: 'row', compound: true, repMin: 8, repMax: 20, restSec: 90, targetRir: 1, stretch: 1, fatigue: 1, unilateral: true, cues: ['Eine Hand und ein Knie auf Bett/Stuhl.', 'Ellbogen zur Hüfte ziehen.', 'Unten ganz strecken lassen.'] }),
-  bw({ id: 'home-reverse-fly', name: 'Reverse Flys vorgebeugt (Hanteln/Flaschen)', muscles: { rearDelts: 1, upperBack: 0.25 }, primary: 'rearDelts', equipment: 'dumbbell', increment: 0.5, pattern: 'reverseFly', compound: false, repMin: 12, repMax: 25, restSec: 90, targetRir: 1, stretch: 0, fatigue: 1, cues: ['Oberkörper fast waagerecht.', 'Arme seitlich nach außen-hinten führen.', 'Leichtes Gewicht, sauber.'] }),
+  // mit deiner Hantel bzw. 1-l-Flaschen (je ~1 kg) – Gewichtsauswahl: 1 Flasche, 2 Flaschen, Hantel
+  bw({ id: 'home-curl', name: 'Bizeps-Curls einarmig (Hantel)', muscles: { biceps: 1 }, primary: 'biceps', equipment: 'dumbbell', pattern: 'curl', compound: false, repMin: 8, repMax: 20, restSec: 60, targetRir: 1, stretch: 1, fatigue: 1, unilateral: true, cues: ['Ein Arm nach dem anderen mit deiner Hantel – der andere Arm pausiert solange.', 'Ellbogen bleibt seitlich am Körper, Handfläche nach oben drehen.', 'Langsam ablassen, unten ganz strecken.'] }),
+  bw({ id: 'home-hammer', name: 'Hammer-Curls einarmig (Hantel)', muscles: { biceps: 1, forearms: 0.5 }, primary: 'biceps', equipment: 'dumbbell', pattern: 'curl', compound: false, repMin: 8, repMax: 20, restSec: 60, targetRir: 1, stretch: 1, fatigue: 1, unilateral: true, cues: ['Neutraler Griff (Daumen oben).', 'Ellbogen fixiert.', 'Gute Ergänzung, wenn normale Curls zu leicht werden.'] }),
+  bw({ id: 'home-oh-ext', name: 'Trizeps über Kopf (Hantel beidhändig)', muscles: { triceps: 1 }, primary: 'triceps', equipment: 'dumbbell', pattern: 'overheadExt', compound: false, repMin: 10, repMax: 20, restSec: 90, targetRir: 1, stretch: 2, fatigue: 1, cues: ['Hantel mit beiden Händen an einer Scheibe greifen.', 'Tief hinter den Kopf absenken – maximale Dehnung des langen Kopfes.', 'Ellbogen zeigen nach vorn-oben.'] }),
+  bw({ id: 'home-lateral', name: 'Seitheben (2 Flaschen)', muscles: { sideDelts: 1 }, primary: 'sideDelts', equipment: 'dumbbell', pattern: 'lateralRaise', compound: false, repMin: 12, repMax: 30, restSec: 90, targetRir: 1, stretch: 0, fatigue: 1, cues: ['Je eine 1-l-Flasche pro Hand, leicht vorgebeugt.', 'Arme seitlich bis Schulterhöhe, kein Schwung.', 'Zu leicht? Einarmig mit der Hantel (andere Hand festhalten).'] }),
+  bw({ id: 'home-lateral-db', name: 'Seitheben einarmig (Hantel)', muscles: { sideDelts: 1 }, primary: 'sideDelts', equipment: 'dumbbell', pattern: 'lateralRaise', compound: false, repMin: 10, repMax: 25, restSec: 60, targetRir: 1, stretch: 1, fatigue: 1, unilateral: true, cues: ['Mit der freien Hand an Türrahmen/Stuhl festhalten, leicht zur Seite lehnen.', 'Mehr Dehnung unten als stehend.', 'Arm bis knapp Schulterhöhe.'] }),
+  bw({ id: 'home-row', name: 'Einarmiges Rudern (Hantel)', muscles: { upperBack: 1, lats: 0.5, biceps: 0.5, rearDelts: 0.5 }, primary: 'upperBack', equipment: 'dumbbell', pattern: 'row', compound: true, repMin: 8, repMax: 20, restSec: 60, targetRir: 1, stretch: 1, fatigue: 1, unilateral: true, cues: ['Eine Hand und ein Knie auf Bett/Stuhl.', 'Ellbogen zur Hüfte ziehen.', 'Unten ganz strecken lassen.'] }),
+  bw({ id: 'home-reverse-fly', name: 'Reverse Flys vorgebeugt (2 Flaschen)', muscles: { rearDelts: 1, upperBack: 0.25 }, primary: 'rearDelts', equipment: 'dumbbell', pattern: 'reverseFly', compound: false, repMin: 12, repMax: 30, restSec: 60, targetRir: 1, stretch: 0, fatigue: 1, cues: ['Oberkörper fast waagerecht, je eine Flasche pro Hand.', 'Arme seitlich nach außen-hinten führen.', 'Oben kurz halten.'] }),
+  bw({ id: 'home-goblet', name: 'Goblet Squats (Hantel)', muscles: { quads: 1, glutes: 0.5 }, primary: 'quads', equipment: 'dumbbell', pattern: 'legPress', compound: true, repMin: 10, repMax: 25, restSec: 90, targetRir: 1, stretch: 1, fatigue: 2, cues: ['Hantel senkrecht vor der Brust halten.', 'Tief runter, Knie folgen den Zehen.', 'Oberkörper aufrecht.'] }),
+  bw({ id: 'home-sl-rdl', name: 'Einbeiniges Rumänisches Kreuzheben (Hantel)', muscles: { hamstrings: 1, glutes: 0.5 }, primary: 'hamstrings', equipment: 'dumbbell', pattern: 'rdl', compound: true, repMin: 8, repMax: 20, restSec: 60, targetRir: 1, stretch: 2, fatigue: 2, unilateral: true, cues: ['Hantel in der Hand gegenüber dem Standbein.', 'Hüfte nach hinten schieben, Rücken gerade, bis Dehnung im Beinbeuger.', 'Mit der freien Hand an der Wand stabilisieren.'] }),
 ];
 defs.push(...homeDefs);
 
@@ -501,11 +505,45 @@ const BENEFIT: Record<string, string> = {
  "nordic-curl": "Exzentrisch sehr schwer – einer der stärksten Reize für die Beinbeuger ohne Geräte.",
  "single-calf": "Einbeinig an der Treppe: volle Dehnung, doppelte Last pro Wade.",
  "leg-raise": "Bauch ohne Geräte.",
- "home-curl": "Bizeps mit jedem Gegenstand – Gewicht frei einstellbar.",
+ "home-curl": "Bizeps direkt mit deiner einen Hantel – Arm für Arm.",
+ "home-hammer": "Brachialis und Unterarm – macht den Oberarm dicker.",
+ "home-lateral-db": "Einarmig angelehnt: mehr Last und mehr Dehnung als mit Flaschen.",
+ "home-goblet": "Quads mit Hantel statt Beinpresse.",
+ "home-sl-rdl": "Beinbeuger in tiefer Dehnung – einbeinig reicht eine Hantel.",
  "home-oh-ext": "Langer Trizepskopf in Dehnung, wie am Kabel über Kopf.",
- "home-lateral": "Seitliche Schulter braucht kaum Gewicht – Flaschen reichen.",
- "home-row": "Rücken mit Gewicht statt Körpergewicht.",
- "home-reverse-fly": "Hintere Schulter mit wenig Gewicht."
+ "home-lateral": "Seitliche Schulter braucht kaum Gewicht – zwei 1-l-Flaschen reichen für hohe Wdh.",
+ "home-row": "Oberer Rücken und Lat mit deiner Hantel.",
+ "home-reverse-fly": "Hintere Schulter – Flaschen sind genau das richtige Gewicht."
 };
 
-export const DEFAULT_EXERCISES: Exercise[] = defs.map((d) => ({ ...d, benefit: BENEFIT[d.id], locked: d.locked ?? false, favorite: d.favorite ?? false }));
+/** Bereich je Übung (Zielmuskel) – Grundlage für die Rotation über die Woche */
+export const REGION: Record<string, string> = {
+  'preacher-curl': 'distal', 'bayesian-curl': 'long', 'db-curl': 'mid', 'hammer-curl': 'brachialis', 'home-curl': 'mid', 'home-hammer': 'brachialis',
+  'overhead-ext': 'long', 'home-oh-ext': 'long', pushdown: 'lateral', 'pushup-diamond': 'lateral', 'dip-machine': 'press', 'bench-dip': 'press',
+  'incline-press': 'upper', 'pushup-decline': 'upper', 'chest-press': 'mid', pushup: 'mid', butterfly: 'stretch', 'pushup-wide': 'stretch',
+  'cable-lateral': 'lengthened', 'home-lateral-db': 'lengthened', 'db-lateral': 'shortened', 'home-lateral': 'shortened',
+  'leg-press': 'vasti', 'split-squat': 'vasti', lunge: 'vasti', 'home-goblet': 'vasti', 'leg-extension': 'rectus',
+  'seated-leg-curl': 'knee', 'nordic-curl': 'knee', rdl: 'hip', 'home-sl-rdl': 'hip',
+};
+
+/** Erklärung der Bereiche (für „Warum diese Übung?“) */
+export const REGION_LABEL: Record<string, string> = {
+  'biceps:distal': 'unterer Bizeps in Dehnung am Ellbogen',
+  'biceps:long': 'langer Bizepskopf (Arm hinter dem Körper)',
+  'biceps:mid': 'beide Bizepsköpfe mit Supination',
+  'biceps:brachialis': 'Brachialis & Unterarm (Hammergriff) – macht den Oberarm dicker',
+  'triceps:long': 'langer Trizepskopf über Kopf',
+  'triceps:lateral': 'äußerer Trizepskopf',
+  'triceps:press': 'alle Trizepsköpfe mit schwerer Last',
+  'chest:upper': 'obere Brust',
+  'chest:mid': 'mittlere/untere Brust mit schwerer Last',
+  'chest:stretch': 'Brust in voller Dehnung',
+  'sideDelts:lengthened': 'seitliche Schulter mit Spannung unten in der Dehnung',
+  'sideDelts:shortened': 'seitliche Schulter mit Spannung oben',
+  'quads:vasti': 'die drei Vastus-Köpfe (Beinpresse/Kniebeuge)',
+  'quads:rectus': 'Rectus femoris – wächst kaum durch Beinpresse',
+  'hamstrings:knee': 'Beinbeuger über Kniebeugung',
+  'hamstrings:hip': 'Beinbeuger über Hüftstreckung',
+};
+
+export const DEFAULT_EXERCISES: Exercise[] = defs.map((d) => ({ ...d, region: REGION[d.id], benefit: BENEFIT[d.id], locked: d.locked ?? false, favorite: d.favorite ?? false }));

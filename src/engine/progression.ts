@@ -65,7 +65,7 @@ export function adviseExercise(
     repTarget: Math.round((repMin + repMax) / 2),
     text:
       ex.equipment === 'bodyweight'
-        ? `Erstes Mal: so viele saubere Wdh. wie möglich, ca. ${targetRir} Wdh. vor dem Versagen aufhören (Bereich ${repMin}–${repMax}). Zu leicht? Schwerere Variante oder Rucksack als Zusatzgewicht.`
+        ? `Erstes Mal: so viele saubere Wdh. wie möglich, ca. ${targetRir} Wdh. vor dem Versagen aufhören (Bereich ${repMin}–${repMax}). Zu leicht? Schwerere Variante oder Flasche/Hantel als Zusatzgewicht.`
         : `Erstes Training: wähle ein Gewicht, mit dem du ca. ${Math.round((repMin + repMax) / 2)} Wdh. bei ${targetRir} RIR schaffst. Die App lernt ab dann mit.`,
     causes: [],
     setDelta: 0,
@@ -93,7 +93,7 @@ export function adviseExercise(
     if (reps.every((r) => r >= repMax)) {
       res.type = 'extend';
       res.repTarget = repMax;
-      res.text = `Alle Sätze am oberen Ende (${reps.join('/')} Wdh.). Nächster Schritt: schwerere Variante (z. B. Füße erhöht, langsamer ablassen) oder Zusatzgewicht – Rucksack, Wasserflaschen – und als Gewicht eintragen.`;
+      res.text = `Alle Sätze am oberen Ende (${reps.join('/')} Wdh.). Nächster Schritt: schwerere Variante (z. B. Füße erhöht, langsamer ablassen) oder Zusatzgewicht (Flasche bzw. Hantel) und als Gewicht eintragen.`;
     } else {
       res.type = 'hold';
       res.repTarget = target;

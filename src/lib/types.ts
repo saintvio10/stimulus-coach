@@ -52,6 +52,8 @@ export interface Exercise {
   unilateral?: boolean;
   /** 'home' = Übung für Training ohne Gym (wird im Studio-Plan nie eingeplant) */
   location?: 'home';
+  /** Bereich des Zielmuskels (z. B. Bizeps: 'brachialis'), für Rotation über die Woche */
+  region?: string;
   equipment: Equipment;
   pattern: AnimPattern;
   compound: boolean;
@@ -232,6 +234,10 @@ export interface Settings {
   orderMode: 'priority' | 'compound';
   autoSuperset: boolean;
   dumbbellWeights: number[];
+  /** Unterwegs dabei: Gewicht deiner Hantel (kg) */
+  homeDumbbell: number;
+  /** Unterwegs dabei: Gewicht einer Flasche (kg, 1 l Wasser ≈ 1 kg) */
+  homeBottle: number;
   cableStep: number;
   machineStep: number;
   plateStep: number;
@@ -270,6 +276,8 @@ export interface AppData {
   timer: RestTimer | null;
   /** Aktivitäten außerhalb des Krafttrainings (Ski, Spazieren …) */
   activities: Activity[];
+  /** Tage ohne Gym (unterwegs) – dort plant der Coach nur Körpergewicht/Hantel/Flaschen */
+  awayDays: string[];
   /** persönliche, gelernte Volumenanpassung je Muskel */
   volumeAdjust: Partial<Record<MuscleId, VolumeAdjust>>;
   updatedAt: number;

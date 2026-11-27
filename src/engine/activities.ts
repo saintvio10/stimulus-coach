@@ -1,5 +1,5 @@
 import type { Activity, AppData, MuscleId } from '../lib/types';
-import { HOUR, parseKey } from '../lib/utils';
+import { HOUR, dateKey, parseKey } from '../lib/utils';
 import { eventsFromSessions, type StimulusEvent } from './fatigue';
 
 export type ActivityType = 'ski' | 'walk' | 'hike' | 'run' | 'bike' | 'swim' | 'climb' | 'ball' | 'other';
@@ -46,10 +46,12 @@ export function activityLoad(a: Activity): number {
 }
 
 /** Aktivitäten erzeugen nur Ermüdung (keine Hypertrophie-Sätze) */
-export function activityEvents(activities: Activity[]): StimulusEvent[] {
+export function activityEvents(activities: Activity[], now = Date.now()): StimulusEvent[] {
   const out: StimulusEvent[] = [];
+  const today = dateKey(now);
   for (const a of activities ?? []) {
-    const t = parseKey(a.date).getTime() + 15 * HOUR;
+    // Standard 15 Uhr; heute eingetragen = schon passiert (zählt sofort, auch morgens)
+    const t = a.date === today ? Math.min(parseKey(a.date).getTime() + 15 * HOUR, now - 60_000) : parseKey(a.date).getTime() + 15 * HOUR;
     for (const [m, f] of Object.entries(activityMuscles(a)) as [MuscleId, number][]) {
       if (!f) continue;
       out.push({ t, muscle: m, sets: 0, fatigue: f, direct: false, load: 0 });
@@ -59,11 +61,11 @@ export function activityEvents(activities: Activity[]): StimulusEvent[] {
 }
 
 /** Alle Reize: Trainings (Volumen + Ermüdung) und Aktivitäten (nur Ermüdung) */
-export function allEvents(data: Pick<AppData, 'sessions' | 'exercises' | 'activities'>): StimulusEvent[] {
+export function allEvents(data: Pick<AppData, 'sessions' | 'exercises' | 'activities'>, now = Date.now()): StimulusEvent[] {
   return eventsFromSessions(
     data.sessions.filter((s) => s.status === 'done' || s.status === 'active'),
     data.exercises,
-  ).concat(activityEvents(data.activities ?? []));
+  ).concat(activityEvents(data.activities ?? [], now));
 }
 
 export function activityLabel(a: Activity): string {

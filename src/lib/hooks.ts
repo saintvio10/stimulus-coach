@@ -32,7 +32,7 @@ export function usePlan() {
   return useMemo(
     () => buildPlan(s as unknown as AppData, Date.now()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns, s.activities, b],
+    [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns, s.activities, s.awayDays, b],
   );
 }
 

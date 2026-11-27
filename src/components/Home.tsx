@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
-import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy } from 'lucide-react';
+import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy, House } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
@@ -85,7 +85,7 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-[19px] font-semibold tracking-tight">Wann hast du Zeit?</h2>
-          <div className="text-[12px] text-muted">Antippen: Zeit → Vielleicht → Keine Zeit</div>
+          <div className="text-[12px] text-muted">Antippen: Zeit → Ohne Gym → Vielleicht → Keine Zeit</div>
         </div>
         <div className="flex gap-1">
           <button onClick={() => openStart(true)} aria-label="Verfügbarkeit planen" className="grid h-9 w-9 place-items-center rounded-full text-muted hover:bg-raised hover:text-fg">
@@ -103,18 +103,24 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
           const planned = plan.sessions.find((x) => x.date === d);
           const rest = plan.restDays?.find((x) => x.date === d);
           const isToday = d === today;
-          const look = done ? 'done' : rest ? 'rest' : a === 'yes' ? 'yes' : a === 'maybe' ? 'maybe' : a === 'no' ? 'no' : 'open';
+          const away = (s.awayDays ?? []).includes(d);
+          const look = done ? 'done' : rest ? 'rest' : a === 'yes' ? (away ? 'away' : 'yes') : a === 'maybe' ? 'maybe' : a === 'no' ? 'no' : 'open';
           return (
             <button
               key={d}
               onClick={() => {
-                const next: Availability = a === 'yes' ? 'maybe' : a === 'maybe' ? 'no' : 'yes';
-                s.setAvailability(d, next);
+                // Zeit → Zeit ohne Gym → Vielleicht → Keine Zeit → Zeit
                 try {
                   navigator.vibrate?.(10);
                 } catch {
                   /* ignore */
                 }
+                if (a === 'yes' && !away) {
+                  s.setAway(d, true);
+                  return toast(`${relDayLabel(d)}: ohne Gym – Plan nur mit Körpergewicht, Hantel & Flaschen`);
+                }
+                const next: Availability = a === 'yes' ? 'maybe' : a === 'maybe' ? 'no' : 'yes';
+                s.setAvailability(d, next);
                 toast(`${relDayLabel(d)}: ${next === 'yes' ? 'Zeit ✓' : next === 'maybe' ? 'Vielleicht – wird vorläufig eingeplant' : 'Keine Zeit'}`);
               }}
               aria-pressed={a === 'yes'}
@@ -123,6 +129,8 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
                 'relative flex flex-col items-center gap-2 rounded-full border pb-3 pt-3 transition active:scale-95',
                 look === 'yes' || look === 'done'
                   ? 'border-rec-green/40 bg-rec-green/[0.08]'
+                  : look === 'away'
+                    ? 'border-sky-400/45 bg-sky-400/[0.09]'
                   : look === 'maybe'
                     ? 'border-rec-yellow/40 bg-rec-yellow/[0.07]'
                     : look === 'no'
@@ -142,7 +150,9 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
               >
                 {Number(d.slice(8))}
               </span>
-              {look === 'rest' ? (
+              {look === 'away' ? (
+                <House size={12} className="text-sky-300 drop-shadow-[0_0_6px_rgba(56,189,248,0.9)]" strokeWidth={2.5} />
+              ) : look === 'rest' ? (
                 <Moon size={12} className="text-[#c4b9ff] drop-shadow-[0_0_6px_rgba(167,150,255,0.9)]" fill="currentColor" />
               ) : look === 'done' ? (
                 <Check size={12} className="text-rec-green" strokeWidth={3} />
@@ -171,7 +181,7 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
                     title={tid && tid in TEMPLATES ? TEMPLATES[tid].label : txt}
                     className={cn(
                       'absolute -top-2 left-1/2 max-w-[calc(100%+10px)] -translate-x-1/2 truncate whitespace-nowrap rounded-full px-1.5 text-[9px] font-bold leading-[15px]',
-                      real ? 'bg-fg text-bg' : planned?.tentative ? 'bg-rec-yellow text-bg' : 'bg-accent text-bg',
+                      real ? 'bg-fg text-bg' : planned?.tentative ? 'bg-rec-yellow text-bg' : planned?.home ? 'bg-sky-400 text-bg' : 'bg-accent text-bg',
                     )}
                   >
                     {txt}
@@ -188,6 +198,9 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-rec-yellow shadow-[0_0_6px_2px_rgb(var(--rec-yellow)/0.6)]" /> Vielleicht
+        </span>
+        <span className="flex items-center gap-1.5">
+          <House size={10} className="text-sky-300" strokeWidth={2.5} /> Ohne Gym
         </span>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 rounded-full bg-rec-red shadow-[0_0_6px_2px_rgb(var(--rec-red)/0.6)]" /> Keine Zeit
@@ -457,6 +470,7 @@ function Pill({ icon, children }: { icon: React.ReactNode; children: React.React
 const STATUS_LABEL: Record<string, string> = {
   yes: 'Zeit',
   maybe: 'Vielleicht',
+  away: 'Zeit, ohne Gym',
   no: 'Keine Zeit',
   rest: 'Ruhetag',
   done: 'trainiert',

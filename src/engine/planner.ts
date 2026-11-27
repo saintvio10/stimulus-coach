@@ -1,3 +1,4 @@
+import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL } from '../lib/muscles';
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
 import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf } from '../lib/utils';
@@ -123,6 +124,8 @@ export interface PlannedSession {
   readiness: number | null;
   value: number;
   rest: boolean;
+  /** Training ohne Gym (unterwegs) */
+  home?: HomeMode;
 }
 
 export interface Plan {
@@ -211,8 +214,10 @@ interface BuildOpts {
   sessionsPerWeek: number;
   tentative: boolean;
   nextDates: string[];
-  /** Training ohne Gym: 'bw' = nur Körpergewicht, 'weights' = auch Hantel/Rucksack */
+  /** Training ohne Gym: 'bw' = nur Körpergewicht, 'weights' = auch Hantel/Flaschen */
   home?: HomeMode;
+  /** in diesem Plan bereits vorher eingeplante Übungen (für die Bereichs-Rotation) */
+  prevPlanned?: { id: string; t: number }[];
 }
 
 export type HomeMode = 'bw' | 'weights';
@@ -268,8 +273,39 @@ export function buildSession(o: BuildOpts): PlannedSession {
     return sc.score * (1 / (1 + s / (isFull ? 2 : 3))) * overWeek * (1 + breadth);
   };
 
+  // Bereichs-Rotation: jeder Bereich eines Muskels (z. B. Bizeps: Brachialis via Hammer Curls) soll regelmäßig drankommen.
+  // Moderate Variation über die Woche → mehr regionales Wachstum; dieselben Übungen kehren wöchentlich wieder (Progression bleibt messbar).
+  const regionLast = new Map<string, number>();
+  const noteRegion = (id: string, tt: number) => {
+    const e = data.exercises.find((x) => x.id === id);
+    if (!e?.region) return;
+    const k = `${e.primary}:${e.region}`;
+    if ((regionLast.get(k) ?? 0) < tt) regionLast.set(k, tt);
+  };
+  for (const s of data.sessions) {
+    if (s.status === 'done' || s.status === 'active')
+      for (const se of s.exercises) if (se.sets.some((x) => x.done)) noteRegion(se.exerciseId, s.startedAt);
+  }
+  for (const p of o.prevPlanned ?? []) if (p.t < at) noteRegion(p.id, p.t);
+  const regionsOf = new Map<MuscleId, Set<string>>();
+  for (const e of candidates) if (e.region) regionsOf.set(e.primary, (regionsOf.get(e.primary) ?? new Set()).add(e.region));
+  const regionDays = (m: MuscleId, r: string) => {
+    const l = regionLast.get(`${m}:${r}`);
+    return l == null ? 99 : (at - l) / DAY;
+  };
+  const regionFactor = (ex: Exercise) => {
+    const regs = ex.region ? regionsOf.get(ex.primary) : undefined;
+    if (!ex.region || !regs || regs.size < 2) return 1;
+    const mine = regionDays(ex.primary, ex.region);
+    const others = [...regs].filter((r) => r !== ex.region).map((r) => regionDays(ex.primary, r));
+    const stalestOther = Math.max(...others);
+    if (mine >= 6 && mine >= stalestOther) return 1.22; // am längsten nicht trainierter Bereich
+    if (mine < 4 && stalestOther >= 7) return 0.86; // gerade erst dran, ein anderer Bereich wartet
+    return 1;
+  };
+
   const exMult = (ex: Exercise) =>
-    (1 + 0.06 * ex.stretch) * (ex.favorite ? 1.08 : 1) * (history.has(ex.id) ? 1.04 : 1) * (recent.has(ex.id) ? 0.85 : 1) * (missed.has(ex.id) ? 1.2 : 1);
+    (1 + 0.06 * ex.stretch) * (ex.favorite ? 1.08 : 1) * (history.has(ex.id) ? 1.04 : 1) * (recent.has(ex.id) ? 0.85 : 1) * (missed.has(ex.id) ? 1.2 : 1) * regionFactor(ex);
 
   const valueOfSets = (ex: Exercise, k: number) => {
     const local = { ...sSets };
@@ -336,7 +372,12 @@ export function buildSession(o: BuildOpts): PlannedSession {
         const v = valueOfSets(ex, startSets);
         if (v / startSets < MIN_SET_VALUE) continue;
         // Bevorzugt Abwechslung bei zweiter Übung für denselben Muskel (andere Dehnungsposition)
-        const varietyBonus = samePrimary.length === 1 && (samePrimary[0].ex.stretch !== ex.stretch || samePrimary[0].ex.compound !== ex.compound) ? 1.08 : 1;
+        const varietyBonus =
+          samePrimary.length === 1 && (samePrimary[0].ex.region && ex.region && samePrimary[0].ex.region !== ex.region ? true : samePrimary[0].ex.stretch !== ex.stretch || samePrimary[0].ex.compound !== ex.compound)
+            ? samePrimary[0].ex.region !== ex.region && ex.region
+              ? 1.12
+              : 1.08
+            : 1;
         const ratio = (v / t) * varietyBonus;
         if (!best || ratio > best.ratio)
           best = {
@@ -398,6 +439,10 @@ export function buildSession(o: BuildOpts): PlannedSession {
       whyParts.push(`${MUSCLE[pm].label} (${rankTxt})${sec.length ? ` + nebenbei ${sec.join(', ')}` : ''} – viel Reiz pro Minute.`);
     } else whyParts.push(`Gezielt für ${MUSCLE[pm].label} (${rankTxt}, diese Woche ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätze).`);
     if (it.ex.benefit) whyParts.push(it.ex.benefit);
+    if (regionFactor(it.ex) > 1 && it.ex.region) {
+      const dd = regionDays(pm, it.ex.region);
+      whyParts.push(`Rotation: ${REGION_LABEL[`${pm}:${it.ex.region}`] ?? it.ex.region} ${dd >= 99 ? 'kam zuletzt nicht dran' : `zuletzt vor ${Math.round(dd)} Tagen`} – Abwechslung über die Woche trifft alle Bereiche des Muskels.`);
+    }
     const mi = missed.get(it.ex.id);
     if (mi) whyParts.push(`Nachholen: am ${fmtDate(mi.date)} im Training entfernt (${mi.sets} Sätze nicht gemacht).`);
     if (sc.neglect > 0.2) whyParts.push(`Seit ${sc.daysSince == null ? 'langem' : Math.round(sc.daysSince) + ' Tagen'} kein direkter Reiz – wird nachgeholt.`);
@@ -498,6 +543,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
     readiness,
     value,
     rest: planned.length === 0,
+    home: o.home,
   };
 }
 
@@ -723,7 +769,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   // Ziele an realistische Frequenz koppeln
   const spw = clamp(opts.forceToday ? data.settings.sessionsPerWeek : dates.length || data.settings.sessionsPerWeek, 1, 3);
 
-  let events = allEvents(data);
+  let events = allEvents(data, now);
   if (activeToday) {
     const exById0 = new Map(data.exercises.map((e) => [e.id, e]));
     for (const se of activeToday.exercises) {
@@ -736,6 +782,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   }
   const exById = new Map(data.exercises.map((e) => [e.id, e]));
   const sessions: PlannedSession[] = [];
+  const awaySet = new Set(data.awayDays ?? []);
+  const prevPlanned: { id: string; t: number }[] = [];
   // Letztes echtes Training (≤ 3 Tage) zählt für die Split-Rotation mit, damit nicht dauernd derselbe Split kommt
   const lastReal = doneSessions[doneSessions.length - 1];
   const usedTemplates: TemplateId[] =
@@ -762,7 +810,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         sessionsPerWeek: spw,
         tentative: tentativeSet.has(d),
         nextDates: allDates.slice(i + 1),
-        home: d === today ? opts.home : undefined,
+        home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
+        prevPlanned,
       });
       let sc = s.value;
       if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
@@ -780,7 +829,12 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     if (allDates.length === 1 && !uncertain && minutes < 90)
       best.reasons.push(`Nur 1 Einheit in den nächsten 7 Tagen: Mit ${minutes} min sind pro Muskel nur wenige Sätze möglich. Wenn es geht, plane 90–120 min ein (Profil → Standarddauer oder „Zeit heute“) – das bringt deutlich mehr Wochenvolumen.`);
     if (best.tentative) best.reasons.push('Vorläufig: Tag ist als „möglich“ markiert. Bestätige ihn im Kalender oder er wird automatisch neu verteilt.');
+    if (best.home && !best.label.startsWith('Unterwegs')) {
+      best.label = `Unterwegs · ${best.label.split(' (')[0]}`;
+      if (awaySet.has(d)) best.reasons.unshift('Ohne Gym: nur Übungen mit Körpergewicht, deiner Hantel und Flaschen. Was du hier trainierst, rechnet der Plan für die folgenden Studio-Tage mit ein.');
+    }
     sessions.push(best);
+    for (const pe of best.exercises) prevPlanned.push({ id: pe.exerciseId, t: at });
     usedTemplates.push(best.templateId);
     // virtuelle Reize für die Simulation der folgenden Tage
     const vt = at + HOUR;
@@ -810,14 +864,14 @@ export function planToday(data: AppData, minutes?: number, now = Date.now()): Pl
   return p2.sessions.find((s) => s.date === today) ?? buildPlan(data, now, { forceToday: true, minutesToday: m }).sessions[0] ?? null;
 }
 
-/** Heutiges Training ohne Gym (unterwegs/zu Hause) – gleicher Coach, nur mit Körpergewicht- bzw. Hantel-/Rucksack-Übungen */
+/** Heutiges Training ohne Gym (unterwegs/zu Hause) – gleicher Coach, nur mit Körpergewicht- bzw. Hantel-/Flaschen-ack-Übungen */
 export function planHome(data: AppData, minutes: number, mode: HomeMode, now = Date.now()): PlannedSession | null {
   const today = dateKey(now);
   const withToday: AppData = { ...data, availability: { ...data.availability, [today]: 'yes' } };
   const p = buildPlan(withToday, now, { forceToday: true, minutesToday: minutes, home: mode });
   const s = p.sessions.find((x) => x.date === today && !x.rest) ?? null;
   if (!s) return null;
-  return { ...s, label: `Unterwegs · ${s.label.split(' (')[0]}` };
+  return s.label.startsWith('Unterwegs') ? s : { ...s, label: `Unterwegs · ${s.label.split(' (')[0]}` };
 }
 
 export function muscleLabelList(ms: MuscleId[]): string {
@@ -829,7 +883,7 @@ export const _internal = { endOfWeek };
 
 /** Plan für eine bestimmte Vorlage heute (Schnellstart) – nutzt dieselbe Bewertungslogik */
 export function planTemplate(data: AppData, templateId: TemplateId, minutes: number, now = Date.now()): PlannedSession {
-  const events = allEvents(data);
+  const events = allEvents(data, now);
   const s = buildSession({
     date: dateKey(now),
     at: now,

@@ -52,9 +52,9 @@ function PlanView() {
   const go = useRouter((r) => r.go);
   const today = dateKey();
   const minutes = s.planOptions.todayMinutes?.date === today ? s.planOptions.todayMinutes.minutes : s.settings.defaultMinutes;
-  const plan = useMemo(() => planToday(data, minutes), [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plan = useMemo(() => planToday(data, minutes), [s.sessions, s.availability, s.planOptions, s.exercises, s.settings, s.profile, s.checkIns, s.activities, s.awayDays]); // eslint-disable-line react-hooks/exhaustive-deps
   const trainedToday = s.sessions.some((x) => x.status === 'done' && x.date === today);
-  const restToday = useMemo(() => buildPlan(data).restDays.find((r) => r.date === today), [s.sessions, s.availability, s.settings, s.planOptions]); // eslint-disable-line react-hooks/exhaustive-deps
+  const restToday = useMemo(() => buildPlan(data).restDays.find((r) => r.date === today), [s.sessions, s.availability, s.settings, s.planOptions, s.awayDays, s.activities]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="Dein Plan für heute" sub={s.profile.name ? `Hallo ${s.profile.name}` : 'Heute'} />

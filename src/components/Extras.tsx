@@ -28,7 +28,8 @@ export function ActivitySheet({ open, onClose, date: initialDate }: { open: bool
   const effect = Object.entries(activityMuscles(draft))
     .filter(([, v]) => (v ?? 0) >= 0.3)
     .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
-  const days = Array.from({ length: 4 }, (_, i) => addDays(dateKey(), -i));
+  // auch geplante Aktivitäten (z. B. Skitag morgen) – der Plan legt dann keine Beine davor/danach
+  const days = [2, 1, 0, -1, -2, -3].map((i) => addDays(dateKey(), i)).reverse();
   return (
     <Sheet
       open={open}

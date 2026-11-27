@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, usePlan, useToast } from '../lib/hooks';
-import { Badge, Button, Card, Confirm, PageHeader, SectionTitle, Sheet } from '../components/ui';
+import { Badge, Button, Card, Confirm, PageHeader, SectionTitle, Sheet, Switch } from '../components/ui';
 import { QuickAvailability, SessionPreview } from '../components/Coach';
 import type { Availability, Session } from '../lib/types';
 import { MONTHS, WEEKDAYS_LONG, addDays, cn, dateKey, fmtNum, parseKey, relDayLabel, weekdayOf } from '../lib/utils';
@@ -173,6 +173,21 @@ function DaySheet({ day, onClose }: { day: string | null; onClose: () => void })
               <Button variant="ghost" size="sm" onClick={() => set(null, 'Zurückgesetzt')}>
                 Standard
               </Button>
+            </div>
+            <div className="mt-3 flex items-center justify-between rounded-xl bg-raised px-3 py-2.5">
+              <div>
+                <div className="text-[13.5px] font-medium">🏠 Ohne Gym (unterwegs)</div>
+                <div className="text-[11.5px] text-muted">Plan nur mit Körpergewicht, Hantel & Flaschen</div>
+              </div>
+              <Switch
+                id="cal-away"
+                checked={(s.awayDays ?? []).includes(day)}
+                onChange={(v) => {
+                  s.setAway(day, v);
+                  toast(v ? `${relDayLabel(day)}: ohne Gym` : `${relDayLabel(day)}: im Studio`);
+                }}
+                label="Ohne Gym"
+              />
             </div>
           </div>
         )}

@@ -37,6 +37,8 @@ export function defaultData(): AppData {
       defaultMinutes: 90,
       orderMode: 'priority',
       autoSuperset: true,
+      homeDumbbell: 10,
+      homeBottle: 1,
       dumbbellWeights: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42.5, 45, 47.5, 50],
       cableStep: 2.5,
       machineStep: 5,
@@ -62,6 +64,7 @@ export function defaultData(): AppData {
     timer: null,
     volumeAdjust: {},
     activities: [],
+    awayDays: [],
     updatedAt: Date.now(),
   };
 }
@@ -130,6 +133,7 @@ export function migrate(raw: Partial<AppData>): AppData {
     nutrition: raw.nutrition ?? {},
     volumeAdjust: raw.volumeAdjust ?? {},
     activities: raw.activities ?? [],
+    awayDays: raw.awayDays ?? [],
     version: DATA_VERSION,
   };
   if (!d.profile.name) d.profile.name = 'Dominic';
@@ -156,7 +160,11 @@ export function migrate(raw: Partial<AppData>): AppData {
   // Seitheben: Arme einzeln erfassen (einmalig, eigene Einstellung bleibt danach erhalten)
   d.exercises = d.exercises.map((x) => {
     const def = DEFAULT_EXERCISES.find((e) => e.id === x.id);
-    return def?.unilateral && x.unilateral === undefined ? { ...x, unilateral: true } : x;
+    let y = def?.unilateral && x.unilateral === undefined ? { ...x, unilateral: true } : x;
+    if (def?.region && !y.region) y = { ...y, region: def.region };
+    // Übungen ohne Gym immer auf aktuellen Stand bringen (z. B. Rucksack → Hantel/Flaschen), Favorit/Sperre bleiben
+    if (def?.location === 'home' && !x.custom) y = { ...def, favorite: x.favorite, locked: x.locked };
+    return y;
   });
   return d;
 }
@@ -169,6 +177,8 @@ interface Store extends AppData {
   replaceAll: (data: AppData) => void;
   // Verfügbarkeit
   setAvailability: (date: string, a: Availability | null) => void;
+  /** Tag ohne Gym an/aus */
+  setAway: (date: string, away: boolean) => void;
   // Training
   startSession: (plan: PlannedSession | null, title?: string, location?: 'home') => string;
   updateSet: (sessionId: string, exUid: string, setId: string, patch: Partial<SetLog>) => void;
@@ -231,6 +241,16 @@ export const useStore = create<Store>()(
           mutate((d) => {
             if (a == null) delete d.availability[date];
             else d.availability[date] = a;
+            // ohne Zeit bzw. unklar → kein „ohne Gym“-Vermerk mehr
+            if (a !== 'yes') d.awayDays = (d.awayDays ?? []).filter((x) => x !== date);
+          }),
+        setAway: (date, away) =>
+          mutate((d) => {
+            d.awayDays = (d.awayDays ?? []).filter((x) => x !== date);
+            if (away) {
+              d.awayDays.push(date);
+              d.availability[date] = 'yes';
+            }
           }),
         startSession: (plan, title, location) => {
           const id = uid();
@@ -241,7 +261,7 @@ export const useStore = create<Store>()(
             startedAt: Date.now(),
             status: 'active',
             title: title ?? plan?.label ?? 'Freies Training',
-            location,
+            location: location ?? (plan?.home ? 'home' : undefined),
             split: plan?.templateId ?? 'custom',
             plannedMinutes: plan?.minutes ?? get().settings.defaultMinutes,
             estMinutes: plan?.estMinutes,
