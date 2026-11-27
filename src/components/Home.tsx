@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy, House } from 'lucide-react';
 import { quick, useStore } from '../lib/store';
-import { useCompletion, useRouter, useSearch, useToast } from '../lib/hooks';
+import { useCompletion, useNow, useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
 import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
 import { planTemplate, planToday, PLAN_DAYS, personalTarget, TEMPLATE_SHORT, TEMPLATES } from '../engine/planner';
@@ -14,6 +14,7 @@ import { MUSCLE } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
 import { addDays, cn, dateKey, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, WEEKDAYS_LONG, MONTHS, fmtMin } from '../lib/utils';
 import { Badge, Button, Chip, GlowProgress, Ring, Sheet } from './ui';
+import { sessionTiming } from '../engine/timing';
 import { sessionStats, sessionsThisWeek } from '../engine/sessionStats';
 import { AddMenu } from './Extras';
 import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
@@ -352,6 +353,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
           <>
             <h2 className="text-[26px] font-semibold leading-tight">{active.title}</h2>
             <p className="text-[13px] text-muted">Training läuft · {active.exercises.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0)} Sätze erledigt</p>
+            <ActiveTimingBar session={active} />
             <ul className="flex flex-col gap-1.5">
               {active.exercises.map((e) => {
                 const ex = exMap.get(e.exerciseId);
@@ -1131,4 +1133,14 @@ function DoneToday({ session, nextPlanned, onNext }: { session: Session; nextPla
       </div>
     </>
   );
+}
+
+/** Laufendes Training: Fortschritt + seit wann, wie lange noch, voraussichtliches Ende (aktualisiert sich alle 30 s) */
+function ActiveTimingBar({ session }: { session: Session }) {
+  const now = useNow(30_000);
+  const sessions = useStore((s) => s.sessions);
+  const settings = useStore((s) => s.settings);
+  const exercises = useStore((s) => s.exercises);
+  const t = sessionTiming(session, { sessions, settings, exercises }, now);
+  return <GlowProgress value={t.progress} height={30} label={<span className="text-[12px]">{t.label}</span>} />;
 }

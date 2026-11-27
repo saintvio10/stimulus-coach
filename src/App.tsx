@@ -15,7 +15,7 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useStore } from './lib/store';
-import { useCompletion, useRouter, useSearch, useToast, type Route } from './lib/hooks';
+import { useCompletion, useFocusNav, useRouter, useSearch, useToast, type Route } from './lib/hooks';
 import { cn } from './lib/utils';
 import { Sheet, Toast } from './components/ui';
 import { RestTimer } from './components/RestTimer';
@@ -59,6 +59,7 @@ export default function App() {
   const active = useStore((s) => s.sessions.some((x) => x.status === 'active'));
   const nutritionEnabled = useStore((s) => s.settings.nutritionEnabled);
   const { route, go } = useRouter();
+  const focusNav = useFocusNav((x) => x.show);
   const toast = useToast((s) => s.msg);
   const [more, setMore] = useState(false);
   const searchOpen = useSearch((x) => x.open);
@@ -159,7 +160,7 @@ export default function App() {
       </div>
 
       {/* Mobile: schwebende Navigationsleiste */}
-      <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-30 flex justify-center pb-[calc(env(safe-area-inset-bottom,0px)+10px)] pl-[max(16px,env(safe-area-inset-left,0px))] pr-[max(16px,env(safe-area-inset-right,0px))] lg:hidden">
+      <nav className={cn('pointer-events-none fixed inset-x-0 bottom-0 flex justify-center pb-[calc(env(safe-area-inset-bottom,0px)+10px)] pl-[max(16px,env(safe-area-inset-left,0px))] pr-[max(16px,env(safe-area-inset-right,0px))] lg:hidden', focusNav ? 'z-[75] animate-fade-up' : 'z-30')}>
         <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-line/10 bg-surface/80 p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.55)] backdrop-blur-xl">
           {MOBILE_MAIN.map((id) => {
             const n = NAV.find((x) => x.id === id)!;
@@ -167,7 +168,11 @@ export default function App() {
             return (
               <button
                 key={id}
-                onClick={() => go(id)}
+                onClick={() => {
+                  // aus dem Fokusmodus heraus: Fokus schließen (Training läuft weiter), dann Seite öffnen
+                  if (focusNav) useFocusNav.getState().close?.();
+                  go(id);
+                }}
                 aria-label={n.label}
                 aria-current={on ? 'page' : undefined}
                 className={cn(
@@ -181,7 +186,10 @@ export default function App() {
             );
           })}
           <button
-            onClick={() => setMore(true)}
+            onClick={() => {
+              if (focusNav) useFocusNav.getState().close?.();
+              setMore(true);
+            }}
             aria-label="Mehr"
             className={cn(
               'grid h-12 w-12 place-items-center rounded-full transition active:scale-95',

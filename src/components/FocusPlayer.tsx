@@ -9,13 +9,13 @@ import { ExerciseAnimation } from './ExerciseAnimation';
 import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
 import { cn, fmtMin, fmtNum, nextWeight, prevWeight } from '../lib/utils';
-import { timeEstimator } from '../engine/timing';
+import { sessionTiming } from '../engine/timing';
 import { exerciseVerdict, setFeedback } from '../engine/verdict';
 import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
 import { LiveAdjustBanner } from './LiveAdjustBanner';
 import { setPR } from '../engine/prs';
-import { usePRCelebration, useSetPopup } from '../lib/hooks';
+import { useFocusNav, usePRCelebration, useSetPopup } from '../lib/hooks';
 import { GlowProgress } from './ui';
 import { FocusProgress } from './FocusProgress';
 import { BusySheet } from './BusySheet';
@@ -38,6 +38,16 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const lastW = se?.lastWeight ?? advice?.lastWeight ?? null;
 
   const [busy, setBusy] = useState(false);
+  // App-Navigation: Schließen über stabile Referenz; ausblenden nur, wenn der Fokusmodus wirklich zugeht
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    useFocusNav.getState().setClose(() => closeRef.current());
+    return () => {
+      useFocusNav.getState().set(false);
+      useFocusNav.getState().setClose(null);
+    };
+  }, []);
   const [fbUid, setFbUid] = useState<string | null>(null);
   const [hideStart, setHideStart] = useState(false);
   // Eingabe für den aktuellen Satz
@@ -98,18 +108,8 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const totalSets = list.reduce((a, e) => a + e.sets.length, 0);
   const doneSets = list.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
   const progress = totalSets ? doneSets / totalSets : 0;
-  // Restzeit wie in der Planung (gelernte Satz-/Wechselzeiten), daraus voraussichtliches Ende
-  const TE = timeEstimator(s);
-  const remainingMin = Math.round(
-    list.reduce((a, e) => {
-      const x = s.exercises.find((y) => y.id === e.exerciseId);
-      const open = e.sets.filter((z) => !z.done).length;
-      if (!open || !x) return a;
-      return a + open * TE.perSet(x, { repMin: e.repMin, repMax: e.repMax, restSec: e.restSec }) + (e.sets.some((z) => z.done) ? 0 : TE.setup(x));
-    }, 0),
-  );
-  const endD = new Date(now + remainingMin * 60_000);
-  const endTxt = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`;
+  // gleiche Berechnung wie die Übersicht (Restzeit mit gelernten Satz-/Wechselzeiten, voraussichtliches Ende)
+  const timing = sessionTiming(session, s, now);
 
   const togglePause = () => {
     unlockAudio();
@@ -158,8 +158,18 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const fills = targetFills(ex.muscles);
 
   return createPortal(
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black text-white" role="dialog" aria-modal="true" aria-label="Fokusmodus">
-      <div className="mx-auto flex min-h-full max-w-lg flex-col gap-4 px-5 pb-[calc(env(safe-area-inset-bottom,0px)+20px)] pt-[calc(env(safe-area-inset-top,0px)+12px)]">
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black text-white"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Fokusmodus"
+      onScroll={(e) => {
+        const el = e.currentTarget;
+        const atBottom = el.scrollTop > 40 && el.scrollTop + el.clientHeight >= el.scrollHeight - 12;
+        if (atBottom !== useFocusNav.getState().show) useFocusNav.getState().set(atBottom);
+      }}
+    >
+      <div className="mx-auto flex min-h-full max-w-lg flex-col gap-4 px-5 pb-[calc(env(safe-area-inset-bottom,0px)+96px)] pt-[calc(env(safe-area-inset-top,0px)+12px)]">
         <div className="flex items-center justify-between">
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full bg-white/10" aria-label="Fokusmodus schließen">
             <X size={18} />
@@ -168,11 +178,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             <GlowProgress
               value={progress}
               height={30}
-              label={
-                <span className="text-[12px]">
-                  {fmtMin(Math.max(0, Math.round((now - session.startedAt) / 60_000)))} · noch ~{fmtMin(remainingMin)} · bis {endTxt}
-                </span>
-              }
+              label={<span className="text-[12px]">{timing.label}</span>}
             />
           </div>
         </div>
@@ -341,18 +347,6 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
         {/* Verlauf: Volumen & Sätze, heute vs. frühere Einheiten */}
         <FocusProgress part="history" ex={ex} se={se} sessionId={session.id} sessions={s.sessions} advice={advice} />
 
-        {/* Steuerung ganz unten (nicht schwebend – erscheint erst beim Runterscrollen, verdeckt nichts) */}
-        <div className="mt-auto grid h-[72px] shrink-0 grid-cols-3 overflow-hidden rounded-[26px] bg-[#1c1c1f]">
-          <button className="grid place-items-center disabled:opacity-30" disabled={idx === 0} onClick={() => setIdx(idx - 1)} aria-label="Vorherige Übung (unten)">
-            <SkipBack size={26} fill="currentColor" />
-          </button>
-          <button className="grid place-items-center" onClick={togglePause} aria-label={awaiting ? 'Satz starten (unten)' : paused ? 'Fortsetzen (unten)' : 'Pausieren (unten)'}>
-            {paused || awaiting ? <Play size={28} fill="currentColor" /> : <Pause size={28} fill="currentColor" />}
-          </button>
-          <button className="grid place-items-center disabled:opacity-30" disabled={idx >= list.length - 1} onClick={() => setIdx(idx + 1)} aria-label="Nächste Übung (unten)">
-            <SkipForward size={26} fill="currentColor" />
-          </button>
-        </div>
         {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} />}
 
         {/* Schwebender Start-Knopf: groß, mittig über allem */}

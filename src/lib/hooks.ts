@@ -56,6 +56,14 @@ export const useToast = create<{ msg: string | null; show: (m: string) => void }
   },
 }));
 
+/** Fokusmodus ganz unten gescrollt → App-Navigation (Übersicht, Training, …) darüber einblenden */
+export const useFocusNav = create<{ show: boolean; set: (v: boolean) => void; close: (() => void) | null; setClose: (f: (() => void) | null) => void }>((set) => ({
+  show: false,
+  set: (v) => set({ show: v }),
+  close: null,
+  setClose: (f) => set({ close: f }),
+}));
+
 /** Pop-up nach jedem Satz (blendet nach 3 s aus) */
 export interface SetPopupData {
   tone: 'great' | 'good' | 'ok' | 'low' | 'light';

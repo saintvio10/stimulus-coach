@@ -115,3 +115,29 @@ export function timeEstimator(data: { sessions: Session[]; settings: { timeFacto
   const learnedShare: TimeEstimator['learnedShare'] = (ex) => wSet(L.get(ex.id));
   return { perSet, setup, learnedShare };
 }
+
+/** Laufendes Training: seit wann, wie lange noch (gleiche Schätzung wie die Planung), voraussichtliches Ende, Fortschritt */
+export function sessionTiming(
+  session: Session,
+  data: { sessions: Session[]; settings: { timeFactor?: number }; exercises: Exercise[] },
+  now = Date.now(),
+): { elapsedMin: number; remainingMin: number; endAt: number; endTxt: string; progress: number; label: string } {
+  const TE = timeEstimator(data);
+  const list = session.exercises.filter((e) => !e.skipped && e.sets.length);
+  const total = list.reduce((a, e) => a + e.sets.length, 0);
+  const doneN = list.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
+  const remainingMin = Math.round(
+    list.reduce((a, e) => {
+      const ex = data.exercises.find((y) => y.id === e.exerciseId);
+      const open = e.sets.filter((z) => !z.done).length;
+      if (!open || !ex) return a;
+      return a + open * TE.perSet(ex, { repMin: e.repMin, repMax: e.repMax, restSec: e.restSec }) + (e.sets.some((z) => z.done) ? 0 : TE.setup(ex));
+    }, 0),
+  );
+  const elapsedMin = Math.max(0, Math.round((now - session.startedAt) / 60_000));
+  const endAt = now + remainingMin * 60_000;
+  const d = new Date(endAt);
+  const endTxt = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const f = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`);
+  return { elapsedMin, remainingMin, endAt, endTxt, progress: total ? doneN / total : 0, label: `${f(elapsedMin)} · noch ~${f(remainingMin)} · bis ${endTxt}` };
+}
