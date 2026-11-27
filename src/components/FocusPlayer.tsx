@@ -146,6 +146,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
       const nextSe = list[idx + 1];
       const nextEx = nextSe ? s.exercises.find((e) => e.id === nextSe.exerciseId) : undefined;
       if (nextSe && nextEx) s.startTimer(Math.max(rest.sec, transitionRest(se.restSec, nextSe.restSec)), `Wechsel zu ${nextEx.name}`);
+      else if (!session.exercises.some((e) => !e.skipped && e.sets.some((x) => !x.done && x.id !== cur.id))) s.stopTimer();
     } else s.startTimer(rest.sec, `${ex.name} · Satz ${setIndex + 2}${rest.note ? ` · ${rest.note}` : ''}`);
     // Nach der letzten Übung-Satz: erst Feedback zum Gewicht, dann weiter zur nächsten Übung
     if (last) setTimeout(() => setFbUid(se.uid), 350);
@@ -412,7 +413,10 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             if (v) s.patchExercise(session.id, fse.uid, { feedback: v });
             setFbUid(null);
             const pos = list.findIndex((x) => x.uid === fse.uid);
-            if (pos >= 0 && pos < list.length - 1) setIdx(pos + 1);
+            const openLeft = session.exercises.some((e) => !e.skipped && e.sets.some((x) => !x.done));
+            // Training komplett → Fokusmodus schließen, die Trainingsseite bietet dann „Training beenden“ an
+            if (!openLeft) onClose();
+            else if (pos >= 0 && pos < list.length - 1) setIdx(pos + 1);
           };
           const v = exerciseVerdict(fex, fse, session, s.sessions, { settings: s.settings, checkIns: s.checkIns });
           const toneCls = { good: 'text-rec-green', mixed: 'text-rec-yellow', light: 'text-accent', heavy: 'text-rec-orange' };

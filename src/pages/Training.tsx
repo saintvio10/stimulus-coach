@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExerciseVisual } from '../components/ExerciseVisual';
 import {
   ArrowDown,
@@ -156,6 +156,21 @@ function Workout({ session }: { session: Session }) {
   const total = session.exercises.filter((e) => !e.skipped).reduce((a, e) => a + e.sets.length, 0);
   const doneN = session.exercises.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
 
+  // Alle Sätze erledigt → Timer stoppen und (außerhalb des Fokusmodus) direkt anbieten, das Training zu beenden
+  const allDone = total > 0 && doneN === total;
+  const [doneOpen, setDoneOpen] = useState(false);
+  const promptedAt = useRef<number>(-1);
+  useEffect(() => {
+    if (!allDone) return;
+    s.stopTimer();
+    if (focusUid || promptedAt.current === total) return;
+    const t = setTimeout(() => {
+      promptedAt.current = total;
+      setDoneOpen(true);
+    }, 1600);
+    return () => clearTimeout(t);
+  }, [allDone, focusUid, total]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const finish = () => {
     const prs = detectPRs(session, s.sessions, s.exercises);
     s.finishSession(session.id, prs);
@@ -280,6 +295,17 @@ function Workout({ session }: { session: Session }) {
         confirmLabel="Speichern & beenden"
       />
       <Confirm
+        open={doneOpen && allDone}
+        onClose={() => setDoneOpen(false)}
+        onConfirm={() => {
+          setDoneOpen(false);
+          finish();
+        }}
+        title="Training geschafft! 🎉"
+        text={`Alle ${total} Sätze erledigt in ${fmtMin(Math.max(1, Math.round((now - session.startedAt) / 60_000)))}. Jetzt beenden und die Auswertung ansehen? Mit „Abbrechen“ kannst du noch Sätze ergänzen.`}
+        confirmLabel="Training beenden"
+      />
+      <Confirm
         open={discard}
         onClose={() => setDiscard(false)}
         onConfirm={() => {
@@ -394,6 +420,8 @@ function ExerciseCard({
         const nextSe = session.exercises.slice(session.exercises.indexOf(se) + 1).find((e) => !e.skipped && e.sets.some((x) => !x.done));
         const nextEx = nextSe ? s.exercises.find((e) => e.id === nextSe.exerciseId) : undefined;
         if (nextSe && nextEx) s.startTimer(Math.max(rest.sec, transitionRest(se.restSec, nextSe.restSec)), `Wechsel zu ${nextEx.name}`);
+        // letzter Satz des Trainings: keine Pause mehr – alten Timer stoppen
+        else if (!session.exercises.some((e) => !e.skipped && e.sets.some((x) => !x.done && x.id !== setId))) s.stopTimer();
       } else s.startTimer(rest.sec, `${ex.name} · Satz ${idx + 2}${rest.note ? ` · ${rest.note}` : ''}`);
     }
     if (isLast && !partner) setTimeout(onNext, 300);
