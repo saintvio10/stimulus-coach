@@ -287,6 +287,8 @@ const defs: Def[] = [
   },
   {
     id: 'reverse-cable-fly',
+    // Gewichtsblock am Gerät (Foto vom 27.11.): 1,25 · 2,5 · 3,75 · 5, danach 2,5er-Schritte bis 50 kg
+    weights: [1.25, 2.5, 3.75, 5, 7.5, 10, 12.5, 15, 17.5, 20, 22.5, 25, 27.5, 30, 32.5, 35, 37.5, 40, 42.5, 45, 47.5, 50],
     name: 'Reverse Cable Flys',
     muscles: { rearDelts: 1, upperBack: 0.5 },
     primary: 'rearDelts',

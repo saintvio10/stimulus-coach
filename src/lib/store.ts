@@ -157,6 +157,11 @@ export function migrate(raw: Partial<AppData>): AppData {
     const def = DEFAULT_EXERCISES.find((e) => e.id === x.id)!;
     return { ...x, name: def.name, cues: def.cues };
   });
+  // Gerätestufen aus den Standardübungen übernehmen, solange keine eigenen eingetragen sind
+  d.exercises = d.exercises.map((x) => {
+    const def = DEFAULT_EXERCISES.find((e) => e.id === x.id);
+    return def?.weights && !x.weights?.length && !x.custom ? { ...x, weights: [...def.weights] } : x;
+  });
   // neue Standardübungen ergänzen, falls sie fehlen
   for (const e of DEFAULT_EXERCISES) {
     const ex = d.exercises.find((x) => x.id === e.id);
