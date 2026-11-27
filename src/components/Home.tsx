@@ -14,6 +14,7 @@ import { readinessLabel, readinessScore } from '../engine/readiness';
 import { addDays, cn, dateKey, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, WEEKDAYS_LONG, MONTHS, fmtMin } from '../lib/utils';
 import { Badge, Button, Chip, GlowProgress, Ring, Sheet } from './ui';
 import { sessionStats, sessionsThisWeek } from '../engine/sessionStats';
+import { AddMenu } from './Extras';
 import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
 import { SwipeToStart } from './SwipeToStart';
 import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability, DayDuration } from './Coach';
@@ -55,6 +56,7 @@ export function HomeHeader() {
             <span className="tnum text-[10.5px] font-semibold">{readiness ?? '–'}</span>
           </Ring>
         </button>
+        <AddMenu />
         <button onClick={() => openSearch(true)} aria-label="Suchen" className="grid h-10 w-10 place-items-center rounded-full text-muted hover:bg-raised hover:text-fg">
           <Search size={18} />
         </button>

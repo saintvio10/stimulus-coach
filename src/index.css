@@ -47,3 +47,11 @@ input[type=number] { -moz-appearance: textfield; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* Gewichts-Schieberegler */
+.weight-range { -webkit-appearance: none; appearance: none; height: 36px; background: transparent; touch-action: pan-x; }
+.weight-range::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: linear-gradient(90deg, rgb(var(--accent)) 0 var(--p), rgb(var(--raised)) var(--p) 100%); }
+.weight-range::-moz-range-track { height: 8px; border-radius: 999px; background: rgb(var(--raised)); }
+.weight-range::-moz-range-progress { height: 8px; border-radius: 999px; background: rgb(var(--accent)); }
+.weight-range::-webkit-slider-thumb { -webkit-appearance: none; width: 30px; height: 30px; margin-top: -11px; border-radius: 999px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.45), 0 0 0 4px rgb(var(--accent) / .35); }
+.weight-range::-moz-range-thumb { width: 30px; height: 30px; border: 0; border-radius: 999px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.45), 0 0 0 4px rgb(var(--accent) / .35); }

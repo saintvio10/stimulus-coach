@@ -10,7 +10,8 @@ import { MUSCLE } from '../lib/muscles';
 import { addDays, cn, dateKey, fmtDate, fmtNum, parseKey, relDayLabel, DAY } from '../lib/utils';
 import { Button, Chip, Field, Input, Sheet } from './ui';
 import { ChartTooltip, axisProps } from '../pages/Progress';
-import { HomeWorkoutButton } from './HomeWorkout';
+import { HomeWorkoutSheet } from './HomeWorkout';
+import { QuickAvailability } from './Coach';
 
 /** Aktivität außerhalb des Studios eintragen (Ski, Spazieren …) */
 export function ActivitySheet({ open, onClose, date: initialDate }: { open: boolean; onClose: () => void; date?: string }) {
@@ -144,57 +145,101 @@ export function ActivitySheet({ open, onClose, date: initialDate }: { open: bool
 }
 
 /** Körpergewicht schnell eintragen, mit Verlaufskurve und 7-Tage-Durchschnitt */
-export function WeightSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Gewicht mit Schieberegler – startet beim letzten Gewicht (±3 kg, 0,1-kg-Schritte) */
+export function WeightSlider({ onSaved, compact }: { onSaved?: () => void; compact?: boolean }) {
   const s = useStore();
   const toast = useToast((t) => t.show);
-  const lastW = [...s.body].reverse().find((b) => b.weight)?.weight;
-  const [w, setW] = useState('');
+  const today = dateKey();
+  const withW = s.body.filter((b) => b.weight);
+  const todayEntry = withW.find((b) => b.date === today);
+  const lastBefore = [...withW].reverse().find((b) => b.date < today);
+  const ref = todayEntry?.weight ?? lastBefore?.weight ?? s.profile.weight ?? 74;
+  const [v, setV] = useState(ref);
+  const base = Math.round((lastBefore?.weight ?? ref) * 10) / 10;
+  const min = Math.floor((base - 3) * 10) / 10;
+  const max = Math.ceil((base + 3) * 10) / 10;
+  const diff = lastBefore ? v - lastBefore.weight! : null;
+  const clamp1 = (x: number) => Math.round(Math.min(max, Math.max(min, x)) * 10) / 10;
+  const save = () => {
+    s.addBody({ date: today, weight: v });
+    toast(`${fmtNum(v)} kg gespeichert`);
+    onSaved?.();
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <div className="tnum text-[40px] font-bold leading-none tracking-tight">
+            {fmtNum(v)}
+            <span className="ml-1 text-[18px] font-semibold text-muted">kg</span>
+          </div>
+          <div className="mt-1 text-[12.5px] text-muted">
+            {diff != null && lastBefore ? (
+              <>
+                <span className={cn('font-semibold', Math.abs(diff) < 0.05 ? 'text-fg' : diff > 0 ? 'text-rec-green' : 'text-accent')}>
+                  {diff > 0 ? '+' : ''}
+                  {fmtNum(diff, 1)} kg
+                </span>{' '}
+                ggü. {relDayLabel(lastBefore.date).split(',')[0]} ({fmtNum(lastBefore.weight!)} kg)
+              </>
+            ) : (
+              'Erster Eintrag'
+            )}
+          </div>
+        </div>
+        <div className="flex gap-1.5 pb-1">
+          {[-0.1, 0.1].map((d) => (
+            <button
+              key={d}
+              onClick={() => setV(clamp1(v + d))}
+              className="grid h-11 w-11 place-items-center rounded-full bg-raised text-[20px] font-semibold active:scale-95"
+              aria-label={d > 0 ? 'plus 0,1 kg' : 'minus 0,1 kg'}
+            >
+              {d > 0 ? '+' : '−'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={0.1}
+        value={v}
+        onChange={(e) => {
+          setV(clamp1(Number(e.target.value)));
+          try {
+            navigator.vibrate?.(3);
+          } catch {
+            /* ignore */
+          }
+        }}
+        aria-label="Körpergewicht"
+        className="weight-range w-full"
+        style={{ ['--p' as string]: `${((v - min) / (max - min)) * 100}%` }}
+      />
+      <div className="tnum -mt-1 flex justify-between text-[11px] text-muted">
+        <span>{fmtNum(min)}</span>
+        <span>{fmtNum(base)}</span>
+        <span>{fmtNum(max)}</span>
+      </div>
+      <Button variant="primary" size={compact ? 'md' : 'lg'} className="w-full" onClick={save}>
+        {todayEntry ? 'Aktualisieren' : 'Für heute speichern'}
+      </Button>
+    </div>
+  );
+}
+
+/** Körpergewicht: Schieberegler + Verlaufskurve */
+export function WeightSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const s = useStore();
   const series = useWeightSeries(90);
   const trend = weightTrend(s as unknown as AppData);
   return (
-    <Sheet
-      open={open}
-      onClose={onClose}
-      title="Körpergewicht"
-      footer={
-        <Button
-          variant="primary"
-          size="lg"
-          className="w-full"
-          onClick={() => {
-            const v = Number((w || String(lastW ?? '')).replace(',', '.'));
-            if (!(v > 30 && v < 300)) return toast('Bitte ein gültiges Gewicht eintragen');
-            s.addBody({ date: dateKey(), weight: v });
-            toast(`${fmtNum(v)} kg gespeichert`);
-            setW('');
-            onClose();
-          }}
-        >
-          Für heute speichern
-        </Button>
-      }
-    >
+    <Sheet open={open} onClose={onClose} title="Körpergewicht">
       <div className="flex flex-col gap-4">
-        <div className="flex items-end gap-3">
-          <Field label="Gewicht heute (kg)" className="flex-1">
-            <Input id="bw-today" inputMode="decimal" autoFocus placeholder={lastW ? fmtNum(lastW) : '74,0'} value={w} onChange={(e) => setW(e.target.value)} className="h-14 text-[24px] font-semibold" />
-          </Field>
-          <div className="flex gap-1.5 pb-1">
-            {[-0.1, 0.1].map((d) => (
-              <Button
-                key={d}
-                size="icon"
-                variant="secondary"
-                className="h-12 w-12"
-                onClick={() => setW(fmtNum(+(Number((w || String(lastW ?? 0)).replace(',', '.')) + d).toFixed(1)))}
-                aria-label={d > 0 ? 'plus 0,1 kg' : 'minus 0,1 kg'}
-              >
-                {d > 0 ? '+' : '−'}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <p className="text-[12px] text-muted">Tipp: morgens nach dem Aufstehen, vor dem Essen wiegen. Schwankungen von Tag zu Tag sind normal – entscheidend ist der Durchschnitt.</p>
+        <WeightSlider onSaved={onClose} />
+        <p className="text-[12px] text-muted">Am besten morgens nach dem Aufstehen wiegen – wann immer es passt, nicht zwingend täglich. Entscheidend ist der Durchschnitt.</p>
         <WeightChart series={series} />
         {trend && (
           <div className="tnum rounded-xl bg-raised px-3 py-2 text-[13px]">
@@ -237,42 +282,113 @@ export function WeightChart({ series, height = 200 }: { series: { label: string;
   );
 }
 
-/** Schnelleintrag-Leiste + letzte Aktivitäten */
-export function QuickLog() {
+/** Gewichtskarte auf der Übersicht: heute noch nicht gewogen → Schieberegler, sonst kompakt mit Trend */
+export function WeightCard() {
   const s = useStore();
+  const today = dateKey();
+  const todayW = s.body.find((b) => b.date === today && b.weight)?.weight;
+  const [edit, setEdit] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const series = useWeightSeries(28);
+  const avg7 = series.length ? series[series.length - 1].avg : null;
+  const trend = weightTrend(s as unknown as AppData);
+  if (todayW && !edit)
+    return (
+      <div className="card flex items-center gap-3 p-4">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-raised text-muted">
+          <Scale size={18} />
+        </span>
+        <button className="min-w-0 flex-1 text-left" onClick={() => setSheet(true)}>
+          <div className="tnum text-[17px] font-semibold">{fmtNum(todayW)} kg heute</div>
+          <div className="tnum truncate text-[12px] text-muted">
+            {avg7 != null && `Ø 7 Tage ${fmtNum(avg7, 1)} kg`}
+            {trend && ` · ${trend.perWeek >= 0 ? '+' : ''}${fmtNum(trend.perWeek, 2)} kg/Woche`}
+          </div>
+        </button>
+        <button onClick={() => setEdit(true)} className="h-9 rounded-full bg-raised px-3.5 text-[12.5px] font-medium">
+          Ändern
+        </button>
+        <WeightSheet open={sheet} onClose={() => setSheet(false)} />
+      </div>
+    );
+  return (
+    <div className="card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[14px] font-semibold">
+          <Scale size={16} className="text-muted" /> Gewicht heute
+        </div>
+        <button onClick={() => setSheet(true)} className="text-[12.5px] text-muted">
+          Verlauf →
+        </button>
+      </div>
+      <WeightSlider compact onSaved={() => setEdit(false)} />
+      <WeightSheet open={sheet} onClose={() => setSheet(false)} />
+    </div>
+  );
+}
+
+/** „+“ in der Kopfzeile: Aktivität, Training ohne Gym, Gewicht, Verfügbarkeit */
+export function AddMenu() {
+  const s = useStore();
+  const [open, setOpen] = useState(false);
   const [act, setAct] = useState(false);
+  const [home, setHome] = useState(false);
   const [wt, setWt] = useState(false);
+  const [more, setMore] = useState(false);
   const today = dateKey();
   const recent = (s.activities ?? []).filter((a) => a.date >= addDays(today, -6)).slice().reverse();
-  const todayW = s.body.find((b) => b.date === today && b.weight)?.weight;
+  const item = (icon: React.ReactNode, title: string, sub: string, run: () => void) => (
+    <button
+      onClick={() => {
+        setOpen(false);
+        setTimeout(run, 180);
+      }}
+      className="flex w-full items-center gap-3 rounded-2xl bg-raised px-3.5 py-3 text-left active:scale-[0.99]"
+    >
+      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-bg text-[18px]">{icon}</span>
+      <span className="min-w-0">
+        <span className="block text-[14.5px] font-semibold">{title}</span>
+        <span className="block truncate text-[12px] text-muted">{sub}</span>
+      </span>
+    </button>
+  );
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-2">
-        <button onClick={() => setAct(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line/10 px-3.5 text-[12.5px] font-medium text-muted hover:text-fg">
-          <Plus size={13} /> Aktivität (Ski, Spazieren …)
-        </button>
-        <button onClick={() => setWt(true)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line/10 px-3.5 text-[12.5px] font-medium text-muted hover:text-fg">
-          <Scale size={13} /> {todayW ? `${fmtNum(todayW)} kg heute` : 'Gewicht eintragen'}
-        </button>
-        <HomeWorkoutButton />
-      </div>
-      {recent.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {recent.map((a) => (
-            <li key={a.id} className="flex items-center gap-2 rounded-xl bg-surface px-3 py-2 text-[12.5px] ring-1 ring-line/[0.06]">
-              <span className="min-w-0 flex-1 truncate">
-                <span className="text-muted">{relDayLabel(a.date).split(',')[0]}: </span>
-                {activityLabel(a)} <span className="text-muted">· {INTENSITY[a.intensity].label}</span>
-              </span>
-              <button aria-label="Aktivität löschen" onClick={() => s.removeActivity(a.id)} className="grid h-7 w-7 place-items-center rounded-full text-muted hover:text-fg">
-                <Trash2 size={13} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+    <>
+      <button onClick={() => setOpen(true)} aria-label="Hinzufügen" className="grid h-10 w-10 place-items-center rounded-full text-muted hover:bg-raised hover:text-fg">
+        <Plus size={20} />
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} title="Hinzufügen">
+        <div className="flex flex-col gap-2">
+          {item('⛷️', 'Aktivität eintragen', 'Ski, Spazieren, Wandern … – auch für morgen', () => setAct(true))}
+          {item('🏠', 'Training ohne Gym', 'Körpergewicht, Hantel & Flaschen', () => setHome(true))}
+          {item('⚖️', 'Gewicht eintragen', 'Schieberegler ab deinem letzten Gewicht', () => setWt(true))}
+          {item('🗓️', 'Zeit & Verfügbarkeit', 'Heute/Morgen Zeit, nur 1× diese Woche …', () => setMore(true))}
+          {recent.length > 0 && (
+            <div className="mt-3">
+              <div className="label mb-1.5">Letzte Aktivitäten</div>
+              <ul className="flex flex-col gap-1">
+                {recent.map((a) => (
+                  <li key={a.id} className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2 text-[12.5px]">
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="text-muted">{relDayLabel(a.date).split(',')[0]}: </span>
+                      {activityLabel(a)} <span className="text-muted">· {INTENSITY[a.intensity].label}</span>
+                    </span>
+                    <button aria-label="Aktivität löschen" onClick={() => s.removeActivity(a.id)} className="grid h-7 w-7 place-items-center rounded-full text-muted hover:text-fg">
+                      <Trash2 size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </Sheet>
       <ActivitySheet open={act} onClose={() => setAct(false)} />
+      <HomeWorkoutSheet open={home} onClose={() => setHome(false)} />
       <WeightSheet open={wt} onClose={() => setWt(false)} />
-    </div>
+      <Sheet open={more} onClose={() => setMore(false)} title="Zeit & Verfügbarkeit">
+        <QuickAvailability />
+      </Sheet>
+    </>
   );
 }

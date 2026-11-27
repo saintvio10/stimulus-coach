@@ -4,14 +4,14 @@ import { ArrowRight, BarChart3, Flame, Play, Trophy, TrendingUp, AlertTriangle, 
 import { useStore } from '../lib/store';
 import { useMuscleStates, useNow, usePlan, useRouter } from '../lib/hooks';
 import { Badge, Bar, Button, Card, Ring, SectionTitle, Stat } from '../components/ui';
-import { DayHero, DayPicker, HomeHeader, MoreAvailability, QuickStart, SwipeDays, UpcomingDays, WeeklyNeed } from '../components/Home';
+import { DayHero, DayPicker, HomeHeader, QuickStart, SwipeDays, UpcomingDays, WeeklyNeed } from '../components/Home';
 import { MUSCLE, MUSCLES, RECOVERY_COLORS, minDose14, weeklyTarget } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
 import { avgDurationMin, doneSessions, exerciseSeries, personalRecords, sessionSets, weekStreak } from '../engine/stats';
 import { cn, dateKey, fmtDuration, fmtNum, fmtShortDay, parseKey, relDayLabel, WEEKDAYS_LONG, MONTHS, DAY, fmtMin } from '../lib/utils';
 import type { AppData } from '../lib/types';
 import { planToday, personalTarget } from '../engine/planner';
-import { QuickLog } from '../components/Extras';
+import { WeightCard } from '../components/Extras';
 import { WeekReviewCard } from './WeekReview';
 
 export default function Dashboard() {
@@ -70,11 +70,10 @@ export default function Dashboard() {
       <HomeHeader />
       <div className="flex flex-col gap-3">
         <DayPicker plan={plan} selected={day} onSelect={setDay} />
-        <MoreAvailability />
-        <QuickLog />
       </div>
       <SwipeDays plan={plan} day={day} onDay={setDay} />
       <UpcomingDays plan={plan} />
+      <WeightCard />
       <WeekReviewCard onOpen={() => go('rueckblick')} />
       <WeeklyNeed plan={plan} />
       <QuickStart />
