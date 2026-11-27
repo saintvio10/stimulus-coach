@@ -189,6 +189,8 @@ interface Store extends AppData {
   patchExercise: (sessionId: string, exUid: string, patch: Partial<SessionExercise>) => void;
   /** Übung im Training entfernen (nicht geschafft) bzw. wiederherstellen */
   missExercise: (sessionId: string, exUid: string, undo?: boolean) => void;
+  /** „Zeit übrig“: offene Sätze je Übung auf keep kürzen, Rest als ausgelassen dokumentieren */
+  trimSession: (sessionId: string, keep: Record<string, number>) => void;
   addExerciseToSession: (sessionId: string, exercise: Exercise, afterUid?: string) => void;
   swapExercise: (sessionId: string, exUid: string, exercise: Exercise) => void;
   moveExercise: (sessionId: string, exUid: string, dir: -1 | 1) => void;
@@ -330,6 +332,19 @@ export const useStore = create<Store>()(
             const se = s.exercises.find((e) => e.uid === xu);
             if (se) Object.assign(se, patch);
           }),
+        trimSession: (sid, keep) =>
+          mutSession(sid, (s) => {
+            for (const se of s.exercises) {
+              if (!(se.uid in keep) || se.skipped) continue;
+              const open = se.sets.filter((x) => !x.done);
+              const cut = open.length - Math.max(0, keep[se.uid]);
+              if (cut <= 0) continue;
+              const drop = new Set(open.slice(open.length - cut).map((x) => x.id));
+              se.sets = se.sets.filter((x) => !drop.has(x.id));
+              se.missed = (se.missed ?? 0) + cut;
+              if (!se.sets.some((x) => x.done) && !se.sets.length) se.skipped = true;
+            }
+          }),
         missExercise: (sid, xu, undo) =>
           mutSession(sid, (s) => {
             const se = s.exercises.find((e) => e.uid === xu);
@@ -364,7 +379,7 @@ export const useStore = create<Store>()(
               adviceType: adv.type,
               lastWeight: adv.lastWeight,
               repMin: exercise.repMin,
-              repMax: exercise.repMax,
+              repMax: adv.repMax ?? exercise.repMax,
               targetRir: exercise.targetRir,
               restSec: exercise.restSec,
               recWeight: adv.weight,
@@ -384,7 +399,7 @@ export const useStore = create<Store>()(
             if (!se) return;
             se.exerciseId = exercise.id;
             se.repMin = exercise.repMin;
-            se.repMax = exercise.repMax;
+            se.repMax = adv.repMax ?? exercise.repMax;
             se.targetRir = exercise.targetRir;
             se.restSec = exercise.restSec;
             se.recWeight = adv.weight;

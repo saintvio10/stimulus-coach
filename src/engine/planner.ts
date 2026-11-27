@@ -1,3 +1,4 @@
+import { JOINT_LABEL, painConflict } from './joints';
 import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL, frequencyFactor } from '../lib/muscles';
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
@@ -135,7 +136,7 @@ export interface Plan {
   notes: string[];
   horizonDays: string[];
   /** Tage mit Zeit, an denen bewusst pausiert wird */
-  restDays: { date: string; reason: string; kind?: 'cap' | 'consecutive' | 'spacing' }[];
+  restDays: { date: string; reason: string; kind?: 'cap' | 'consecutive' | 'spacing'; because?: 'today' | 'preferred' }[];
   /** Einheiten pro 7 Tage, auf die die Wochenziele ausgelegt sind (gilt für alle Ansichten) */
   spw: number;
   /** Erklärung des Wochenziels */
@@ -237,8 +238,11 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const short = o.minutes <= 50 && data.settings.autoSuperset;
   const budget = Math.max(15, (o.minutes - WARMUP_MIN) * radj.volume);
 
+  // Beschwerden aus dem heutigen Check-in: Übungen, die das Gelenk stark belasten, heute ersetzen
+  const pain = isToday ? data.checkIns[o.date]?.pain : undefined;
+  const painSkipped: string[] = [];
   const candidates = data.exercises.filter((e) =>
-    !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home'),
+    !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (painConflict(e, pain).length ? (painSkipped.push(e.name), false) : true) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home'),
   );
   const history = new Set<string>();
   const recent = new Set<string>();
@@ -410,6 +414,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
   }
 
   // Progression & Feinjustierung
+  const reasonsPre: string[] = [];
   const planned: PlannedExercise[] = items.map((it) => {
     const st = states[it.ex.primary];
     const tgt = scores[it.ex.primary].target;
@@ -486,9 +491,11 @@ export function buildSession(o: BuildOpts): PlannedSession {
     if (data.settings.orderMode === 'compound') return (ex.compound ? 2 : 0) + pw + last;
     // Prioritäts-Modus: Prioritätsmuskeln zuerst; schwere Mehrgelenksübungen für Beine trotzdem früh,
     // um sie nicht im ermüdeten Zustand auszuführen.
-    return pw + (ex.compound ? 0.12 : 0) + (ex.fatigue >= 3 ? 0.35 : 0) + last;
+    return pw + (ex.compound ? 0.12 : 0) + (ex.fatigue >= 3 ? 0.2 : 0) + last;
   };
   planned.sort((a, b) => orderKey(b) - orderKey(a));
+  if (data.settings.orderMode !== 'compound' && planned.length >= 3)
+    reasonsPre.push('Reihenfolge: deine Prioritäten zuerst (Arme, dann Brust/Rücken), solange du frisch bist; schwere Beinübungen vor kleinen Isolationsübungen, damit sie nicht ermüdet ausgeführt werden; Bauch/Waden zum Schluss.');
 
   // Supersätze im Zeitmodus
   if (short) {
@@ -507,6 +514,30 @@ export function buildSession(o: BuildOpts): PlannedSession {
         planned.splice(planned.indexOf(pa) + 1, 0, pb);
       }
     }
+  }
+
+  // Ohne Check-in ist die Erholungsschätzung unsicherer → bei nicht sicher erholten Muskeln 1 Satz weniger (Modellregel)
+  if (isToday && !data.checkIns[o.date]) {
+    const cautious: string[] = [];
+    for (const p of planned) {
+      const ex = data.exercises.find((e) => e.id === p.exerciseId);
+      if (!ex || MUSCLE[ex.primary].indirectOnly) continue;
+      const st = states[ex.primary];
+      if (st.lastAny != null && st.fatigueEff >= F_GREEN && p.sets > 2) {
+        p.sets -= 1;
+        p.minutes -= setMinutes(ex, short) * tf;
+        cautious.push(`${ex.name} (${MUSCLE[ex.primary].short} ${recoveryInfo(st, at).short})`);
+      }
+    }
+    if (cautious.length)
+      reasonsPre.push(`Ohne Check-in vorsichtiger (größere Unsicherheit): je 1 Satz weniger bei ${cautious.join(', ')}. Mit Check-in ohne Muskelkater entfällt das – und die ersten Sätze entscheiden über Anpassungen.`);
+  }
+  if (painSkipped.length) reasonsPre.push(`Beschwerden (${(pain ?? []).map((j) => JOINT_LABEL[j]).join(', ')}): heute nicht eingeplant – ${[...new Set(painSkipped)].slice(0, 6).join(', ')}. Stattdessen gelenkschonendere Alternativen.`);
+  // Satzsummen je Muskel aus den endgültigen Übungen (Begründung = tatsächliche Planung)
+  for (const m of MUSCLE_IDS) sSets[m] = 0;
+  for (const p of planned) {
+    const ex = data.exercises.find((e) => e.id === p.exerciseId);
+    if (ex) for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) sSets[m] += c * p.sets;
   }
 
   // Entscheidungen je Muskel
@@ -539,7 +570,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
 
   // Pausen anhand von Belastung und Leistungsverlauf verlängern – freie Zeit macht es nur möglich, sie ist nicht der Grund.
   // Kriterien (Modellregel): Wdh. fielen in der letzten Einheit bei gleichem Gewicht um ≥ 3, oder ≥ 2 Sätze am Versagen.
-  const reasons: string[] = [];
+  const reasons: string[] = [...reasonsPre];
   let slack = budget - planned.reduce((a, p) => a + p.minutes, 0);
   for (const p of planned) {
     const ex = data.exercises.find((e) => e.id === p.exerciseId);
@@ -816,6 +847,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       restDays.push({
         date: d,
         kind: ww.n > cap ? 'cap' : run > maxCons ? 'consecutive' : 'spacing',
+        because: ww.n > cap ? (prefHit.length && !preferSet.has(d) ? 'preferred' : todayWins ? 'today' : undefined) : undefined,
         reason:
           ww.n > cap
             ? `${prefHit.length && !preferSet.has(d) ? `Verschoben: Du hast ${prefHit.map((x) => relDayLabel(x, today).split(',')[0]).join(', ')} bevorzugt${todayWins ? ' und heute hast du sicher Zeit' : ''}. ` : todayWins ? 'Verschoben: Heute hast du sicher Zeit – das hat Vorrang vor einem späteren Termin. ' : 'Ruhetag: '}Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Eingeplant: ${chosen}${!todayWins && !prefHit.length ? ' – gewählt nach gleichmäßigen Abständen und Tagen mit eigener Trainingszeit' : ''}. Das Wochenvolumen wird darauf verteilt.`
@@ -908,6 +940,11 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     if (allDates.length === 1 && !uncertain && minutes < 90)
       best.reasons.push(`Nur 1 Einheit in den nächsten 7 Tagen: Mit ${minutes} min sind pro Muskel nur wenige Sätze möglich. Wenn es geht, plane 90–120 min ein (Profil → Standarddauer oder „Zeit heute“) – das bringt deutlich mehr Wochenvolumen.`);
     if (best.tentative) best.reasons.push('Vorläufig: Tag ist als „möglich“ markiert. Bestätige ihn im Kalender oder er wird automatisch neu verteilt.');
+    // Name muss zum Inhalt passen: Schwerpunkt-Vorlage ohne den Schwerpunkt (z. B. wegen Beschwerden/Ermüdung) → neutral benennen
+    if (['fbC', 'arms'].includes(best.templateId)) {
+      const armEx = best.exercises.filter((p) => ['biceps', 'triceps'].includes(data.exercises.find((e) => e.id === p.exerciseId)?.primary ?? '')).length;
+      if (armEx === 0) best.label = 'Ganzkörper (angepasst)';
+    }
     if (best.home && !best.label.startsWith('Unterwegs')) {
       best.label = `Unterwegs · ${best.label.split(' (')[0]}`;
       if (awaySet.has(d)) best.reasons.unshift('Ohne Gym: nur Übungen mit Körpergewicht, deiner Hantel und Flaschen. Was du hier trainierst, rechnet der Plan für die folgenden Studio-Tage mit ein.');

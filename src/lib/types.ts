@@ -121,6 +121,8 @@ export interface ProgressionAdvice {
   lastDetail?: string;
   /** Herkunft der Empfehlung (letzte gewertete Einheit) */
   from?: { sessionId: string; uid: string };
+  /** „Wann erhöhen?“ – aus derselben Regel wie Zielbereich und Text */
+  increaseRule?: string;
 }
 
 export interface SessionExercise {
@@ -151,6 +153,8 @@ export interface SessionExercise {
   excluded?: boolean;
   /** Grund, warum eine Gewichtsempfehlung abgelehnt wurde */
   declineReason?: 'device' | 'typo' | 'dayform' | 'other';
+  /** Rückmeldung vom Aufwärmen */
+  warmup?: 'easy' | 'ok' | 'hard';
   /** Live-Gewichtsvorschlag nach diesem Satz ausgeblendet */
   liveDismissed?: string;
   /** Bewertung nach der Übung */
@@ -199,7 +203,11 @@ export interface CheckIn {
   energy: number; // 1–5
   stress: number; // 1–5
   soreness: Partial<Record<MuscleId, number>>; // 0–3
+  /** Beschwerden (Gelenke/Bereiche) – belastende Übungen werden heute ersetzt oder ausgelassen */
+  pain?: Joint[];
 }
+
+export type Joint = 'shoulder' | 'elbow' | 'wrist' | 'knee' | 'lowerBack';
 
 export interface BodyEntry {
   id: string;

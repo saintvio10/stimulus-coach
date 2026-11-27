@@ -33,8 +33,11 @@ import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Co
 import { ExerciseAnimation, ExerciseIcon } from '../components/ExerciseAnimation';
 import { FocusPlayer } from '../components/FocusPlayer';
 import { SwipeRow } from '../components/SwipeRow';
+import { ExerciseHistory } from '../components/ExerciseHistory';
+import { TimeLeftButton } from '../components/TimeLeft';
 import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
 import { prSetIds, setPR } from '../engine/prs';
+import { JOINT_LABEL, painConflict } from '../engine/joints';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
@@ -180,6 +183,9 @@ function Workout({ session }: { session: Session }) {
           </div>
         </div>
         <WorkoutProgress session={session} now={now} onJump={(uid) => setOpenUid(uid)} />
+        <div className="mt-2">
+          <TimeLeftButton session={session} />
+        </div>
       </div>
 
       {session.exercises.length === 0 && (
@@ -301,6 +307,7 @@ function ExerciseCard({
     [ex, prior, s.settings, s.checkIns, se.repMin, se.repMax, se.targetRir],
   );
   const rec = se.recWeight ?? advice.weight;
+  const painJ = painConflict(ex, s.checkIns[dateKey()]?.pain);
   const prIds = useMemo(() => prSetIds(s.sessions, session, ex), [s.sessions, session, ex]);
   const incAdvice = (se.adviceType ?? advice.type) === 'increase';
   // Reduktionen bleiben immer übersteuerbar (vorsichtig oder deutlich)
@@ -465,6 +472,21 @@ function ExerciseCard({
             <Big label="Gewicht" value={ex.equipment === 'bodyweight' && !rec ? 'Körper' : rec != null ? fmtNum(rec) : 'frei'} unit={rec != null && !(ex.equipment === 'bodyweight' && !rec) ? 'kg' : undefined} accent />
             <Big label="Pause" value={fmtClock(se.restSec)} />
           </div>
+          {/* Ziel heute & wann erhöhen – aus derselben Regel wie Karte und Erklärung */}
+          <div className="flex flex-col gap-1.5 rounded-2xl bg-raised px-3.5 py-3 text-[13px]">
+            <div>
+              <span className="font-semibold">Ziel heute: </span>
+              {rec != null && rec > 0 ? `${fmtNum(se.sets.find((x) => !x.done)?.weight ?? rec)} kg` : ex.equipment === 'bodyweight' ? 'Körpergewicht' : 'Gewicht wählen'} × {se.sets.find((x) => !x.done)?.reps ?? advice.repTarget}+ Wdh. pro Satz ·
+              {` ${se.targetRir} Wdh. Reserve`}
+              {ex.unilateral ? ' · je Seite' : ''}
+            </div>
+            {advice.increaseRule && (
+              <div className="text-muted">
+                <span className="font-semibold text-fg">Erhöhen: </span>
+                {advice.increaseRule}
+              </div>
+            )}
+          </div>
           <div className="flex flex-col gap-1 text-[12.5px] text-muted">
             <span>
               Ziel-RIR {se.targetRir}{last ? '' : ' · Erstes Mal – Gewicht frei wählen'}
@@ -490,6 +512,7 @@ function ExerciseCard({
           </div>
           )}
 
+          <ExerciseHistory ex={ex} sessions={s.sessions} excludeSessionId={session.id} />
           {/* Letztes Mal & Steigerungsvorschlag */}
           {last && (
             <div className="flex items-center gap-3 rounded-2xl bg-raised px-3.5 py-3">
@@ -587,6 +610,74 @@ function ExerciseCard({
               <button className="text-accent" onClick={() => s.patchExercise(session.id, se.uid, { decision: undefined })}>
                 ändern
               </button>
+            </div>
+          )}
+
+          {/* Beschwerden aus dem heutigen Check-in */}
+          {painJ.length > 0 && doneN === 0 && !se.skipped && (
+            <div className="flex flex-col gap-2 rounded-2xl border border-rec-red/30 bg-rec-red/[0.08] p-3.5 text-[13px]">
+              <div>
+                <b>Belastet {painJ.map((j) => JOINT_LABEL[j]).join(' & ')}</b> – du hast heute dort Beschwerden angegeben.
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={onSwap}>
+                  Alternative wählen
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    s.missExercise(session.id, se.uid);
+                    toast(`${ex.name} heute ausgelassen – wird später nachgeholt`);
+                  }}
+                >
+                  Heute auslassen
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Aufwärmen: deutlich schwächer/stärker als erwartet? */}
+          {isCurrent && doneN === 0 && !se.skipped && rec != null && rec > 0 && (
+            <div className="rounded-2xl bg-raised px-3.5 py-3 text-[13px]">
+              <div className="mb-2 text-muted">Wie fühlte sich das Aufwärmen an? (optional)</div>
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ['hard', 'schwerer als erwartet'],
+                    ['ok', 'wie erwartet'],
+                    ['easy', 'leichter als erwartet'],
+                  ] as const
+                ).map(([k, l]) => (
+                  <Chip key={k} active={se.warmup === k} className="h-8" onClick={() => s.patchExercise(session.id, se.uid, { warmup: k })}>
+                    {l}
+                  </Chip>
+                ))}
+              </div>
+              {se.warmup && se.warmup !== 'ok' && (() => {
+                const first = se.sets.find((x) => !x.done);
+                const cur = first?.weight ?? rec;
+                const to = se.warmup === 'hard' ? prevWeight(cur, ex, s.settings) : nextWeight(cur, ex, s.settings);
+                if (!first || to === cur) return null;
+                return (
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-[12.5px]">
+                      {se.warmup === 'hard' ? 'Vorschlag: Arbeitssätze eine Stufe leichter' : 'Vorschlag: eine Stufe schwerer'} – {fmtNum(to)} kg statt {fmtNum(cur)} kg.
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => {
+                        s.setWeightFrom(session.id, se.uid, first.id, to);
+                        s.patchExercise(session.id, se.uid, { warmup: 'ok' });
+                        toast(`Arbeitssätze: ${fmtNum(to)} kg`);
+                      }}
+                    >
+                      Übernehmen
+                    </Button>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -987,6 +1078,7 @@ export function ExercisePicker({
 }) {
   const [pauseReason, setPauseReason] = useState<'pain' | 'device' | null>(null);
   const exercises = useStore((s) => s.exercises);
+  const pain = useStore((s) => s.checkIns[dateKey()]?.pain);
   const homeSession = useStore((s) => s.sessions.find((x) => x.status === 'active')?.location === 'home');
   const [q, setQ] = useState('');
   const [where, setWhere] = useState<'gym' | 'home' | null>(null);
@@ -1001,7 +1093,10 @@ export function ExercisePicker({
     <button key={e.id} onClick={() => onPick(e, mode === 'swap' ? pauseReason ?? undefined : undefined)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-raised">
       <ExerciseIcon id={e.id} pattern={e.pattern} muscles={e.muscles} size={44} />
       <div className="min-w-0">
-        <div className="truncate text-[14px] font-medium">{e.name}</div>
+        <div className="truncate text-[14px] font-medium">
+          {e.name}
+          {painConflict(e, pain).length > 0 && <span className="ml-1.5 rounded-full bg-rec-red/15 px-1.5 py-0.5 text-[10.5px] font-semibold text-rec-red">belastet {painConflict(e, pain).map((j) => JOINT_LABEL[j]).join('/')}</span>}
+        </div>
         <div className="truncate text-[12px] text-muted">
           {Object.keys(e.muscles)
             .map((m) => MUSCLE[m as keyof typeof MUSCLE].short)

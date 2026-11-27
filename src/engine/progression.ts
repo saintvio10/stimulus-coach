@@ -53,7 +53,21 @@ interface AdviceCtx {
   today?: string;
 }
 
-export function adviseExercise(
+export function adviseExercise(...args: Parameters<typeof adviseExerciseCore>): ProgressionAdvice {
+  const [ex, , ctx, , , targetRir] = args;
+  const a = adviseExerciseCore(...args);
+  const tr = targetRir ?? ex.targetRir;
+  const top = a.repMax ?? ex.repMax;
+  if (ex.equipment === 'bodyweight' && !(a.weight ?? 0)) a.increaseRule = `Schwerer machen (Variante oder Zusatzgewicht), sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen.`;
+  else {
+    const base = a.type === 'increase' || a.type === 'decrease' || a.type === 'deload' ? a.weight : a.lastWeight ?? a.weight;
+    const nxt = base ? nextWeight(base, ex, ctx.settings) : null;
+    a.increaseRule = nxt && base && nxt > base ? `Auf ${fmtNum(nxt)} kg erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen${(nxt - base) / base > 0.12 ? ` (Sprung +${Math.round(((nxt - base) / base) * 100)} % – deshalb Bereich bis ${top})` : ''}.` : `Erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen.`;
+  }
+  return a;
+}
+
+function adviseExerciseCore(
   ex: Exercise,
   sessions: Session[],
   ctx: AdviceCtx,

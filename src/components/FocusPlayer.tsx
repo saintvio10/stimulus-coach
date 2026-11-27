@@ -157,6 +157,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             Ziel {se.repMin}–{se.repMax} Wdh. · RIR {se.targetRir}
             {rec != null && ` · empfohlen ${fmtNum(rec)} kg`}
           </div>
+        {advice?.increaseRule && <div className="-mt-2 text-[12.5px] text-white/50">Erhöhen: {advice.increaseRule}</div>}
         </div>
 
         {/* Letztes Mal & Steigerung */}

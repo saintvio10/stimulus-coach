@@ -6,7 +6,8 @@ import { addDays, cn, dateKey, endOfWeek, fmtNum, relDayLabel, weekdayOf, WEEKDA
 import { Badge, Button, Chip, Sheet } from './ui';
 import type { Plan, PlannedSession } from '../engine/planner';
 import { MUSCLE, MUSCLE_IDS } from '../lib/muscles';
-import type { CheckIn, MuscleId } from '../lib/types';
+import type { CheckIn, Joint, MuscleId } from '../lib/types';
+import { JOINT_LABEL } from '../engine/joints';
 import { readinessScore } from '../engine/readiness';
 import { ExerciseIcon } from './ExerciseAnimation';
 
@@ -145,6 +146,21 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
           </Badge>
         ))}
       </div>
+      {s.decisions.some((d) => d.status === 'skipped' && d.reason) && (
+        <div className="rounded-xl bg-raised px-3 py-2 text-[12px]">
+          <div className="mb-0.5 font-medium">Heute nicht dabei</div>
+          <ul className="flex flex-col gap-0.5 text-muted">
+            {s.decisions
+              .filter((d) => d.status === 'skipped' && d.reason)
+              .slice(0, 5)
+              .map((d) => (
+                <li key={d.muscle}>
+                  <span className="text-fg/80">{MUSCLE[d.muscle].short}:</span> {d.reason}
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
       <ol className="flex flex-col divide-y divide-line/[0.06]">
         {s.exercises.map((p, i) => {
           const ex = exMap.get(p.exerciseId);
@@ -259,7 +275,7 @@ export function CheckInSheet({ open, onClose }: { open: boolean; onClose: () => 
   const existing = useStore((s) => s.checkIns[today]);
   const save = useStore((s) => s.saveCheckIn);
   const toast = useToast((s) => s.show);
-  const [c, setC] = useState<CheckIn>(existing ?? { sleepHours: 7.5, sleepQuality: 3, energy: 3, stress: 2, soreness: {} });
+  const [c, setC] = useState<CheckIn>(existing ?? { sleepHours: 7.5, sleepQuality: 3, energy: 3, stress: 2, soreness: {}, pain: [] });
   const scale = (key: 'sleepQuality' | 'energy' | 'stress', label: string, lo: string, hi: string) => (
     <div>
       <div className="mb-2 flex justify-between text-[13px]">
@@ -354,8 +370,27 @@ export function CheckInSheet({ open, onClose }: { open: boolean; onClose: () => 
             })}
           </div>
         </div>
+        <div>
+          <div className="mb-1 text-[13px] font-medium">Beschwerden (optional)</div>
+          <p className="mb-2 text-[12px] text-muted">Zwickt etwas? Übungen, die diesen Bereich stark belasten, werden heute durch schonendere Alternativen ersetzt oder ausgelassen.</p>
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(JOINT_LABEL) as Joint[]).map((j) => {
+              const on = (c.pain ?? []).includes(j);
+              return (
+                <button
+                  key={j}
+                  onClick={() => setC({ ...c, pain: on ? (c.pain ?? []).filter((x) => x !== j) : [...(c.pain ?? []), j] })}
+                  className={cn('h-9 rounded-full px-3.5 text-[13px] font-medium transition', on ? 'bg-rec-red/20 text-rec-red ring-1 ring-rec-red/40' : 'bg-raised text-muted')}
+                >
+                  {JOINT_LABEL[j]}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-[11.5px] text-muted">Bei starken oder anhaltenden Schmerzen bitte ärztlich abklären lassen – die App ersetzt keine Diagnose.</p>
+        </div>
         <p className="text-[12px] text-muted">
-          Muskelkater erhöht die geschätzte Ermüdung des Muskels. Er ist allerdings nur ein grober Indikator für Regeneration – kein Muskelkater heißt nicht automatisch
+          Alles ist optional: Ohne Check-in plant die App etwas vorsichtiger (größere Unsicherheit). Muskelkater erhöht die geschätzte Ermüdung des Muskels. Er ist allerdings nur ein grober Indikator für Regeneration – kein Muskelkater heißt nicht automatisch
           „vollständig erholt“.
         </p>
       </div>

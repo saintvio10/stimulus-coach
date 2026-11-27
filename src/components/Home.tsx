@@ -393,6 +393,29 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
               <h2 className="mt-0.5 text-[28px] font-semibold leading-[1.1] tracking-tight">{planned.label}</h2>
             </div>
             <DayDuration date={planned.date} plan={planned} />
+            {isToday &&
+              plan.restDays
+                .filter((r) => r.because === 'today')
+                .slice(0, 1)
+                .map((r) => (
+                  <div key={r.date} className="flex flex-col gap-2 rounded-2xl border border-accent/30 bg-accent/[0.08] px-3.5 py-3 text-[13px]">
+                    <div>
+                      Weil du heute sicher Zeit hast, rückt <b>{relDayLabel(r.date).split(',')[0]}</b> als Ruhetag nach – sonst wären es mehr als {s.settings.maxSessionsPerWeek} Einheiten in 7 Tagen.
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          quick.preferDay(r.date);
+                          toast(`${relDayLabel(r.date).split(',')[0]} wird trainiert – heute entsprechend angepasst`);
+                        }}
+                      >
+                        Lieber {relDayLabel(r.date).split(',')[0]} trainieren
+                      </Button>
+                    </div>
+                  </div>
+                ))}
             <div className="flex flex-wrap gap-2">
               <Pill icon={<Dumbbell size={14} />}>{planned.exercises.length} Übungen</Pill>
               <Pill icon={<Layers size={14} />}>{planned.exercises.reduce((a, p) => a + p.sets, 0)} Sätze</Pill>
