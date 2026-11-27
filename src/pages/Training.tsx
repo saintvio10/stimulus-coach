@@ -22,7 +22,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { useCompletion, useFocusRequest, useNow, useRouter, useToast } from '../lib/hooks';
+import { useCompletion, useFocusRequest, useNow, usePRCelebration, useRouter, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
@@ -34,6 +34,7 @@ import { ExerciseAnimation, ExerciseIcon } from '../components/ExerciseAnimation
 import { FocusPlayer } from '../components/FocusPlayer';
 import { SwipeRow } from '../components/SwipeRow';
 import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
+import { prSetIds, setPR } from '../engine/prs';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
@@ -289,6 +290,7 @@ function ExerciseCard({
     [ex, prior, s.settings, s.checkIns, se.repMin, se.repMax, se.targetRir],
   );
   const rec = se.recWeight ?? advice.weight;
+  const prIds = useMemo(() => prSetIds(s.sessions, session, ex), [s.sessions, session, ex]);
   const incAdvice = (se.adviceType ?? advice.type) === 'increase';
   const lastW = se.lastWeight ?? advice.lastWeight;
   const doneN = se.sets.filter((x) => x.done).length;
@@ -325,6 +327,8 @@ function ExerciseCard({
     const doneReps = uni ? Math.min(repL ?? advice.repTarget, repR ?? advice.repTarget) : st.reps ?? advice.repTarget;
     const doneRir = st.rir ?? se.targetRir;
     const rest = restAfterSet(se, doneReps, doneRir, st.failure);
+    const pr = setPR(s.sessions, session, ex, { id: setId, w: weight ?? 0, reps: doneReps, rir: st.failure ? 0 : doneRir });
+    if (pr) setTimeout(() => usePRCelebration.getState().show({ title: pr.title, sub: pr.sub, exercise: ex.name }), 150);
     s.updateSet(session.id, se.uid, setId, {
       done: true,
       weight,
@@ -634,6 +638,7 @@ function ExerciseCard({
                   )}
                   {st.done && (
                     <div className="tnum pl-[2.25rem] text-[11.5px] text-muted">
+                      {prIds.has(st.id) && <span className="mr-1.5 font-semibold text-rec-yellow">🏆 Rekord</span>}
                       {ex.unilateral && st.repsL != null && st.repsR != null && `Links ${st.repsL} · Rechts ${st.repsR} · `}RIR {st.rir ?? '–'}
                       {st.failure && ' · Muskelversagen'}
                     </div>

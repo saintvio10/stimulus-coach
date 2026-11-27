@@ -35,6 +35,7 @@ import { SearchSheet } from './components/Search';
 import type { AppData } from './lib/types';
 import { useEffect } from 'react';
 import { SessionComplete } from './components/SessionComplete';
+import { PRCelebration } from './components/PRCelebration';
 import StatsPage from './pages/Stats';
 import WeekReviewPage from './pages/WeekReview';
 
@@ -211,6 +212,7 @@ export default function App() {
 
       <RestTimer />
       <CompletionHost />
+      <PRCelebration />
       <SearchSheet open={searchOpen} onClose={() => setSearchOpen(false)} />
       {start.open && <StartScreen onClose={() => start.set(false)} />}
       <Toast message={toast} />

@@ -13,6 +13,8 @@ import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
 import { WeightFeedback } from './WeightFeedback';
 import { LiveAdjustBanner } from './LiveAdjustBanner';
+import { setPR } from '../engine/prs';
+import { usePRCelebration } from '../lib/hooks';
 import { GlowProgress } from './ui';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
@@ -90,6 +92,8 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
     const effReps = uni ? Math.min(reps, repsR) : reps;
     setNoWeight(false);
     unlockAudio();
+    const pr = setPR(s.sessions, session, ex, { id: cur.id, w: w ?? 0, reps: effReps, rir });
+    if (pr) setTimeout(() => usePRCelebration.getState().show({ title: pr.title, sub: pr.sub, exercise: ex.name }), 150);
     s.setWeightFrom(session.id, se.uid, cur.id, w);
     s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps: effReps, ...(uni ? { repsL: reps, repsR } : {}), rir, failure: rir === 0 ? cur.failure : false });
     const last = setIndex === se.sets.length - 1;

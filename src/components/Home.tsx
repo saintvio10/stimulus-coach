@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
-import { CalendarDays, Check, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy, House } from 'lucide-react';
+import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy, House } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
@@ -79,7 +79,24 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
   const openStart = useStartScreen((x) => x.set);
   const toast = useToast((t) => t.show);
   const today = dateKey();
-  const days = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(today, i));
+  // Wischen: 7-Tage-Seiten vor/zurück (0 = ab heute)
+  const [page, setPage] = useState(0);
+  const [dir, setDir] = useState<'l' | 'r' | null>(null);
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const turn = (d: number) => {
+    const np = Math.max(-8, Math.min(3, page + d));
+    if (np === page) return;
+    setDir(d > 0 ? 'r' : 'l');
+    setPage(np);
+    try {
+      navigator.vibrate?.(6);
+    } catch {
+      /* ignore */
+    }
+  };
+  const days = Array.from({ length: PLAN_DAYS }, (_, i) => addDays(today, page * 7 + i));
+  const rangeLabel =
+    page === 0 ? 'Ab heute' : page === 1 ? 'Nächste 7 Tage' : page === -1 ? 'Letzte 7 Tage' : `${Number(days[0].slice(8))}.${Number(days[0].slice(5, 7))}. – ${Number(days[6].slice(8))}.${Number(days[6].slice(5, 7))}.`;
   return (
     <section>
       <div className="mb-4 flex items-start justify-between gap-3">
@@ -96,19 +113,54 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
           </button>
         </div>
       </div>
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="mb-2 flex items-center justify-between">
+        <button aria-label="Frühere Tage" onClick={() => turn(-1)} disabled={page <= -8} className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-raised disabled:opacity-30">
+          <ChevronLeft size={17} />
+        </button>
+        <button onClick={() => page !== 0 && turn(-page)} className={cn('text-[12.5px] font-medium', page === 0 ? 'text-muted' : 'text-accent')}>
+          {rangeLabel}
+          {page !== 0 && ' · zurück zu heute'}
+        </button>
+        <button aria-label="Spätere Tage" onClick={() => turn(1)} disabled={page >= 3} className="grid h-8 w-8 place-items-center rounded-full text-muted hover:bg-raised disabled:opacity-30">
+          <ChevronRight size={17} />
+        </button>
+      </div>
+      <div
+        key={page}
+        data-noswipe
+        className={cn('grid grid-cols-7 gap-1.5', dir === 'r' && 'animate-slide-in-r', dir === 'l' && 'animate-slide-in-l')}
+        style={{ touchAction: 'pan-y' }}
+        onTouchStart={(e) => (touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
+        onTouchEnd={(e) => {
+          const st = touch.current;
+          touch.current = null;
+          if (!st) return;
+          const dx = e.changedTouches[0].clientX - st.x;
+          const dy = e.changedTouches[0].clientY - st.y;
+          if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+            if (e.cancelable) e.preventDefault();
+            turn(dx < 0 ? 1 : -1);
+          }
+        }}
+      >
         {days.map((d) => {
+          const past = d < today;
           const a = s.availability[d]; // undefined = offen
           const done = s.sessions.some((x) => x.date === d && x.status === 'done');
           const planned = plan.sessions.find((x) => x.date === d);
           const rest = plan.restDays?.find((x) => x.date === d);
           const isToday = d === today;
           const away = (s.awayDays ?? []).includes(d);
-          const look = done ? 'done' : rest ? 'rest' : a === 'yes' ? (away ? 'away' : 'yes') : a === 'maybe' ? 'maybe' : a === 'no' ? 'no' : 'open';
+          const look = done ? 'done' : past ? 'open' : rest ? 'rest' : a === 'yes' ? (away ? 'away' : 'yes') : a === 'maybe' ? 'maybe' : a === 'no' ? 'no' : 'open';
           return (
             <button
               key={d}
               onClick={() => {
+                if (past) {
+                  const ses = s.sessions.find((x) => x.date === d && x.status === 'done');
+                  if (ses) return useCompletion.getState().open(ses.id);
+                  return toast(`${relDayLabel(d)}: kein Training gespeichert`);
+                }
                 // Zeit → Zeit ohne Gym → Vielleicht → Keine Zeit → Zeit
                 try {
                   navigator.vibrate?.(10);

@@ -115,3 +115,10 @@ export const useCompletion = create<{ sessionId: string | null; prs: string[]; o
   open: (id, prs = []) => set({ sessionId: id, prs }),
   close: () => set({ sessionId: null, prs: [] }),
 }));
+
+// ───── Rekord-Feier direkt im Satz ─────
+export const usePRCelebration = create<{ pr: { title: string; sub: string; exercise: string; key: number } | null; show: (p: { title: string; sub: string; exercise: string }) => void; hide: () => void }>((set) => ({
+  pr: null,
+  show: (p) => set({ pr: { ...p, key: Date.now() } }),
+  hide: () => set({ pr: null }),
+}));
