@@ -299,6 +299,9 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const sSets: Record<MuscleId, number> = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 0])) as Record<MuscleId, number>;
   const sDirect: Record<MuscleId, number> = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 0])) as Record<MuscleId, number>;
 
+  /** Satz-Obergrenze pro Muskel und Einheit als harte Grenze für direkte Sätze (Zielmuskel und andere direkt belastete Muskeln) */
+  const capRoom = (ex: Exercise) =>
+    Math.min(...(Object.entries(ex.muscles) as [MuscleId, number][]).filter(([m, c]) => c >= 0.75 && !MUSCLE[m].indirectOnly).map(([m]) => MUSCLE[m].sessionCap - sDirect[m]), 99);
   const isFull = templateId === 'full';
   // Ganzkörper: Breite vor Tiefe – max. 3 Sätze je Übung, damit Brust, Rücken, Arme und Beine in eine Einheit passen (Modellregel)
   const maxSets = isFull ? 3 : MAX_SETS_PER_EXERCISE;
@@ -428,6 +431,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       let cheapest = Infinity;
       for (const ex of candidates) {
         if (!g.hit(ex) || items.some((i) => i.ex.id === ex.id || (i.ex.primary === ex.primary && familyOf(i.ex) === familyOf(ex)))) continue;
+        if (capRoom(ex) < n) continue;
         const t = n * TE.perSet(ex, { short }) + TE.setup(ex);
         cheapest = Math.min(cheapest, t);
         if (used + t > coverBudget) continue;
@@ -456,6 +460,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       const fiveOk = !it.ex.compound && !short && !isFull && (familyOf(it.ex) === 'lateral' || it.ex.pattern === 'calfRaise');
       if (it.sets >= (fiveOk ? maxSets + 1 : maxSets)) continue;
       if (it.sets >= 3 && extraBlock(it.ex.primary)) continue;
+      if (capRoom(it.ex) < 1) continue;
       const t = TE.perSet(it.ex, { short });
       if (used + t > budget) continue;
       const v = valueOfSets(it.ex, 1);
@@ -489,10 +494,13 @@ export function buildSession(o: BuildOpts): PlannedSession {
         if (samePrimary.length === 1 && samePrimary[0].sets < 3) continue;
         // keine fast identische Variante (z. B. Seitheben Kabel + Kurzhantel, zwei Ruder-Varianten)
         if (samePrimary.some((i) => familyOf(i.ex) === familyOf(ex))) continue;
-        const t = startSets * TE.perSet(ex, { short }) + TE.setup(ex);
+        // nur so viele Startsätze, wie unter der Obergrenze pro Muskel noch Platz ist (mind. 2, sonst lohnt die Übung nicht)
+        const nNew = Math.min(startSets, capRoom(ex));
+        if (nNew < 2) continue;
+        const t = nNew * TE.perSet(ex, { short }) + TE.setup(ex);
         if (used + t > budget) continue;
-        const v = valueOfSets(ex, startSets);
-        if (v / startSets < MIN_SET_VALUE) continue;
+        const v = valueOfSets(ex, nNew);
+        if (v / nNew < MIN_SET_VALUE) continue;
         // Bevorzugt Abwechslung bei zweiter Übung für denselben Muskel (andere Dehnungsposition)
         const varietyBonus =
           samePrimary.length === 1 && (samePrimary[0].ex.region && ex.region && samePrimary[0].ex.region !== ex.region ? true : samePrimary[0].ex.stretch !== ex.stretch || samePrimary[0].ex.compound !== ex.compound)
@@ -511,11 +519,11 @@ export function buildSession(o: BuildOpts): PlannedSession {
           best = {
             ratio,
             apply: () => {
-              items.push({ ex, sets: startSets });
+              items.push({ ex, sets: nNew });
               used += t;
               for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) {
-                sSets[m] += startSets * c;
-                if (c >= 0.75) sDirect[m] += startSets;
+                sSets[m] += nNew * c;
+                if (c >= 0.75) sDirect[m] += nNew;
               }
             },
           };
@@ -540,7 +548,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
     const capTxt = MUSCLE[pm].sessionCap;
     const setsReason = MUSCLE[pm].indirectOnly
       ? `${sets} Arbeitssätze: Mehrgelenksübung, deckt ${Object.keys(it.ex.muscles).length} Muskeln ab.`
-      : `${sets} Arbeitssätze geplant. Begründung: ${MUSCLE[pm].label} steht bei ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätzen in 7 Tagen, heute kommen insgesamt ~${fmtNum(sSets[pm])} dazu (direkt + ½ indirekt). Pro Einheit plant die App höchstens ~${capTxt} Sätze für diesen Muskel – Modellregel, weil der Zusatznutzen pro Satz abnimmt (Pelland 2026); die genaue Grenze ist individuell.${sets >= 4 && it.why4 ? ` ${it.why4}` : sets <= 3 && it.sets <= 3 ? ' Standard 3 Sätze: ein 4. Satz nur bei Top-Priorität oder wenn dem Muskel sonst Wochensätze fehlen (Modellregel).' : ''}${advice.setDelta < 0 ? ' −1 Satz wegen Stagnation/Ermüdung (Modellregel).' : ''}`;
+      : `${sets} Arbeitssätze geplant. Begründung: ${MUSCLE[pm].label} steht bei ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätzen in 7 Tagen, heute plant die App ${fmtNum(sDirect[pm])} direkte Sätze dafür${sSets[pm] - sDirect[pm] >= 0.5 ? ` (+~${fmtNum(sSets[pm] - sDirect[pm])} indirekt aus anderen Übungen)` : ''}. Pro Einheit höchstens ~${capTxt} direkte Sätze für diesen Muskel – Modellregel, weil der Zusatznutzen pro Satz abnimmt (Pelland 2026); die genaue Grenze ist individuell.${sets >= 4 && it.why4 ? ` ${it.why4}` : sets <= 3 && it.sets <= 3 ? ' Standard 3 Sätze: ein 4. Satz nur bei Top-Priorität oder wenn dem Muskel sonst Wochensätze fehlen (Modellregel).' : ''}${advice.setDelta < 0 ? ' −1 Satz wegen Stagnation/Ermüdung (Modellregel).' : ''}`;
     const targetRir = it.ex.targetRir + radj.rir + advice.rirDelta;
     const sc = scores[it.ex.primary];
     const parts: string[] = [];
@@ -677,6 +685,14 @@ export function buildSession(o: BuildOpts): PlannedSession {
       reason = `Nicht Teil von „${tpl.label}“${nextLabel ? ` – nächste Gelegenheit: ${nextLabel}` : ''}.`;
     } else if ((carry[m] ?? 0) >= sc.target) {
       reason = `Wochenziel bis zum nächsten Termin abgedeckt (${fmtNum(carry[m] ?? 0)}/${fmtNum(sc.target)} Sätze im 7-Tage-Fenster).`;
+    } else if (budget - used >= 8) {
+      // Es war noch Zeit übrig – dann war nicht die Zeit der Grund, sondern der geringe Zusatznutzen heute
+      reason =
+        sc.rec < 0.75
+          ? `Noch nicht ganz erholt (${recoveryInfo(st, at).label}) – heute wenig Zusatznutzen${nextLabel ? `, nächste Gelegenheit: ${nextLabel}` : ''}.`
+          : (carry[m] ?? 0) >= sc.target * 0.8
+            ? `Wochenziel fast erreicht (${fmtNum(carry[m] ?? 0)}/${fmtNum(sc.target)} Sätze im 7-Tage-Fenster) – heute nicht nötig.`
+            : `Heute geringer Zusatznutzen gegenüber den geplanten Muskeln${nextLabel ? ` – nächste Gelegenheit: ${nextLabel}` : ''}.`;
     } else {
       reason = 'Aus Zeitgründen nachrangig (geringerer Nutzen pro Minute).';
     }
@@ -770,7 +786,7 @@ export function sessionFocus(label: string, exercises: { exerciseId: string; set
     }
   }
   const total = legs + abs + upper;
-  if (total < 4) return undefined;
+  if (total < 2) return undefined;
   let f: string | undefined;
   if ((legs + abs) / total >= 0.8) f = legs && abs ? 'Beine & Bauch' : legs ? 'Beine' : 'Bauch';
   else if (upper / total >= 0.85) f = arms / upper >= 0.7 ? 'Arme & Schultern' : 'Oberkörper';
@@ -1162,6 +1178,9 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       if (i >= dates.length) best.reasons.unshift(`Woche 2 (${strategy2.label}): wird bei jedem Training neu berechnet.`);
       if (focus.length) best.reasons.push(`Schwerpunkt: ${focus.join(', ')}.`);
       if (skippedTired.length) best.reasons.push(`Ausgelassen wegen Ermüdung: ${skippedTired.join(', ')}.`);
+      const nSets = best.exercises.reduce((a, e) => a + e.sets, 0);
+      if (nSets > 0 && nSets <= 5 && best.estMinutes < minutes * 0.6)
+        best.reasons.unshift(`Kurze Einheit (${nSets} Sätze): Die meisten Muskeln haben ihr Wochenziel schon fast erreicht oder sind noch ermüdet. Mehr Sätze brächten heute wenig – ein Ruhetag wäre genauso in Ordnung.`);
       if (allDates.length === 1 && !uncertain && minutes < 90)
         best.reasons.push(`Nur 1 Einheit in den nächsten 7 Tagen: Mit ${minutes} min sind pro Muskel nur wenige Sätze möglich. Wenn es geht, plane 90–120 min ein (Profil → Standarddauer oder „Zeit heute“) – das bringt deutlich mehr Wochenvolumen.`);
       if (best.tentative) best.reasons.push('Vorläufig: Tag ist als „möglich“ markiert. Bestätige ihn im Kalender oder er wird automatisch neu verteilt.');

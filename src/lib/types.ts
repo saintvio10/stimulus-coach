@@ -54,9 +54,10 @@ export interface Exercise {
   linkSides?: boolean;
   /**
    * Last zu Hause: 'bottles' = je eine Flasche pro Hand (nur Flaschengewicht), 'oneDumbbell' = beide Hände an deiner einen Hantel
-   * (nur Hantelgewicht). Sonst: Flasche(n) oder Hantel in einer Hand.
+   * (nur Hantelgewicht), 'none' = Körpergewichtsübung ohne sinnvolle Zusatzlast (z. B. Pike-Liegestütze).
+   * Sonst: Flasche(n) oder Hantel in einer Hand; Körpergewichtsübungen: ohne oder mit deiner Hantel als Zusatzgewicht.
    */
-  homeLoad?: 'bottles' | 'oneDumbbell';
+  homeLoad?: 'bottles' | 'oneDumbbell' | 'none';
   /** schwerere Variante, wenn diese Übung ausgereizt ist (z. B. Flaschen → einarmig mit Hantel) */
   upgradeTo?: string;
   /** 'home' = Übung für Training ohne Gym (wird im Studio-Plan nie eingeplant) */

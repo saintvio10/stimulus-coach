@@ -46,13 +46,15 @@ d.sessions[1].exercises[0].sets[2].doneAt! += 20 * 60_000;
 d.sessions[1].exercises[0].sets[3].doneAt! += 20 * 60_000;
 ok(Math.abs(timeEstimator(d).perSet(pc) - 3) < 0.05, 'Unterbrechung von 20 min verfälscht die Satzzeit nicht');
 // 4) Heimübung mit 35 Wdh. letztes Mal → Arbeitszeit nach echten Wdh. statt Bereichsmitte
-const home = d.exercises.find((e) => e.location === 'home' && !e.unilateral && e.pattern !== 'bayesian')!;
+const home = d.exercises.find((e) => e.location === 'home' && e.equipment === 'bodyweight' && !e.unilateral && e.pattern !== 'bayesian')!;
 d.sessions = [];
 const before = timeEstimator(d).perSet(home);
 const s1 = mk(0, [[home.id, 1, 0, 35]]);
 d.sessions = [s1];
 const after = timeEstimator(d).perSet(home);
 console.log(`${home.name}: vorher ${before.toFixed(2)} min/Satz, nach 35 Wdh. ${after.toFixed(2)} min/Satz`);
-ok(after > before + 0.5, 'Heimübung: lange Sätze (35 Wdh.) werden in der Schätzung berücksichtigt');
+ok(after > before + 0.2, 'Heimübung: lange Sätze (35 Wdh.) werden in der Schätzung berücksichtigt');
+// ohne Verlauf rechnet die App bei Körpergewicht/Flaschen zu Hause mit dem oberen Ende des Bereichs (leichte Last → viele Wdh.)
+ok(before >= ((Math.max(40, home.repMax * 3) + home.restSec) / 60) * (d.settings.timeFactor || 1) - 0.01, `Heimübung ohne Verlauf: Schätzung mit ${home.repMax} Wdh. (oberes Ende)`);
 console.log(fails ? `${fails} FEHLER` : 'Alle Prüfungen bestanden');
 if (fails) (globalThis as { process?: { exit: (n: number) => void } }).process?.exit(1);

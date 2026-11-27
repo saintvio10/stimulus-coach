@@ -18,6 +18,8 @@ const steps = (id: string) => JSON.stringify(weightSteps(ex(id), d.settings).lis
 ok(steps('home-lateral') === '[1]' && steps('home-reverse-fly') === '[1]', `2-Flaschen-Übungen: nur 1 kg pro Hand (${steps('home-lateral')})`);
 ok(steps('home-oh-ext') === '[10]' && steps('home-goblet') === '[10]', 'beidhändig an der einen Hantel: nur 10 kg');
 ok(steps('home-lateral-db') === '[1,2,10]', 'einarmig: Flasche(n) oder Hantel in einer Hand');
+ok(steps('bench-dip') === '[0,10]' && steps('pullup') === '[0,10]', 'Körpergewicht: ohne oder mit Hantel als Zusatzlast – keine 1-kg-Flaschen');
+ok(steps('pike-pushup') === '[0]' && steps('nordic-curl') === '[0]' && steps('leg-raise') === '[0]', 'Pike, Nordic Curls, Beinheben: keine Zusatzlast');
 ok(nextWeight(1, ex('home-lateral'), d.settings) === 1, 'keine Steigerung über 1 kg pro Hand hinaus');
 ok(loadHint(ex('home-lateral')) === 'pro Hand (Flasche)' && loadHint(ex('db-lateral')) === 'pro Hand' && loadHint(ex('home-goblet')) === 'eine Hantel, beidhändig' && loadHint(ex('preacher-curl')) === '', 'Anzeige: „pro Hand“ bei Kurzhanteln/Flaschen');
 // Migration: gespeicherte Heimübungen bekommen die neuen Felder
@@ -51,9 +53,9 @@ const adv = adviseExercise(ex('home-lateral'), d.sessions, { settings: d.setting
 console.log('  Empfehlung:', adv.type, adv.weight, '–', adv.text);
 ok(adv.type === 'extend' && adv.weight === 1 && /Seitheben einarmig \(Hantel\)/.test(adv.text), 'Empfehlung: bei 1 kg bleiben, nächster Schritt einarmig mit Hantel');
 ok(!/Stagnation/.test(adv.text), 'keine „Stagnation“-Meldung, wenn nur das Equipment begrenzt');
-// Seitliche Schulter gezielt gefragt (Priorität 1), 60 min
+// Seitliche Schulter gezielt gefragt (Priorität 1), 90 min
 d.profile.priorities = ['sideDelts', 'rearDelts', 'biceps', 'triceps', 'chest', 'back', 'legs', 'absCalves'];
-const hp = planHome(d, 60, 'weights', at('2027-01-06', 17)); // 12 Tage nach der letzten Schultereinheit
+const hp = planHome(d, 90, 'weights', at('2027-01-06', 17)); // 12 Tage nach der letzten Schultereinheit
 const ids = hp?.exercises.map((e) => e.exerciseId) ?? [];
 console.log('  Heimplan:', ids.join(', '), '|', hp?.reasons.find((r) => /ausgereizt/.test(r)));
 ok(!ids.includes('home-lateral'), 'Heimplan danach ohne „Seitheben (2 Flaschen)“');

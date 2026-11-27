@@ -68,7 +68,9 @@ export function learnedTimings(sessions: Session[]): Map<string, ExTiming> {
 /** Modell: ~3 s pro Wdh. (mind. 40 s, Mehrgelenk 50 s), einseitig × 2, plus Pause */
 export function modelSetMin(ex: Exercise, repMin: number, repMax: number, restSec: number, reps?: number | null): number {
   const unilateral = ex.pattern === 'bayesian' || !!ex.unilateral;
-  const r = reps ?? (repMin + repMax) / 2;
+  // Ohne Verlauf: Bereichsmitte – mit Flaschen bzw. nur Körpergewicht zu Hause landet man meist am oberen Ende
+  const light = ex.location === 'home' && (ex.homeLoad === 'bottles' || ex.equipment === 'bodyweight');
+  const r = reps ?? (light ? repMax : (repMin + repMax) / 2);
   const work = Math.max(ex.compound ? 50 : 40, r * 3) * (unilateral ? 2 : 1);
   return (work + restSec) / 60;
 }
