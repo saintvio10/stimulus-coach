@@ -135,7 +135,7 @@ export interface Plan {
   notes: string[];
   horizonDays: string[];
   /** Tage mit Zeit, an denen bewusst pausiert wird */
-  restDays: { date: string; reason: string }[];
+  restDays: { date: string; reason: string; kind?: 'cap' | 'consecutive' | 'spacing' }[];
   /** Einheiten pro 7 Tage, auf die die Wochenziele ausgelegt sind (gilt für alle Ansichten) */
   spw: number;
   /** Erklärung des Wochenziels */
@@ -238,7 +238,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const budget = Math.max(15, (o.minutes - WARMUP_MIN) * radj.volume);
 
   const candidates = data.exercises.filter((e) =>
-    !e.locked && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home'),
+    !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home'),
   );
   const history = new Set<string>();
   const recent = new Set<string>();
@@ -297,7 +297,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
     const l = regionLast.get(`${m}:${r}`);
     return l == null ? 99 : (at - l) / DAY;
   };
-  // Übungen mit aktuellem Fortschritt (e1RM zuletzt gestiegen) werden durch die Rotation nicht verdrängt
+  // Übungen mit aktuellem Fortschritt (e1RM zuletzt gestiegen) kehren bevorzugt wieder (keine Rotations-Abwertung) –
+  // austauschbar bleiben sie trotzdem (Austauschen, Pausieren bei Beschwerden/Gerät, Sperren, Zeitbudget, Wochenschwerpunkt)
   const progressing = new Set<string>();
   for (const e of candidates) {
     const h = exposures(e.id, data.sessions);
@@ -536,24 +537,33 @@ export function buildSession(o: BuildOpts): PlannedSession {
     decisions.push({ muscle: m, status, sets, score: sc.score, recovery: st.recovery, vol7: st.vol7, target: sc.target, reason });
   }
 
-  // Mehr Zeit als sinnvolle Sätze: Pausen verlängern statt Sätze zu stapeln (bessere Wdh.-Leistung, Schoenfeld 2016)
+  // Pausen anhand von Belastung und Leistungsverlauf verlängern – freie Zeit macht es nur möglich, sie ist nicht der Grund.
+  // Kriterien (Modellregel): Wdh. fielen in der letzten Einheit bei gleichem Gewicht um ≥ 3, oder ≥ 2 Sätze am Versagen.
   const reasons: string[] = [];
   let slack = budget - planned.reduce((a, p) => a + p.minutes, 0);
-  if (slack >= 6 && planned.length) {
-    let added = 0;
-    for (const p of [...planned].sort((a, b) => b.sets - a.sets)) {
-      const ex = data.exercises.find((e) => e.id === p.exerciseId);
-      if (!ex) continue;
-      const capRest = ex.compound ? 240 : 180;
-      const extra = Math.min(30, capRest - p.restSec);
-      const cost = (p.sets * extra) / 60;
-      if (extra <= 0 || cost > slack) continue;
-      p.restSec += extra;
-      p.minutes += cost;
-      slack -= cost;
-      added++;
+  for (const p of planned) {
+    const ex = data.exercises.find((e) => e.id === p.exerciseId);
+    const lastExp = ex ? exposures(ex.id, data.sessions)[0] : undefined;
+    if (!ex || !lastExp) continue;
+    const w0 = lastExp.sets[0]?.weight;
+    const same = lastExp.sets.filter((x) => x.weight === w0).map((x) => x.reps ?? 0);
+    const drop = same.length >= 2 ? same[0] - Math.min(...same.slice(1)) : 0;
+    const failures = lastExp.sets.filter((x) => x.failure || x.rir === 0).length;
+    if (drop < 3 && failures < 2) continue;
+    const capRest = ex.compound ? 240 : 180;
+    const extra = Math.min(30, capRest - p.restSec);
+    const cost = (p.sets * extra) / 60;
+    if (extra <= 0) continue;
+    if (cost > slack) {
+      reasons.push(`${ex.name}: längere Pausen wären sinnvoll (${drop >= 3 ? `Wdh. fielen zuletzt von ${same[0]} auf ${Math.min(...same.slice(1))}` : `${failures} Sätze am Versagen`}), passen aber nicht ins Zeitbudget.`);
+      continue;
     }
-    if (added) reasons.push(`Mehr Zeit als zusätzliche Sätze sinnvoll nutzen: Pausen bei ${added} Übung${added === 1 ? '' : 'en'} um 30 s verlängert – erhält die Wiederholungsleistung. Die Einheit ist trotzdem vor Ablauf der Zeit fertig.`);
+    p.restSec += extra;
+    p.minutes += cost;
+    slack -= cost;
+    const txt = `Pause ${Math.floor(p.restSec / 60)}:${String(p.restSec % 60).padStart(2, '0')} statt ${Math.floor((p.restSec - extra) / 60)}:${String((p.restSec - extra) % 60).padStart(2, '0')} min: ${drop >= 3 ? `Wdh. fielen letztes Mal von ${same[0]} auf ${Math.min(...same.slice(1))}` : `${failures} Sätze waren am Versagen`} – längere Pausen erhalten die Wiederholungsleistung (Schoenfeld 2016). Modellregel, Zeit war vorhanden.`;
+    p.why = `${p.why} ${txt}`;
+    reasons.push(`${ex.name}: ${txt}`);
   }
   const estMinutes = Math.round(WARMUP_MIN + planned.reduce((a, p) => a + p.minutes, 0));
   if (radj.note) reasons.push(radj.note);
@@ -730,7 +740,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   // ───── Sinnvolle Ruhetage ─────
   // Regeln: max. maxConsecutive Trainingstage am Stück (inkl. bereits absolvierter Tage davor),
   // max. maxSessionsPerWeek Einheiten in den 7 Tagen (inkl. Trainings der letzten Tage im rollierenden Fenster).
-  const restDays: { date: string; reason: string }[] = [];
+  const restDays: Plan['restDays'] = [];
   if (!opts.forceToday && !uncertain && dates.length >= 1) {
     const maxCons = Math.max(2, data.settings.maxConsecutive || 3);
     // Trainingstage (inkl. schwerer Aktivitäten) für die Regel „max. Tage am Stück“
@@ -753,6 +763,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       return worst;
     };
     const fixedTentative = new Set(dates.filter((d) => tentativeSet.has(d)));
+    const preferSet = new Set((data.planOptions.preferDates ?? []).filter((d) => d >= today));
     const n = dates.length;
     let best: string[] = dates;
     let bestScore = -Infinity;
@@ -776,7 +787,11 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       const gaps = seq.slice(1).map((d, i) => diffDays(d, seq[i]));
       const minGap = gaps.length ? Math.min(...gaps) : 7;
       const consecutive = gaps.filter((g) => g === 1).length;
-      const score = pick.length * 100 + minGap * 8 - consecutive * 3 + (pick.includes(today) ? 2 : 0) - pick.filter((d) => fixedTentative.has(d)).length * 5;
+      // Sicherer Termin heute hat Vorrang vor späteren (unsichereren) Terminen; ausdrücklich bevorzugte Tage noch mehr
+      const todaySure = pick.includes(today) && data.availability[today] === 'yes';
+      const preferred = pick.filter((d) => preferSet.has(d)).length;
+      const score =
+        pick.length * 100 + preferred * 150 + (todaySure ? 40 : pick.includes(today) ? 2 : 0) + minGap * 8 - consecutive * 3 - pick.filter((d) => fixedTentative.has(d)).length * 5;
       if (score > bestScore) (bestScore = score), (best = pick);
     }
     for (const d of dates) {
@@ -786,11 +801,14 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       for (let k = 1; set.has(addDays(d, -k)); k++) run++;
       for (let k = 1; set.has(addDays(d, k)); k++) run++;
       const ww = worstWindow([...best, d]);
+      const prefHit = best.filter((x) => preferSet.has(x));
+      const todayWins = ww.n > cap && best.includes(today) && data.availability[today] === 'yes' && d > today;
       restDays.push({
         date: d,
+        kind: ww.n > cap ? 'cap' : run > maxCons ? 'consecutive' : 'spacing',
         reason:
           ww.n > cap
-            ? `Ruhetag: Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Das Wochenvolumen wird auf die übrigen Tage verteilt.`
+            ? `${prefHit.length && !preferSet.has(d) ? `Verschoben: Du hast ${prefHit.map((x) => relDayLabel(x, today).split(',')[0]).join(', ')} bevorzugt${todayWins ? ' und heute hast du sicher Zeit' : ''}. ` : todayWins ? 'Verschoben: Heute hast du sicher Zeit – das hat Vorrang vor einem späteren Termin. ' : 'Ruhetag: '}Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Das Wochenvolumen wird auf die übrigen Tage verteilt.`
             : run > maxCons
               ? `Ruhetag: Sonst wären es ${run} Trainingstage am Stück (absolvierte mitgezählt, Limit ${maxCons} im Profil). Die Wochenarbeit wird auf die übrigen Tage verteilt.`
               : 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – mehr Abstand zwischen Belastungen derselben Muskeln.',
@@ -903,7 +921,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   const sure = dates.filter((d) => !tentativeSet.has(d)).length;
   const goalNote =
     `Wochenziele ausgelegt auf ${spw} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage (${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'Profil-Standard'}). ` +
-    (spw < 3 ? `Bei ${spw === 1 ? 'einer Einheit' : 'zwei Einheiten'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Modellannahme. ` : '') +
+    (spw < 3 ? `Bei ${spw === 1 ? 'einer Einheit' : 'zwei Einheiten'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw, data.settings), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Startannahme, im Profil einstellbar. ` : '') +
     'Gezählt: direkte Sätze voll, indirekte mit 0,5 (Pelland 2026). Geplante Sätze sind eine Prognose.';
   return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays, spw, goalNote };
 }
@@ -988,5 +1006,5 @@ export function optimalSetsFor(data: AppData, ex: Exercise, sessionId?: string):
 /** Persönliches Wochenziel: Basisziel × gelernter Anpassungsfaktor */
 export function personalTarget(data: AppData, m: MuscleId, sessionsPerWeek: number): number {
   const f = data.volumeAdjust?.[m]?.factor ?? 1;
-  return Math.round(weeklyTarget(m, data.profile.priorities, sessionsPerWeek) * f * 2) / 2;
+  return Math.round(weeklyTarget(m, data.profile.priorities, sessionsPerWeek, data.settings) * f * 2) / 2;
 }

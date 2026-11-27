@@ -75,24 +75,29 @@ export function priorityWeight(m: MuscleId, priorities: PriorityGroup[]): number
 }
 
 /** Frequenzabhängiger Skalierungsfaktor: realistisches Volumen bei 1, 2 oder 3 Einheiten/Woche */
-export function frequencyFactor(sessionsPerWeek: number): number {
-  if (sessionsPerWeek <= 1) return 0.55;
-  if (sessionsPerWeek === 2) return 0.8;
+export interface FreqFactors {
+  freqFactor1?: number;
+  freqFactor2?: number;
+}
+/** Modellannahme (keine Studienwerte): Standard 0,55 bei 1×, 0,8 bei 2× – im Profil einstellbar */
+export function frequencyFactor(sessionsPerWeek: number, f: FreqFactors = {}): number {
+  if (sessionsPerWeek <= 1) return f.freqFactor1 ?? 0.55;
+  if (sessionsPerWeek === 2) return f.freqFactor2 ?? 0.8;
   return 1;
 }
 
 /** Wöchentliches Zielvolumen (fraktionale Sätze, rollierende 7 Tage) */
-export function weeklyTarget(m: MuscleId, priorities: PriorityGroup[], sessionsPerWeek: number): number {
+export function weeklyTarget(m: MuscleId, priorities: PriorityGroup[], sessionsPerWeek: number, f: FreqFactors = {}): number {
   const meta = MUSCLE[m];
   if (meta.indirectOnly) return meta.baseTarget;
   const rank = groupRank(meta.group, priorities);
   const prioMult = 1.15 - rank * 0.05;
-  return Math.round(meta.baseTarget * prioMult * frequencyFactor(sessionsPerWeek) * 2) / 2;
+  return Math.round(meta.baseTarget * prioMult * frequencyFactor(sessionsPerWeek, f) * 2) / 2;
 }
 
 /** Mindestdosis über 14 Tage, damit kein Muskel dauerhaft vernachlässigt wird */
-export function minDose14(m: MuscleId, priorities: PriorityGroup[], sessionsPerWeek: number): number {
-  return Math.round(weeklyTarget(m, priorities, sessionsPerWeek) * 0.7 * 2) / 2;
+export function minDose14(m: MuscleId, priorities: PriorityGroup[], sessionsPerWeek: number, f: FreqFactors = {}): number {
+  return Math.round(weeklyTarget(m, priorities, sessionsPerWeek, f) * 0.7 * 2) / 2;
 }
 
 export const RECOVERY_COLORS = {

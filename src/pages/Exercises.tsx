@@ -7,7 +7,7 @@ import { MUSCLE, MUSCLES } from '../lib/muscles';
 import { Badge, Button, Card, Chip, Confirm, Field, Input, PageHeader, Select, Sheet, Switch } from '../components/ui';
 import { ExerciseAnimation, ExerciseIcon, SPECS } from '../components/ExerciseAnimation';
 import { ExercisePicker } from './Training';
-import { cn, uid, weightSteps, fmtNum } from '../lib/utils';
+import { cn, uid, weightSteps, fmtNum, dateKey, fmtShortDay } from '../lib/utils';
 import { DEFAULT_EXERCISES } from '../data/exercises';
 
 const EQUIP: Record<Equipment, string> = {
@@ -137,6 +137,7 @@ export default function ExercisesPage() {
                       <div className="flex items-center gap-1.5 truncate text-[14px] font-medium">
                         {e.name}
                         {e.custom && <Badge>eigene</Badge>}
+                        {e.pausedUntil && e.pausedUntil >= dateKey() && <Badge tone="orange">pausiert bis {fmtShortDay(e.pausedUntil)}</Badge>}
                       </div>
                       <div className="truncate text-[12px] text-muted">
                         {Object.entries(e.muscles)
@@ -391,6 +392,16 @@ function EditSheet({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
         <Field label="Notiz">
           <Input id="ed-note" value={e.note ?? ''} onChange={(x) => setE({ ...e, note: x.target.value || undefined })} />
         </Field>
+        {e.pausedUntil && e.pausedUntil >= dateKey() && (
+          <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2.5">
+            <span className="text-[13px]">
+              Pausiert bis {fmtShortDay(e.pausedUntil)} ({e.pausedReason === 'pain' ? 'Beschwerden' : 'Gerät'})
+            </span>
+            <Button size="sm" variant="secondary" onClick={() => setE({ ...e, pausedUntil: undefined, pausedReason: undefined })}>
+              Wieder einplanen
+            </Button>
+          </div>
+        )}
         <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2.5">
           <span className="text-[13px]">Arme/Beine einzeln erfassen (Wdh. links & rechts)</span>
           <Switch id="ed-uni" checked={!!e.unilateral} onChange={(v) => setE({ ...e, unilateral: v })} label="Einzeln erfassen" />

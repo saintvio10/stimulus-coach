@@ -64,7 +64,7 @@ export default function Dashboard() {
   const avgDur = avgDurationMin(done);
   const streak = weekStreak(s.sessions);
   const vol7 = MUSCLES.filter((m) => !m.indirectOnly).reduce((a, m) => a + states[m.id].direct7, 0);
-  const under = MUSCLES.filter((m) => !m.indirectOnly && states[m.id].vol14 < minDose14(m.id, s.profile.priorities, spw));
+  const under = MUSCLES.filter((m) => !m.indirectOnly && states[m.id].vol14 < minDose14(m.id, s.profile.priorities, spw, s.settings));
 
   return (
     <div className="flex flex-col gap-6">

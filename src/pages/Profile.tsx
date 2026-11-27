@@ -101,6 +101,37 @@ export default function ProfilePage() {
               <Segmented value={String(st.maxConsecutive ?? 3)} onChange={(v) => setS({ maxConsecutive: +v })} options={['2', '3', '4'].map((v) => ({ value: v, label: `${v} Tage` }))} />
             </Field>
           </div>
+          <div className="rounded-xl bg-raised p-3">
+            <div className="text-[13.5px] font-medium">Wochenziel bei wenigen Einheiten (Annahme)</div>
+            <p className="mt-0.5 text-[11.5px] text-muted">
+              Startannahme der App, kein Studienwert: Bei 1 oder 2 Einheiten pro 7 Tagen wird das Wochenziel verkleinert, weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist. Prüfe im
+              Wochenrückblick, ob du das Ziel erreichst und trotzdem Fortschritt machst – und passe den Faktor dann an.
+            </p>
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {(
+                [
+                  ['freqFactor1', '1 Einheit', 0.55],
+                  ['freqFactor2', '2 Einheiten', 0.8],
+                ] as const
+              ).map(([k, l, def]) => {
+                const v = (st[k] as number | undefined) ?? def;
+                return (
+                  <div key={k} className="flex items-center justify-between gap-2 rounded-lg bg-bg px-2.5 py-2">
+                    <span className="text-[12.5px]">{l}</span>
+                    <span className="flex items-center gap-1.5">
+                      <button className="grid h-7 w-7 place-items-center rounded-full bg-raised" aria-label={`${l} Faktor verringern`} onClick={() => setS({ [k]: Math.max(0.3, Math.round((v - 0.05) * 100) / 100) })}>
+                        −
+                      </button>
+                      <span className="tnum w-11 text-center text-[13px] font-semibold">×{fmtNum(v, 2)}</span>
+                      <button className="grid h-7 w-7 place-items-center rounded-full bg-raised" aria-label={`${l} Faktor erhöhen`} onClick={() => setS({ [k]: Math.min(1, Math.round((v + 0.05) * 100) / 100) })}>
+                        +
+                      </button>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
           <Row label="Supersätze bei wenig Zeit (≤ 50 min)" hint="Bizeps/Trizeps und seitliche/hintere Schulter im Wechsel">
             <Switch id="s-ss" checked={st.autoSuperset} onChange={(v) => setS({ autoSuperset: v })} label="Supersätze" />
           </Row>

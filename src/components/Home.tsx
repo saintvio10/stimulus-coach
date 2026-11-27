@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy, House } from 'lucide-react';
-import { useStore } from '../lib/store';
+import { quick, useStore } from '../lib/store';
 import { useCompletion, useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
 import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
@@ -487,6 +487,17 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                   : `Bei ${s.settings.sessionsPerWeek}× pro Woche wird dieser Tag gerade nicht gebraucht.${nextPlanned ? ` Nächste Einheit: ${relDayLabel(nextPlanned.date)}.` : ''}`}
             </p>
             <div className="flex flex-wrap gap-2">
+              {restHere && (restHere.kind === 'cap' || restHere.kind === 'consecutive') && avail !== 'no' && (
+                <Button
+                  variant={isToday ? 'secondary' : 'primary'}
+                  onClick={() => {
+                    quick.preferDay(day);
+                    toast(`${relDayLabel(day).split(',')[0]} wird bevorzugt – ein anderer Tag rückt dafür als Ruhetag nach`);
+                  }}
+                >
+                  Lieber an diesem Tag trainieren
+                </Button>
+              )}
               {isToday && avail !== 'no' && (
                 <Button variant="primary" onClick={() => start(null)}>
                   Heute trotzdem trainieren
@@ -766,6 +777,17 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
               Du kannst trotzdem trainieren – tippe den Tag dann einfach erneut an oder starte ihn über „Training“. Regeln (max. Tage am Stück, max. Einheiten pro Woche)
               lassen sich im Profil anpassen.
             </p>
+            {(plan.restDays.find((r) => r.date === restOpen.date)?.kind ?? 'spacing') !== 'spacing' && (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  quick.preferDay(restOpen.date);
+                  setRestOpen(null);
+                }}
+              >
+                Lieber an diesem Tag trainieren (anderen Tag verschieben)
+              </Button>
+            )}
             <Button
               variant="secondary"
               onClick={() => {

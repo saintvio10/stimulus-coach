@@ -52,6 +52,9 @@ export interface Exercise {
   unilateral?: boolean;
   /** 'home' = Übung für Training ohne Gym (wird im Studio-Plan nie eingeplant) */
   location?: 'home';
+  /** vorübergehend nicht einplanen (z. B. Beschwerden, Gerät fehlt) – bis einschließlich Datum */
+  pausedUntil?: string;
+  pausedReason?: 'pain' | 'device';
   /** Bereich des Zielmuskels (z. B. Bizeps: 'brachialis'), für Rotation über die Woche */
   region?: string;
   equipment: Equipment;
@@ -116,6 +119,8 @@ export interface ProgressionAdvice {
   cautious?: boolean;
   /** letzte Einheit bei gemischten Gewichten, z. B. „10 × 9 · 12,5 × 5“ */
   lastDetail?: string;
+  /** Herkunft der Empfehlung (letzte gewertete Einheit) */
+  from?: { sessionId: string; uid: string };
 }
 
 export interface SessionExercise {
@@ -142,6 +147,10 @@ export interface SessionExercise {
   decision?: 'accepted' | 'declined';
   /** Im Training per Wischen entfernt (nicht geschafft) – Anzahl nicht gemachter Sätze; wird in den nächsten Tagen nachgeholt */
   missed?: number;
+  /** für die Gewichtsempfehlung ignorieren (z. B. anderes Gerät, Eingabefehler) */
+  excluded?: boolean;
+  /** Grund, warum eine Gewichtsempfehlung abgelehnt wurde */
+  declineReason?: 'device' | 'typo' | 'dayform' | 'other';
   /** Live-Gewichtsvorschlag nach diesem Satz ausgeblendet */
   liveDismissed?: string;
   /** Bewertung nach der Übung */
@@ -178,6 +187,8 @@ export interface PlanOptions {
   todayMinutes: { date: string; minutes: number } | null;
   /** eigene Trainingsdauer je Tag (Minuten), sonst Standarddauer */
   dayMinutes?: Record<string, number>;
+  /** Tage, die der Nutzer bei einem Konflikt (Wochenlimit/Tage am Stück) ausdrücklich bevorzugt */
+  preferDates?: string[];
   /** Datum, an dem zuletzt nach der Verfügbarkeit gefragt wurde */
   askedOn?: string;
 }
@@ -248,6 +259,9 @@ export interface Settings {
   dumbbellWeights: number[];
   /** Unterwegs dabei: Gewicht deiner Hantel (kg) */
   homeDumbbell: number;
+  /** Annahme: Wochenziel-Faktor bei 1 bzw. 2 Einheiten pro Woche (Standard 0,55 / 0,8) – einstellbar */
+  freqFactor1?: number;
+  freqFactor2?: number;
   /** Unterwegs dabei: Gewicht einer Flasche (kg, 1 l Wasser ≈ 1 kg) */
   homeBottle: number;
   cableStep: number;

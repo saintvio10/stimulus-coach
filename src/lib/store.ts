@@ -568,6 +568,16 @@ export const quick = {
       d.planOptions.uncertain = !d.planOptions.uncertain;
     }),
   minutesToday: (m: number | null) => quick.dayMinutes(dateKey(), m),
+  /** Tag bei Konflikt bevorzugen (z. B. lieber Mittwoch statt heute) */
+  preferDay: (date: string, on = true) =>
+    useStore.getState().mutate((d) => {
+      const today = dateKey();
+      const set = new Set((d.planOptions.preferDates ?? []).filter((x) => x >= today));
+      if (on) set.add(date);
+      else set.delete(date);
+      d.planOptions.preferDates = [...set];
+      d.availability[date] = 'yes';
+    }),
   /** Trainingsdauer für einen Tag setzen (null = Standarddauer) */
   dayMinutes: (date: string, m: number | null) =>
     useStore.getState().mutate((d) => {

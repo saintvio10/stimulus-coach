@@ -9,6 +9,16 @@ import { addDays, dateKey, parseKey, uid, HOUR } from '../src/lib/utils';
 
 let fails = 0;
 let checks = 0;
+let warns = 0;
+/** Plausibilitätswarnung (keine harte Regel, keine Studiengrenze – Schwelle anpassbar) */
+const warn = (cond: boolean, msg: string) => {
+  if (!cond) {
+    warns++;
+    console.log('   ⚠ ' + msg);
+  }
+};
+/** anpassbare Plausibilitätsschwelle: Sätze desselben Muskels an zwei Folgetagen */
+const CONSEC_WARN_SETS = 3;
 const ok = (cond: boolean, msg: string) => {
   checks++;
   if (!cond) {
@@ -47,7 +57,7 @@ function session(date: string, ex: { id: string; sets: SetLog[]; repMin?: number
 }
 
 /** Prüft die Invarianten eines Plans */
-function invariants(name: string, d: AppData, plan: Plan, now: number) {
+export function invariants(name: string, d: AppData, plan: Plan, now: number) {
   const today = dateKey(now);
   const cap = d.settings.maxSessionsPerWeek;
   const done = [...new Set(d.sessions.filter((s) => s.status === 'done').map((s) => s.date))];
@@ -146,7 +156,7 @@ for (const [name, offs] of [['2 verteilt', [0, 3]], ['2 am Stück', [0, 1]], ['3
       const b = p.sessions[i];
       for (const x of b.decisions) {
         const y = a.decisions.find((z) => z.muscle === x.muscle);
-        if (y && y.sets >= 3 && x.sets >= 3) ok(false, `3 am Stück: ${x.muscle} an ${a.date} und ${b.date} je ≥ 3 Sätze`);
+        if (y) warn(!(y.sets >= CONSEC_WARN_SETS && x.sets >= CONSEC_WARN_SETS), `3 am Stück: ${x.muscle} an ${a.date} und ${b.date} je ≥ ${CONSEC_WARN_SETS} Sätze (Hinweis, keine Regel)`);
       }
     }
   }
@@ -177,6 +187,14 @@ for (const [name, offs] of [['2 verteilt', [0, 3]], ['2 am Stück', [0, 1]], ['3
   for (const x of ['2026-11-27', '2026-11-28', '2026-11-30', '2026-12-02']) d.availability[x] = 'yes';
   const p = run('Import-Fall: Do trainiert + Fr/Sa/Mo/Mi verfügbar, Limit 4', d, now);
   ok(p.sessions.length <= 3, `Import-Fall: ${p.sessions.length} geplant + 1 absolviert > 4`);
+  ok(p.sessions.some((s) => s.date === TODAY), 'Import-Fall: heute sicher verfügbar, aber nicht geplant');
+  ok(p.restDays.some((r) => r.kind === 'cap' && r.date > TODAY && r.reason.startsWith('Verschoben')), 'Import-Fall: späterer Termin nicht als „verschoben“ begründet');
+  // Nutzer bevorzugt den späteren Termin → dann pausiert heute
+  d.planOptions.preferDates = ['2026-11-28'];
+  const pp = run('… Nutzer tippt beim Samstag „Lieber an diesem Tag trainieren“', d, now);
+  ok(pp.sessions.some((s) => s.date === '2026-11-28'), 'Bevorzugter Samstag nicht geplant');
+  ok(pp.restDays.some((r) => r.kind === 'cap' && r.reason.includes('bevorzugt')), 'Verschiebung nennt die Bevorzugung nicht');
+  d.planOptions.preferDates = [];
   ok(p.restDays.some((r) => r.reason.includes('Limit') || r.reason.includes('am Stück')), 'Import-Fall: gestrichener Tag ohne nachvollziehbaren Grund');
   // Beinbeuger: großer Gewichtssprung → erweiterter, erklärter Bereich
   const ex = d.exercises.find((e) => e.id === 'seated-leg-curl')!;
@@ -194,6 +212,12 @@ for (const [name, offs] of [['2 verteilt', [0, 3]], ['2 am Stück', [0, 1]], ['3
   d.sessions.push(session('2026-11-27', [{ id: 'cable-lateral', sets: sets(3, 10, [9, 9, 8]), repMin: 12, repMax: 20 }]));
   const c = adviseExercise(lat, d.sessions, { settings: d.settings, checkIns: {} });
   ok(c.type === 'decrease' && !c.cautious, 'Seitheben: wiederholte Unterschreitung führt nicht zu klarer Anpassung');
+  ok(c.text.includes('ablehnen'), 'Seitheben: deutliche Empfehlung nicht als übersteuerbar gekennzeichnet');
+  // Ablehnen mit „anderes Gerät“ → letzte Einheit zählt nicht mehr
+  const lastSe = d.sessions[d.sessions.length - 1].exercises[0];
+  lastSe.excluded = true;
+  const c2 = adviseExercise(lat, d.sessions, { settings: d.settings, checkIns: {} });
+  ok(c2.from?.uid !== lastSe.uid, 'Ausgeschlossene Einheit wird weiter für die Empfehlung genutzt');
 }
 // „Nur einmal“ → mehrere Termine
 {
@@ -217,5 +241,43 @@ for (const [name, offs] of [['2 verteilt', [0, 3]], ['2 am Stück', [0, 1]], ['3
   ok(!!s0 && s0.exercises.some((e) => d.exercises.find((x) => x.id === e.exerciseId)!.primary === 'biceps'), 'Bizeps ohne Preacher nicht abgedeckt');
 }
 
-console.log(`\n${checks - fails}/${checks} Prüfungen bestanden${fails ? ` – ${fails} FEHLER` : ''}`);
+// Kurzfristig: Plan für Sa/Mo/Mi steht, heute wird spontan „Zeit“ – passt heute sinnvoll hinein?
+{
+  const d = base(false);
+  d.settings.maxSessionsPerWeek = 3;
+  d.sessions.push(session('2026-11-25', [{ id: 'preacher-curl', sets: sets(3, 25, [10, 10, 9]) }]));
+  for (const x of ['2026-11-28', '2026-11-30', '2026-12-02']) d.availability[x] = 'yes';
+  run('Plan Sa/Mo/Mi (Limit 3, Mi 25.11. absolviert)', d, now);
+  d.availability[TODAY] = 'yes';
+  const p = run('… heute spontan Zeit', d, now);
+  ok(p.sessions.some((s) => s.date === TODAY), 'Spontaner heutiger Termin nicht eingeplant');
+}
+// Pausierte Übung (Beschwerden) wird nicht eingeplant; Pausen nur bei Leistungsabfall länger
+{
+  const d = base(false);
+  d.availability[TODAY] = 'yes';
+  d.exercises = d.exercises.map((e) => (e.id === 'overhead-ext' ? { ...e, pausedUntil: addDays(TODAY, 10), pausedReason: 'pain' as const } : e));
+  d.sessions.push(session('2026-11-24', [{ id: 'preacher-curl', sets: sets(4, 25, [12, 10, 8, 7]) }, { id: 'pushdown', sets: sets(3, 30, [12, 12, 11]) }]));
+  const p = run('Überkopf pausiert, Preacher fiel 12→7', d, now);
+  const s = p.sessions[0];
+  ok(!s.exercises.some((e) => e.exerciseId === 'overhead-ext'), 'Pausierte Übung geplant');
+  const pc = s.exercises.find((e) => e.exerciseId === 'preacher-curl');
+  const ex = d.exercises.find((e) => e.id === 'preacher-curl')!;
+  if (pc) ok(pc.restSec > ex.restSec && pc.why.includes('fielen'), 'Preacher: trotz Leistungsabfall keine begründete längere Pause');
+  const pd = s.exercises.find((e) => e.exerciseId === 'pushdown');
+  const exd = d.exercises.find((e) => e.id === 'pushdown')!;
+  if (pd) ok(pd.restSec === exd.restSec, 'Pushdown: Pause ohne Leistungsabfall verlängert');
+}
+// Frequenzfaktor ist einstellbar und wirkt überall
+{
+  const d = base(false);
+  d.availability[TODAY] = 'yes';
+  const a1 = buildPlan(d, now);
+  d.settings.freqFactor1 = 0.75;
+  const a2 = buildPlan(d, now);
+  ok(a1.spw === 1 && personalTarget(d, 'biceps', 1) > personalTarget({ ...d, settings: { ...d.settings, freqFactor1: 0.55 } }, 'biceps', 1), 'Frequenzfaktor wirkt nicht auf das Wochenziel');
+  ok(a2.goalNote.includes('0,75'), 'Wochenziel-Begründung zeigt geänderten Faktor nicht');
+}
+
+console.log(`\n${checks - fails}/${checks} Prüfungen bestanden${fails ? ` – ${fails} FEHLER` : ''} · ${warns} Plausibilitätshinweise (keine harten Regeln)`);
 if (fails) (globalThis as { process?: { exitCode?: number } }).process!.exitCode = 1;

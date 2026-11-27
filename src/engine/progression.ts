@@ -11,6 +11,8 @@ export interface Exposure {
   targetRir: number;
   feedback?: 'easy' | 'ok' | 'hard';
   decision?: 'accepted' | 'declined';
+  sessionId: string;
+  uid: string;
 }
 
 /** Vergangene Durchgänge einer Übung, neueste zuerst */
@@ -19,11 +21,11 @@ export function exposures(exerciseId: string, sessions: Session[]): Exposure[] {
   for (const s of sessions) {
     if (s.status !== 'done') continue;
     for (const se of s.exercises) {
-      if (se.exerciseId !== exerciseId || se.skipped) continue;
+      if (se.exerciseId !== exerciseId || se.skipped || se.excluded) continue;
       // Sätze ohne Gewicht zählen nur bei Körpergewicht (Gewicht = 0); sonst kann ohne Gewicht gar nicht gespeichert werden
       const sets = se.sets.filter((x) => x.done && x.reps != null && x.reps > 0).map((x) => (x.weight == null ? { ...x, weight: 0 } : x));
       if (!sets.length) continue;
-      out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir, feedback: se.feedback, decision: se.decision });
+      out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir, feedback: se.feedback, decision: se.decision, sessionId: s.id, uid: se.uid });
     }
   }
   return out.sort((a, b) => b.t - a.t);
@@ -91,7 +93,7 @@ export function adviseExercise(
   const reps = atW.map((s) => s.reps ?? 0);
   const rirs = atW.map((s) => s.rir).filter((r): r is number => r != null);
   const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
-  const res: ProgressionAdvice = { ...base, lastWeight: w, lastReps: last.sets.map((s) => s.reps ?? 0), lastDate: last.date, weight: w };
+  const res: ProgressionAdvice = { ...base, from: { sessionId: last.sessionId, uid: last.uid }, lastWeight: w, lastReps: last.sets.map((s) => s.reps ?? 0), lastDate: last.date, weight: w };
 
   // Körpergewicht ohne Zusatzlast: über Wiederholungen steigern, dann schwerere Variante/Zusatzgewicht
   if (ex.equipment === 'bodyweight' && w <= 0) {
@@ -194,7 +196,7 @@ export function adviseExercise(
       res.type = 'decrease';
       res.weight = lower;
       res.repTarget = repMin + 1;
-      res.text = `Zweimal in Folge unter ${repMin} Wdh. bei ${fmtNum(w)} kg → ${fmtNum(lower)} kg und sauber im Bereich ${repMin}–${res.repMax} aufbauen.${heavyNote}`;
+      res.text = `Deutliche Empfehlung: ${fmtNum(lower)} kg. Zweimal in Folge unter ${repMin} Wdh. bei ${fmtNum(w)} kg – mit weniger Gewicht wieder sauber im Bereich ${repMin}–${res.repMax} aufbauen.${heavyNote} Anderes Gerät oder Eingabefehler? Dann ablehnen und Grund angeben.`;
     } else if (deficit >= 3 && !lowEffort && !badDay && lower < w) {
       // einzelne deutlich schwache Einheit → vorsichtige Empfehlung, ablehnbar
       res.type = 'decrease';

@@ -100,7 +100,7 @@ export default function MusclesPage() {
                 {fmtNum(st.vol7)} / {fmtNum(target)} Sätze
               </span>
             </div>
-            <Bar value={st.vol7 / target} marker={minDose14(sel, s.profile.priorities, spw) / 2 / target} />
+            <Bar value={st.vol7 / target} marker={minDose14(sel, s.profile.priorities, spw, s.settings) / 2 / target} />
           </div>
           <div className="rounded-xl bg-raised p-3 text-[13px]">
             <div className="label mb-1">Empfohlener nächster Reiz</div>

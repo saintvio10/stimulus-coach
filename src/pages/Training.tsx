@@ -38,7 +38,7 @@ import { prSetIds, setPR } from '../engine/prs';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
-import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight, fmtMin } from '../lib/utils';
+import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight, fmtMin, addDays } from '../lib/utils';
 import { unlockAudio } from '../components/RestTimer';
 
 export default function Training() {
@@ -221,10 +221,21 @@ function Workout({ session }: { session: Session }) {
         mode={picker?.mode ?? 'add'}
         current={picker?.uid ? exMap.get(session.exercises.find((e) => e.uid === picker.uid)?.exerciseId ?? '') : undefined}
         onClose={() => setPicker(null)}
-        onPick={(ex) => {
+        onPick={(ex, reason) => {
           if (picker?.mode === 'swap' && picker.uid) {
+            const oldId = session.exercises.find((e) => e.uid === picker.uid)?.exerciseId;
             s.swapExercise(session.id, picker.uid, ex);
-            toast(`Ausgetauscht gegen ${ex.name}`);
+            if (reason && oldId) {
+              const until = addDays(dateKey(), reason === 'pain' ? 14 : 7);
+              s.mutate((d) => {
+                const o = d.exercises.find((x) => x.id === oldId);
+                if (o) {
+                  o.pausedUntil = until;
+                  o.pausedReason = reason;
+                }
+              });
+              toast(`Ausgetauscht – ${exMap.get(oldId)?.name ?? 'Übung'} pausiert bis ${fmtShortDay(until)}`);
+            } else toast(`Ausgetauscht gegen ${ex.name}`);
           } else {
             s.addExerciseToSession(session.id, ex);
             toast(`${ex.name} hinzugefügt`);
@@ -292,7 +303,9 @@ function ExerciseCard({
   const rec = se.recWeight ?? advice.weight;
   const prIds = useMemo(() => prSetIds(s.sessions, session, ex), [s.sessions, session, ex]);
   const incAdvice = (se.adviceType ?? advice.type) === 'increase';
-  const decAdvice = (se.adviceType ?? advice.type) === 'decrease' && !!advice.cautious;
+  // Reduktionen bleiben immer übersteuerbar (vorsichtig oder deutlich)
+  const decAdvice = (se.adviceType ?? advice.type) === 'decrease';
+  const [askReason, setAskReason] = useState(false);
   const lastW = se.lastWeight ?? advice.lastWeight;
   const doneN = se.sets.filter((x) => x.done).length;
   const complete = doneN === se.sets.length && se.sets.length > 0;
@@ -519,6 +532,7 @@ function ExerciseCard({
                   size="sm"
                   variant="secondary"
                   onClick={() => {
+                    if (rec! < lastW!) return setAskReason(true);
                     const first = se.sets.find((x) => !x.done);
                     if (first) s.setWeightFrom(session.id, se.uid, first.id, lastW);
                     s.patchExercise(session.id, se.uid, { decision: 'declined' });
@@ -527,6 +541,38 @@ function ExerciseCard({
                   Bei {fmtNum(lastW)} kg bleiben
                 </Button>
               </div>
+              {askReason && (
+                <div className="flex flex-col gap-2 rounded-xl bg-bg/50 p-3">
+                  <div className="text-[12.5px] text-muted">Warum bleibst du bei {fmtNum(lastW)} kg?</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        ['device', 'Anderes Gerät'],
+                        ['typo', 'Eingabefehler'],
+                        ['dayform', 'Schlechte Tagesform'],
+                        ['other', 'Anderer Grund'],
+                      ] as const
+                    ).map(([k, l]) => (
+                      <Chip
+                        key={k}
+                        active={false}
+                        className="h-8"
+                        onClick={() => {
+                          const first = se.sets.find((x) => !x.done);
+                          if (first) s.setWeightFrom(session.id, se.uid, first.id, lastW);
+                          s.patchExercise(session.id, se.uid, { decision: 'declined', declineReason: k });
+                          // Gerät/Eingabefehler: die letzte Einheit zählt nicht mehr für die Gewichtsempfehlung
+                          if ((k === 'device' || k === 'typo') && advice.from) s.patchExercise(advice.from.sessionId, advice.from.uid, { excluded: true });
+                          setAskReason(false);
+                          toast(k === 'device' || k === 'typo' ? 'Letzte Einheit wird für die Empfehlung ignoriert' : `Du bleibst bei ${fmtNum(lastW)} kg`);
+                        }}
+                      >
+                        {l}
+                      </Chip>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {se.decision && (
@@ -534,7 +580,9 @@ function ExerciseCard({
               {se.decision === 'accepted'
                 ? `✓ ${rec != null && lastW != null && rec < lastW ? 'Reduktion' : 'Steigerung'} auf ${fmtNum(rec)} kg übernommen.`
                 : rec != null && lastW != null && rec < lastW
-                  ? `Abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Die nächste Einheit entscheidet: liegen die Wdh. wieder klar unter dem Ziel, wird die Reduktion verbindlich.`
+                  ? se.declineReason === 'device' || se.declineReason === 'typo'
+                    ? `Abgelehnt (${se.declineReason === 'device' ? 'anderes Gerät' : 'Eingabefehler'}) – die betroffene Einheit zählt nicht mehr für die Empfehlung. Du bleibst bei ${fmtNum(lastW)} kg.`
+                    : `Abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Liegen die Wdh. wieder klar unter dem Ziel, empfiehlt die App die Reduktion deutlicher – du kannst sie aber immer übersteuern.`
                   : `Steigerung abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Lehnst du öfter ab, wartet die App künftig eine Wiederholung länger.`}{' '}
               <button className="text-accent" onClick={() => s.patchExercise(session.id, se.uid, { decision: undefined })}>
                 ändern
@@ -935,8 +983,9 @@ export function ExercisePicker({
   mode: 'add' | 'swap';
   current?: Exercise;
   onClose: () => void;
-  onPick: (e: Exercise) => void;
+  onPick: (e: Exercise, pauseReason?: 'pain' | 'device') => void;
 }) {
+  const [pauseReason, setPauseReason] = useState<'pain' | 'device' | null>(null);
   const exercises = useStore((s) => s.exercises);
   const homeSession = useStore((s) => s.sessions.find((x) => x.status === 'active')?.location === 'home');
   const [q, setQ] = useState('');
@@ -949,7 +998,7 @@ export function ExercisePicker({
   const rest = list.filter((e) => !same.includes(e));
   const groups = MUSCLES.map((m) => ({ m, items: rest.filter((e) => e.primary === m.id) })).filter((g) => g.items.length);
   const row = (e: Exercise) => (
-    <button key={e.id} onClick={() => onPick(e)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-raised">
+    <button key={e.id} onClick={() => onPick(e, mode === 'swap' ? pauseReason ?? undefined : undefined)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-raised">
       <ExerciseIcon id={e.id} pattern={e.pattern} muscles={e.muscles} size={44} />
       <div className="min-w-0">
         <div className="truncate text-[14px] font-medium">{e.name}</div>
@@ -964,6 +1013,22 @@ export function ExercisePicker({
   return (
     <Sheet open={open} onClose={onClose} title={mode === 'swap' ? `${current?.name ?? 'Übung'} austauschen` : 'Übung hinzufügen'}>
       <Input id="picker-q" placeholder="Suchen…" value={q} onChange={(e) => setQ(e.target.value)} className="mb-2" />
+      {mode === 'swap' && (
+        <div className="mb-3 rounded-xl bg-raised p-2.5">
+          <div className="mb-1.5 text-[12px] text-muted">Grund (optional) – bestimmt, ob {current?.name ?? 'die Übung'} künftig wieder eingeplant wird:</div>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip active={pauseReason === null} onClick={() => setPauseReason(null)} className="h-8">
+              Nur heute
+            </Chip>
+            <Chip active={pauseReason === 'pain'} onClick={() => setPauseReason('pain')} className="h-8">
+              Beschwerden (14 Tage pausieren)
+            </Chip>
+            <Chip active={pauseReason === 'device'} onClick={() => setPauseReason('device')} className="h-8">
+              Gerät fehlt/belegt (7 Tage)
+            </Chip>
+          </div>
+        </div>
+      )}
       <div className="mb-3 flex gap-1.5">
         <Chip active={loc === 'gym'} onClick={() => setWhere('gym')} className="h-8">
           Studio
