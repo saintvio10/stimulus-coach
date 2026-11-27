@@ -10,7 +10,7 @@ import { ExerciseIcon } from './ExerciseAnimation';
 import { Sheet } from './ui';
 
 /** „Gerät besetzt“: später machen oder gleichwertige Alternative nur für heute – ohne die Übung zu pausieren */
-export function BusySheet({ open, onClose, session, se, onOther, onDone }: { open: boolean; onClose: () => void; session: Session; se: SessionExercise; onOther?: () => void; onDone?: () => void }) {
+export function BusySheet({ open, onClose, session, se, onOther, onDone }: { open: boolean; onClose: () => void; session: Session; se: SessionExercise; onOther?: () => void; /** nach Aktion; bei Tausch mit der uid der Zeile, in der die neue Übung steht */ onDone?: (uid?: string) => void }) {
   const s = useStore();
   const toast = useToast((t) => t.show);
   const cur = s.exercises.find((e) => e.id === se.exerciseId);
@@ -52,11 +52,11 @@ export function BusySheet({ open, onClose, session, se, onOther, onDone }: { ope
             <button
               key={a.ex.id}
               onClick={() => {
-                s.swapExercise(session.id, se.uid, a.ex);
-                s.patchExercise(session.id, se.uid, { reason: `Gerät besetzt (statt ${cur.name})` });
+                const nu = s.swapExercise(session.id, se.uid, a.ex);
+                s.patchExercise(session.id, nu, { reason: `Gerät besetzt (statt ${cur.name})` });
                 toast(`Heute ${a.ex.name} statt ${cur.name}`);
                 onClose();
-                onDone?.();
+                onDone?.(nu);
               }}
               className="flex items-center gap-3 rounded-2xl bg-raised px-3 py-2.5 text-left"
             >

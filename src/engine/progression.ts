@@ -1,6 +1,7 @@
 import { readinessScore } from './readiness';
 import type { CheckIn, Exercise, ProgressionAdvice, Session, SetLog, Settings } from '../lib/types';
-import { e1rm, fmtNum, fmtShortDay, nextWeight, prevWeight } from '../lib/utils';
+import { e1rm, fmtNum, fmtShortDay, nextWeight, prevWeight, weightSteps } from '../lib/utils';
+import { DEFAULT_EXERCISES } from '../data/exercises';
 
 export interface Exposure {
   date: string;
@@ -53,6 +54,19 @@ interface AdviceCtx {
   /** aktuelles 7-Tage-Volumen / Ziel des Primärmuskels */
   volumeRatio?: number;
   today?: string;
+}
+
+/**
+ * Übung mit fester Last (z. B. 2 Flaschen) ausgereizt: letzte Einheit mit dem schwersten möglichen Gewicht,
+ * alle Sätze am oberen Ende des Bereichs. Dann soll der Plan die schwerere Variante (upgradeTo) nehmen.
+ */
+export function maxedOut(ex: Exercise, sessions: Session[], settings: Settings): boolean {
+  const last = exposures(ex.id, sessions)[0];
+  if (!last) return false;
+  const list = weightSteps(ex, settings).list;
+  const top = list?.length ? Math.max(...list) : Infinity;
+  const done = last.sets.filter((x) => x.reps);
+  return done.length > 0 && done.every((x) => (x.weight ?? 0) >= top - 1e-6 && (x.reps ?? 0) >= ex.repMax);
 }
 
 export function adviseExercise(...args: Parameters<typeof adviseExerciseCore>): ProgressionAdvice {
@@ -213,7 +227,10 @@ function adviseExerciseCore(
   } else if (atW.length >= 1 && reps.every((r) => r >= topReps) && next <= w && w > 0) {
     res.type = 'extend';
     res.repTarget = Math.min(30, Math.max(...reps));
-    res.text = `${fmtNum(w)} kg ist das schwerste verfügbare Gewicht und alle Sätze liegen am oberen Ende (${reps.join('/')}). Schwerer machen ohne Gewicht: 3 s ablassen, 1–2 s Pause in der Dehnung, 1½-Wiederholungen oder eine schwerere Variante – bis ~30 Wdh. nah am Versagen bleibt der Reiz wirksam.`;
+    const up = ex.upgradeTo ? DEFAULT_EXERCISES.find((x) => x.id === ex.upgradeTo) : undefined;
+    res.text = ex.homeLoad === 'bottles'
+      ? `Mit ${fmtNum(w)} kg pro Hand (Flasche) liegen alle Sätze am oberen Ende (${reps.join('/')}) – schwerer geht mit den Flaschen nicht.${up ? ` Nächster Schritt: „${up.name}“ mit deiner Hantel – beim nächsten Heimtraining plant die App diese Variante ein (eigener Verlauf).` : ' Schwerer machen ohne Gewicht: 3 s ablassen, oben 1–2 s halten, 1½-Wiederholungen – bis ~30 Wdh. nah am Versagen bleibt der Reiz wirksam.'}`
+      : `${fmtNum(w)} kg ist das schwerste verfügbare Gewicht und alle Sätze liegen am oberen Ende (${reps.join('/')}). Schwerer machen ohne Gewicht: 3 s ablassen, 1–2 s Pause in der Dehnung, 1½-Wiederholungen oder eine schwerere Variante – bis ~30 Wdh. nah am Versagen bleibt der Reiz wirksam.`;
   } else if (reps.every((r) => r >= repMax) && rirOk && bigJump) {
     res.type = 'extend';
     res.repTarget = Math.min(topReps, Math.max(...reps) + 1);
@@ -260,7 +277,9 @@ function adviseExerciseCore(
   // Stagnations- und Leistungsabfall-Erkennung über e1RM
   // Stagnation nie aus einem einzelnen schwachen Tag ableiten: solche Einheiten zählen nicht
   const series = hist.filter((h) => !(h.warmup === 'hard' || h.declineReason === 'dayform' || (readinessScore(ctx.checkIns[h.date]) ?? 100) < 45)).slice(0, 4).map((h) => bestE1rm(h.sets));
-  if (series.length >= 3) {
+  // Am schwersten verfügbaren Gewicht mit allen Sätzen am oberen Ende begrenzt das Equipment, nicht die Erholung → keine „Stagnation“
+  const equipmentCap = res.type === 'extend' && nextWeight(w, ex, ctx.settings) <= w;
+  if (series.length >= 3 && !equipmentCap) {
     const [a, b, c] = series;
     // nach bewusster Gewichtsreduktion keine „Stagnation“ melden (e1RM sinkt dann zwangsläufig)
     const olderWs = Math.max(...hist.slice(1, 4).map((h) => workingWeight(h.sets)));

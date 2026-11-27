@@ -52,6 +52,13 @@ export interface Exercise {
   unilateral?: boolean;
   /** einseitig: links/rechts verknüpft (eine Änderung gilt für beide Seiten) – Standard: verknüpft */
   linkSides?: boolean;
+  /**
+   * Last zu Hause: 'bottles' = je eine Flasche pro Hand (nur Flaschengewicht), 'oneDumbbell' = beide Hände an deiner einen Hantel
+   * (nur Hantelgewicht). Sonst: Flasche(n) oder Hantel in einer Hand.
+   */
+  homeLoad?: 'bottles' | 'oneDumbbell';
+  /** schwerere Variante, wenn diese Übung ausgereizt ist (z. B. Flaschen → einarmig mit Hantel) */
+  upgradeTo?: string;
   /** 'home' = Übung für Training ohne Gym (wird im Studio-Plan nie eingeplant) */
   location?: 'home';
   /** vorübergehend nicht einplanen (z. B. Beschwerden, Gerät fehlt) – bis einschließlich Datum */

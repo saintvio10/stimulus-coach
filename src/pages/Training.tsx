@@ -48,7 +48,7 @@ import { JOINT_LABEL, painConflict } from '../engine/joints';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
-import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight, fmtMin, addDays } from '../lib/utils';
+import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight, fmtMin, addDays, loadHint } from '../lib/utils';
 import { unlockAudio } from '../components/RestTimer';
 
 export default function Training() {
@@ -88,6 +88,7 @@ function PlanView() {
               <div>
                 <div className="label">Empfehlung für heute</div>
                 <h2 className="mt-1 text-[24px] font-semibold leading-tight">{plan.label}</h2>
+                {plan.focus && <div className="mt-0.5 text-[14px] font-medium text-accent">Heute Schwerpunkt {plan.focus}</div>}
                 <p className="tnum mt-0.5 text-[13px] text-muted">
                   {minutes} min verfügbar · geschätzt {plan.estMinutes} min · {plan.exercises.reduce((a, p) => a + p.sets, 0)} Arbeitssätze
                 </p>
@@ -249,7 +250,8 @@ function Workout({ session }: { session: Session }) {
           se={session.exercises.find((e) => e.uid === busyUid)!}
           onClose={() => setBusyUid(null)}
           onOther={() => setPicker({ mode: 'swap', uid: busyUid })}
-          onDone={() => {
+          onDone={(nu) => {
+            if (nu) return void setOpenUid(nu);
             const nxt = session.exercises.find((e) => e.uid !== busyUid && !e.skipped && e.sets.some((x) => !x.done));
             if (nxt) setOpenUid(nxt.uid);
           }}
@@ -267,7 +269,8 @@ function Workout({ session }: { session: Session }) {
         onPick={(ex, reason) => {
           if (picker?.mode === 'swap' && picker.uid) {
             const oldId = session.exercises.find((e) => e.uid === picker.uid)?.exerciseId;
-            s.swapExercise(session.id, picker.uid, ex);
+            const nu = s.swapExercise(session.id, picker.uid, ex);
+            setOpenUid(nu);
             if (reason && oldId) {
               const until = addDays(dateKey(), reason === 'pain' ? 14 : 7);
               s.mutate((d) => {
@@ -525,14 +528,14 @@ function ExerciseCard({
           <div className="grid grid-cols-4 gap-2">
             <Big label="Sätze" value={String(se.sets.length)} />
             <Big label="Wdh." value={`${se.repMin}–${se.repMax}`} />
-            <Big label="Gewicht" value={ex.equipment === 'bodyweight' && !rec ? 'Körper' : rec != null ? fmtNum(rec) : 'frei'} unit={rec != null && !(ex.equipment === 'bodyweight' && !rec) ? 'kg' : undefined} accent />
+            <Big label={ex.homeLoad === 'oneDumbbell' ? 'Hantel' : ex.homeLoad === 'bottles' ? 'Flasche' : 'Gewicht'} value={ex.equipment === 'bodyweight' && !rec ? 'Körper' : rec != null ? fmtNum(rec) : 'frei'} unit={rec != null && !(ex.equipment === 'bodyweight' && !rec) ? (ex.equipment === 'dumbbell' && ex.homeLoad !== 'oneDumbbell' ? 'kg/Hand' : 'kg') : undefined} accent />
             <Big label="Pause" value={fmtClock(se.restSec)} />
           </div>
           {/* Ziel heute & wann erhöhen – aus derselben Regel wie Karte und Erklärung */}
           <div className="flex flex-col gap-1.5 rounded-2xl bg-raised px-3.5 py-3 text-[13px]">
             <div>
               <span className="font-semibold">Ziel heute: </span>
-              {rec != null && rec > 0 ? `${fmtNum(se.sets.find((x) => !x.done)?.weight ?? rec)} kg` : ex.equipment === 'bodyweight' ? 'Körpergewicht' : 'Gewicht wählen'} × {se.sets.find((x) => !x.done)?.reps ?? advice.repTarget}+ Wdh. pro Satz ·
+              {rec != null && rec > 0 ? `${fmtNum(se.sets.find((x) => !x.done)?.weight ?? rec)} kg${loadHint(ex) ? ` ${loadHint(ex)}` : ''}` : ex.equipment === 'bodyweight' ? 'Körpergewicht' : 'Gewicht wählen'} × {se.sets.find((x) => !x.done)?.reps ?? advice.repTarget}+ Wdh. pro Satz ·
               {` ${se.targetRir} Wdh. Reserve`}
               {ex.unilateral ? ' · je Seite' : ''}
             </div>

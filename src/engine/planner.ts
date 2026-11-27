@@ -5,7 +5,7 @@ import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/type
 import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor, fmtMin } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent, recoveryInfo } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
-import { adviseExercise, exposures, bestE1rm } from './progression';
+import { adviseExercise, exposures, bestE1rm, maxedOut } from './progression';
 import { readinessAdjust, readinessScore } from './readiness';
 import { timeEstimator } from './timing';
 
@@ -117,6 +117,8 @@ export interface PlannedSession {
   at: number;
   templateId: TemplateId;
   label: string;
+  /** tatsächlicher Schwerpunkt, wenn der Name („Ganzkörper …“) nicht zum Inhalt passt, z. B. „Beine & Bauch“ */
+  focus?: string;
   minutes: number;
   estMinutes: number;
   exercises: PlannedExercise[];
@@ -141,7 +143,14 @@ export interface Plan {
   notes: string[];
   horizonDays: string[];
   /** Tage mit Zeit, an denen bewusst pausiert wird */
-  restDays: { date: string; reason: string; kind?: 'cap' | 'consecutive' | 'spacing'; because?: 'today' | 'preferred' }[];
+  restDays: {
+    date: string;
+    reason: string;
+    kind?: 'cap' | 'consecutive' | 'spacing';
+    because?: 'today' | 'preferred';
+    /** kein verfügbarer Tag im Planungsfenster ist mit deinen Limits vereinbar – ein anderer Tag kann nicht nachrücken */
+    noAlternative?: boolean;
+  }[];
   /** Einheiten pro 7 Tage, auf die die Wochenziele ausgelegt sind (gilt für alle Ansichten) */
   spw: number;
   /** Erklärung des Wochenziels */
@@ -252,9 +261,19 @@ export function buildSession(o: BuildOpts): PlannedSession {
   // Beschwerden aus dem heutigen Check-in: Übungen, die das Gelenk stark belasten, heute ersetzen
   const pain = isToday ? data.checkIns[o.date]?.pain : undefined;
   const painSkipped: string[] = [];
-  const candidates = data.exercises.filter((e) =>
-    !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (painConflict(e, pain).length ? (painSkipped.push(e.name), false) : true) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home'),
-  );
+  const upgraded: { from: Exercise; to: Exercise }[] = [];
+  const usable = (e: Exercise) =>
+    !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home');
+  const candidates = data.exercises.filter((e) => {
+    if (!usable(e)) return false;
+    if (painConflict(e, pain).length) return void painSkipped.push(e.name), false;
+    // Feste Last ausgereizt (z. B. 2 Flaschen am oberen Ende) → schwerere Variante statt dieser Übung
+    if (e.upgradeTo && maxedOut(e, data.sessions, data.settings)) {
+      const up = data.exercises.find((x) => x.id === e.upgradeTo);
+      if (up && usable(up) && !painConflict(up, pain).length) return void upgraded.push({ from: e, to: up }), false;
+    }
+    return true;
+  });
   const history = new Set<string>();
   const recent = new Set<string>();
   for (const s of data.sessions) {
@@ -625,6 +644,9 @@ export function buildSession(o: BuildOpts): PlannedSession {
     if (cautious.length)
       reasonsPre.push(`Ohne Check-in vorsichtiger (größere Unsicherheit): je 1 Satz weniger bei ${cautious.join(', ')}. Mit Check-in ohne Muskelkater entfällt das – und die ersten Sätze entscheiden über Anpassungen.`);
   }
+  for (const u of upgraded)
+    if (planned.some((x) => x.exerciseId === u.to.id))
+      reasonsPre.push(`${u.from.name} ist ausgereizt (alle Sätze am oberen Ende mit dem schwersten möglichen Gewicht) → jetzt „${u.to.name}“ mit eigenem Verlauf.`);
   if (painSkipped.length) reasonsPre.push(`Beschwerden (${(pain ?? []).map((j) => JOINT_LABEL[j]).join(', ')}): heute nicht eingeplant – ${[...new Set(painSkipped)].slice(0, 6).join(', ')}. Stattdessen gelenkschonendere Alternativen.`);
   // Satzsummen je Muskel aus den endgültigen Übungen (Begründung = tatsächliche Planung)
   for (const m of MUSCLE_IDS) sSets[m] = 0;
@@ -727,6 +749,32 @@ export function buildSession(o: BuildOpts): PlannedSession {
     coverageNote,
     coverage: o.coverage ? { covered, missing: missing.map((x) => x.label) } : undefined,
   };
+}
+
+/**
+ * Schwerpunkt einer „Ganzkörper“-Einheit, wenn sie tatsächlich fast nur eine Körperregion trifft
+ * (z. B. Oberkörper vom Vortag noch belastet → nur Beine & Bauch). Basis: Arbeitssätze nach Zielmuskel.
+ */
+export function sessionFocus(label: string, exercises: { exerciseId: string; sets: number }[], all: Exercise[]): string | undefined {
+  if (!/Ganzkörper/.test(label)) return undefined;
+  const map = new Map(all.map((e) => [e.id, e]));
+  let legs = 0, abs = 0, arms = 0, upper = 0;
+  for (const pe of exercises) {
+    const m = map.get(pe.exerciseId)?.primary;
+    if (!m) continue;
+    if (m === 'abs') abs += pe.sets;
+    else if (['quads', 'hamstrings', 'glutes', 'calves'].includes(m)) legs += pe.sets;
+    else {
+      upper += pe.sets;
+      if (['biceps', 'triceps', 'sideDelts', 'rearDelts', 'forearms'].includes(m)) arms += pe.sets;
+    }
+  }
+  const total = legs + abs + upper;
+  if (total < 4) return undefined;
+  let f: string | undefined;
+  if ((legs + abs) / total >= 0.8) f = legs && abs ? 'Beine & Bauch' : legs ? 'Beine' : 'Bauch';
+  else if (upper / total >= 0.85) f = arms / upper >= 0.7 ? 'Arme & Schultern' : 'Oberkörper';
+  return f && !label.includes(f) ? f : undefined;
 }
 
 // ───────────────────────── Strategie ─────────────────────────
@@ -894,8 +942,9 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     const worstWindow = (pick: string[]) => {
       const all = [...new Set([...sessionDates, ...pick])];
       let worst = { n: 0, from: '', to: '' };
+      // Fenster, die am geplanten Tag enden, zuerst – liest sich in der Begründung natürlicher („Freitag bis heute“)
       for (const d of pick)
-        for (let k = 0; k < 7; k++) {
+        for (let k = 6; k >= 0; k--) {
           const from = addDays(d, -k);
           const to = addDays(from, 6);
           const n = all.filter((x) => x >= from && x <= to).length;
@@ -906,7 +955,9 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     const fixedTentative = new Set(dates.filter((d) => tentativeSet.has(d)));
     const preferSet = new Set((data.planOptions.preferDates ?? []).filter((d) => d >= today));
     const n = dates.length;
-    let best: string[] = dates;
+    // Ist keine Auswahl mit den Limits vereinbar, bleibt der Plan leer (Ruhetage mit Begründung) –
+    // nie auf die ursprüngliche, limitverletzende Auswahl zurückfallen.
+    let best: string[] = [];
     let bestScore = -Infinity;
     for (let mask = 1; mask < 1 << n; mask++) {
       const pick = dates.filter((_, i) => mask & (1 << i));
@@ -943,29 +994,63 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         pick.filter((d) => fixedTentative.has(d)).length * 5;
       if (score > bestScore) (bestScore = score), (best = pick);
     }
-    for (const d of dates) {
-      if (best.includes(d) || tentativeSet.has(d)) continue;
-      const set = new Set([...best, ...doneDates, d]);
+    /** längste Kette von Trainingstagen um d (absolviert + gewählt + d) */
+    const runAt = (d: string, chosen: string[]) => {
+      const set = new Set([...chosen, ...doneDates, d]);
       let run = 1;
       for (let k = 1; set.has(addDays(d, -k)); k++) run++;
       for (let k = 1; set.has(addDays(d, k)); k++) run++;
+      return run;
+    };
+    /** frühester Tag nach d, an dem eine Einheit mit beiden Limits vereinbar wäre (nur absolvierte + gewählte Tage zählen) */
+    const nextAllowed = (d: string) => {
+      for (let k = 1; k <= 14; k++) {
+        const x = addDays(d, k);
+        if (best.includes(x)) return x;
+        if (runAt(x, best) <= maxCons && worstWindow([...best, x]).n <= cap) return x;
+      }
+      return null;
+    };
+    const noAlternative = !best.length && dates.length > 0;
+    /** Tagesname mitten im Satz („bis heute“, „ab morgen“) */
+    const relIn = (x: string) => {
+      const t = relDayLabel(x, today).split(',')[0];
+      return ['Heute', 'Morgen', 'Übermorgen', 'Gestern'].includes(t) ? t.toLowerCase() : t;
+    };
+    for (const d of dates) {
+      if (best.includes(d) || (tentativeSet.has(d) && !noAlternative)) continue;
+      const run = runAt(d, best);
       const ww = worstWindow([...best, d]);
+      const overCap = ww.n > cap;
+      const overRun = run > maxCons;
       const prefHit = best.filter((x) => preferSet.has(x));
       // „Heute hat Vorrang“ nur, wenn dieser Tag statt heute wirklich ins Limit gepasst hätte
-      const todayWins = ww.n > cap && best.includes(today) && data.availability[today] === 'yes' && d > today && worstWindow([...best.filter((x) => x !== today), d]).n <= cap;
+      const todayWins = overCap && best.includes(today) && data.availability[today] === 'yes' && d > today && worstWindow([...best.filter((x) => x !== today), d]).n <= cap;
       const chosen = best.map((x) => relDayLabel(x, today).split(',')[0]).join(', ');
+      const dayTxt = d === today ? 'Heute' : relDayLabel(d, today).split(',')[0];
+      const parts = [
+        overRun ? `der ${run}. Trainingstag in Folge (Limit ${maxCons})` : '',
+        overCap ? `die ${ww.n}. Einheit innerhalb von 7 Tagen (${relIn(ww.from)} bis ${relIn(ww.to)}, Limit ${cap})` : '',
+      ].filter(Boolean);
+      const limitTxt = `${dayTxt} wäre ${parts.join(' und ')}`;
+      const nx = overCap || overRun ? nextAllowed(d) : null;
+      let reason: string;
+      if (noAlternative && (overCap || overRun)) {
+        reason = `Ruhetag: ${limitTxt} – absolvierte Einheiten zählen mit (Limits im Profil). Kein anderer verfügbarer Tag passt gerade in deine Limits, deshalb plant die App hier bewusst kein Training.${nx ? ` Deine Limits erlauben die nächste Einheit ab ${relIn(nx)}.` : ''}`;
+      } else if (overCap) {
+        reason = `${prefHit.length && !preferSet.has(d) ? `Verschoben: Du hast ${prefHit.map((x) => relDayLabel(x, today).split(',')[0]).join(', ')} bevorzugt${todayWins ? ' und heute hast du sicher Zeit' : ''}. ` : todayWins ? 'Verschoben: Heute hast du sicher Zeit – das hat Vorrang vor einem späteren Termin. ' : 'Ruhetag: '}${limitTxt} – absolvierte mitgezählt, Limits im Profil. Eingeplant: ${chosen}${!todayWins && !prefHit.length ? ' – gewählt nach gleichmäßigen Abständen und Tagen mit eigener Trainingszeit' : ''}. Das Wochenvolumen wird darauf verteilt.`;
+      } else if (overRun) {
+        reason = `Ruhetag: ${limitTxt} – absolvierte mitgezählt, Limit im Profil. Die Wochenarbeit wird auf die übrigen Tage verteilt.`;
+      } else reason = 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – mehr Abstand zwischen Belastungen derselben Muskeln.';
       restDays.push({
         date: d,
-        kind: ww.n > cap ? 'cap' : run > maxCons ? 'consecutive' : 'spacing',
-        because: ww.n > cap ? (prefHit.length && !preferSet.has(d) ? 'preferred' : todayWins ? 'today' : undefined) : undefined,
-        reason:
-          ww.n > cap
-            ? `${prefHit.length && !preferSet.has(d) ? `Verschoben: Du hast ${prefHit.map((x) => relDayLabel(x, today).split(',')[0]).join(', ')} bevorzugt${todayWins ? ' und heute hast du sicher Zeit' : ''}. ` : todayWins ? 'Verschoben: Heute hast du sicher Zeit – das hat Vorrang vor einem späteren Termin. ' : 'Ruhetag: '}Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Eingeplant: ${chosen}${!todayWins && !prefHit.length ? ' – gewählt nach gleichmäßigen Abständen und Tagen mit eigener Trainingszeit' : ''}. Das Wochenvolumen wird darauf verteilt.`
-            : run > maxCons
-              ? `Ruhetag: Sonst wären es ${run} Trainingstage am Stück (absolvierte mitgezählt, Limit ${maxCons} im Profil). Die Wochenarbeit wird auf die übrigen Tage verteilt.`
-              : 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – mehr Abstand zwischen Belastungen derselben Muskeln.',
+        kind: overRun && !overCap ? 'consecutive' : overCap ? 'cap' : 'spacing',
+        because: overCap && !noAlternative ? (prefHit.length && !preferSet.has(d) ? 'preferred' : todayWins ? 'today' : undefined) : undefined,
+        noAlternative: noAlternative || undefined,
+        reason,
       });
     }
+    if (noAlternative) notes.push('Kein verfügbarer Tag passt gerade in deine Limits (Tage am Stück / Einheiten pro 7 Tage) – Ruhetag statt Training.');
     dates = best;
   }
 
@@ -1162,6 +1247,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     `Wochenziele ausgelegt auf ${fmtNum(spw)} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage. Bezugszeitraum ist dasselbe rollierende 7-Tage-Fenster wie beim geleisteten Volumen: absolvierte und geplante Einheiten darin zusammen (${recentCount} absolviert in den letzten 7 Tagen, ${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'keine im Plan'}; vorläufige zählen halb${windowSure !== windowCount ? `, sicher wären es ${windowSure}` : ''}). Eine abgeschlossene Einheit ändert das Ziel daher nicht – nur eine Änderung deiner Verfügbarkeit. ` +
     (spw < 3 ? `Bei ${fmtNum(spw)} Einheit${spw === 1 ? '' : 'en'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw, data.settings), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Startannahme, im Profil einstellbar. ` : '') +
     'Gezählt: direkte Sätze voll, indirekte mit 0,5 (Pelland 2026). Geplante Sätze sind eine Prognose.';
+  for (const ps of sessions) if (!ps.rest) ps.focus = sessionFocus(ps.label, ps.exercises, data.exercises);
   return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays, spw, goalNote };
 }
 

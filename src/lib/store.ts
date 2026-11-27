@@ -203,7 +203,11 @@ interface Store extends AppData {
   /** „Zeit übrig“: offene Sätze je Übung auf keep kürzen, Rest als ausgelassen dokumentieren */
   trimSession: (sessionId: string, keep: Record<string, number>) => void;
   addExerciseToSession: (sessionId: string, exercise: Exercise, afterUid?: string, sets?: number) => void;
-  swapExercise: (sessionId: string, exUid: string, exercise: Exercise) => void;
+  /**
+   * Übung tauschen. Bereits erledigte Sätze bleiben bei der bisherigen Übung (eigene Historie/Empfehlung);
+   * nur die offenen Sätze wandern in eine neue Zeile mit der neuen Übung. Gibt die uid der Zeile mit der neuen Übung zurück.
+   */
+  swapExercise: (sessionId: string, exUid: string, exercise: Exercise) => string;
   /** „Gerät besetzt – später“: Übung ans Ende der Einheit verschieben */
   deferExercise: (sessionId: string, exUid: string) => void;
   moveExercise: (sessionId: string, exUid: string, dir: -1 | 1) => void;
@@ -408,24 +412,48 @@ export const useStore = create<Store>()(
           },
         swapExercise: (sid, xu, exercise) => {
           const adv = adviseExercise(exercise, get().sessions.filter((x) => x.id !== sid), { settings: get().settings, checkIns: get().checkIns });
+          let outUid = xu;
           mutSession(sid, (s) => {
-            const se = s.exercises.find((e) => e.uid === xu);
-            if (!se) return;
-            se.exerciseId = exercise.id;
-            se.repMin = exercise.repMin;
-            se.repMax = adv.repMax ?? exercise.repMax;
-            se.targetRir = exercise.targetRir;
-            se.restSec = exercise.restSec;
-            se.recWeight = adv.weight;
-            se.adviceText = adv.text;
-            se.adviceType = adv.type;
-            se.lastWeight = adv.lastWeight;
-            se.decision = undefined;
-            se.why = undefined;
-            se.reason = 'Ausgetauscht';
-            // offene Sätze mit dem Gewicht vom letzten Mal (bzw. Empfehlung) und Ziel-Wiederholungen füllen
-            se.sets = se.sets.map((x) => (x.done ? x : { ...x, weight: adv.weight, reps: adv.repTarget, rir: exercise.targetRir }));
+            const i = s.exercises.findIndex((e) => e.uid === xu);
+            const old = s.exercises[i];
+            if (!old) return;
+            const done = old.sets.filter((x) => x.done);
+            const open = old.sets.filter((x) => !x.done);
+            const oldName = get().exercises.find((e) => e.id === old.exerciseId)?.name;
+            const fresh: SessionExercise = {
+              uid: done.length ? uid() : old.uid,
+              exerciseId: exercise.id,
+              superset: done.length ? undefined : old.superset,
+              repMin: exercise.repMin,
+              repMax: adv.repMax ?? exercise.repMax,
+              targetRir: exercise.targetRir,
+              restSec: exercise.restSec,
+              recWeight: adv.weight,
+              adviceText: adv.text,
+              adviceType: adv.type,
+              lastWeight: adv.lastWeight,
+              reason: oldName ? `Ausgetauscht (statt ${oldName})` : 'Ausgetauscht',
+              // Satz-Begründung, Übungserklärung und Live-/Aufwärm-Status gehörten zur alten Übung
+              skipped: false,
+              note: '',
+              // offene Sätze mit dem Gewicht vom letzten Mal (bzw. Empfehlung) und Ziel-Wiederholungen füllen
+              sets: (open.length ? open : done.map(() => ({ id: uid(), weight: null, reps: null, rir: null, failure: false, done: false, note: '' }) as SetLog)).map((x) => ({
+                ...x,
+                weight: adv.weight,
+                reps: adv.repTarget,
+                rir: exercise.targetRir,
+                repsL: undefined,
+                repsR: undefined,
+              })),
+            };
+            if (done.length) {
+              // alte Übung behält ihre erledigten Sätze – als abgeschlossen
+              old.sets = done;
+              s.exercises.splice(i + 1, 0, fresh);
+            } else s.exercises[i] = fresh;
+            outUid = fresh.uid;
           });
+          return outUid;
         },
         deferExercise: (sid, xu) =>
           mutSession(sid, (s) => {

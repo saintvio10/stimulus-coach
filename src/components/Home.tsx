@@ -405,6 +405,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
             <div>
               <div className="text-[13px] text-muted">{planned.tentative ? 'Vielleicht – falls du Zeit hast' : isToday ? 'Deine Empfehlung' : 'Geplant'}</div>
               <h2 className="mt-0.5 text-[28px] font-semibold leading-[1.1] tracking-tight">{planned.label}</h2>
+              {planned.focus && <div className="mt-1 text-[14px] font-medium text-accent">{isToday ? 'Heute' : 'Diesmal'} Schwerpunkt {planned.focus}</div>}
             </div>
             <DayDuration date={planned.date} plan={planned} />
             {isToday &&
@@ -517,7 +518,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                   : `Bei ${s.settings.sessionsPerWeek}× pro Woche wird dieser Tag gerade nicht gebraucht.${nextPlanned ? ` Nächste Einheit: ${relDayLabel(nextPlanned.date)}.` : ''}`}
             </p>
             <div className="flex flex-wrap gap-2">
-              {restHere && (restHere.kind === 'cap' || restHere.kind === 'consecutive') && avail !== 'no' && (
+              {restHere && (restHere.kind === 'cap' || restHere.kind === 'consecutive') && !restHere.noAlternative && avail !== 'no' && (
                 <Button
                   variant={isToday ? 'secondary' : 'primary'}
                   onClick={() => {
@@ -768,6 +769,7 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
                     {p.tentative && ' · Vielleicht'}
                   </div>
                   <div className="mt-1 max-w-[60%] text-[20px] font-semibold leading-tight text-white">{p.label.split(' (')[0]}</div>
+                  {p.focus && <div className="mt-0.5 max-w-[60%] text-[12.5px] font-medium text-white/80">Schwerpunkt {p.focus}</div>}
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">~{fmtMin(p.estMinutes)}</span>
                     <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">{p.exercises.length} Übungen</span>
@@ -807,7 +809,7 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
               Du kannst trotzdem trainieren – tippe den Tag dann einfach erneut an oder starte ihn über „Training“. Regeln (max. Tage am Stück, max. Einheiten pro Woche)
               lassen sich im Profil anpassen.
             </p>
-            {(plan.restDays.find((r) => r.date === restOpen.date)?.kind ?? 'spacing') !== 'spacing' && (
+            {(plan.restDays.find((r) => r.date === restOpen.date)?.kind ?? 'spacing') !== 'spacing' && !plan.restDays.find((r) => r.date === restOpen.date)?.noAlternative && (
               <Button
                 variant="primary"
                 onClick={() => {

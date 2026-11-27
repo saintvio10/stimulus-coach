@@ -8,7 +8,7 @@ import { adviseExercise } from '../engine/progression';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
-import { cn, fmtMin, fmtNum, nextWeight, prevWeight } from '../lib/utils';
+import { cn, fmtMin, fmtNum, loadHint, nextWeight, prevWeight } from '../lib/utils';
 import { sessionTiming } from '../engine/timing';
 import { exerciseVerdict, setFeedback } from '../engine/verdict';
 import { unlockAudio } from './RestTimer';
@@ -25,6 +25,16 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const s = useStore();
   const list = session.exercises.filter((e) => !e.skipped);
   const [idx, setIdx] = useState(() => Math.max(0, list.findIndex((e) => e.uid === startUid)));
+  // nach „Gerät besetzt → andere Übung“: zur Zeile mit der neuen Übung springen (erledigte Sätze bleiben bei der alten)
+  const [jumpUid, setJumpUid] = useState<string | null>(null);
+  useEffect(() => {
+    if (!jumpUid) return;
+    const i = list.findIndex((e) => e.uid === jumpUid);
+    if (i >= 0) {
+      setIdx(i);
+      setJumpUid(null);
+    }
+  }, [jumpUid, list]);
   const se = list[Math.min(idx, list.length - 1)];
   const ex = s.exercises.find((e) => e.id === se?.exerciseId);
   const prior = useMemo(() => s.sessions.filter((x) => x.id !== session.id), [s.sessions, session.id]);
@@ -282,7 +292,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           <div className="flex flex-col gap-3 rounded-[24px] bg-white/[0.06] p-4">
             {ex.unilateral ? (
               <>
-                <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
+                <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} hint={loadHint(ex) || undefined} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
                 <div className="relative grid grid-cols-2 gap-3">
                   <Stepper label="Links · Wdh." value={String(reps)} onMinus={() => setL(Math.max(0, reps - 1))} onPlus={() => setL(reps + 1)} />
                   <Stepper label="Rechts · Wdh." value={String(repsR)} onMinus={() => setR(Math.max(0, repsR - 1))} onPlus={() => setR(repsR + 1)} />
@@ -303,7 +313,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
               </>
             ) : (
               <div className="grid grid-cols-2 gap-3">
-                <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
+                <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} hint={loadHint(ex) || undefined} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
                 <Stepper label="Wiederholungen" value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
               </div>
             )}
@@ -370,7 +380,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
         {/* Verlauf: Volumen & Sätze, heute vs. frühere Einheiten */}
         <FocusProgress part="history" ex={ex} se={se} sessionId={session.id} sessions={s.sessions} advice={advice} />
 
-        {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} />}
+        {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} onDone={(nu) => nu && setJumpUid(nu)} />}
 
         {/* Schwebender Start-Knopf: groß, mittig über allem */}
         {awaiting && !hideStart && !fbUid && !busy && (
@@ -463,10 +473,13 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   );
 }
 
-function Stepper({ label, value, onMinus, onPlus }: { label: string; value: string; onMinus: () => void; onPlus: () => void }) {
+function Stepper({ label, value, onMinus, onPlus, hint }: { label: string; value: string; onMinus: () => void; onPlus: () => void; hint?: string }) {
   return (
     <div className="rounded-2xl bg-white/[0.05] p-2">
-      <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-white/45">{label}</div>
+      <div className="truncate px-1 text-[11px] font-semibold uppercase tracking-wider text-white/45">
+        {label}
+        {hint && <span className="ml-1 normal-case tracking-normal text-white/60">{hint}</span>}
+      </div>
       <div className="mt-1 flex items-center justify-between gap-1">
         <button onClick={onMinus} className="grid h-10 w-10 place-items-center rounded-full bg-white/10" aria-label={`${label} verringern`}>
           <Minus size={16} />

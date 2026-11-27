@@ -222,7 +222,7 @@ export const RULES: { title: string; body: string }[] = [
   },
   {
     title: '4. Einheit füllen (Nutzen pro Minute)',
-    body: 'Schrittweise wird die Option mit dem höchsten Nutzen pro Minute hinzugefügt: neue Übung (2 Sätze + Rüstzeit/Aufwärmen) oder ein weiterer Satz (max. 4). Der Nutzen eines Satzes ist die Summe der Muskelbeiträge × abnehmender Grenznutzen; Belastung ermüdeter Synergisten zieht Punkte ab. Bonus für Dehnungsbetonung, Favoriten und Übungen mit Historie, Malus für dieselbe Übung < 36 h. Max. 9 Übungen, max. 2 pro Zielmuskel.',
+    body: 'Schrittweise wird die Option mit dem höchsten Nutzen pro Minute hinzugefügt: neue Übung (2 Sätze + Rüstzeit/Aufwärmen) oder ein weiterer Satz (max. 4 pro Übung, 5 nur bei Seitheben und Waden – kleine, wenig ermüdende Muskeln; in Kurzeinheiten bis 50 min max. 4, und bei nur einem Termin in Sicht („Ganzkörper“ breit) max. 3 pro Übung, damit mehr Muskeln drankommen). Ein 4./5. Satz nur bei Top-2-Priorität oder wenn dem Muskel im 7-Tage-Fenster sonst Sätze fehlen. Nach harten Sätzen kannst du jede Übung mit einem Tipp beenden („Übung fertig“ bzw. im Fokusmodus „Übung hier beenden“) – der Plan rechnet mit den tatsächlich gemachten Sätzen. Der Nutzen eines Satzes ist die Summe der Muskelbeiträge × abnehmender Grenznutzen; Belastung ermüdeter Synergisten zieht Punkte ab. Bonus für Dehnungsbetonung, Favoriten und Übungen mit Historie, Malus für dieselbe Übung < 36 h. Max. 9 Übungen, max. 2 pro Zielmuskel.',
   },
   {
     title: '5. Simulation der Folgetage',

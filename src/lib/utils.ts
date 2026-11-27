@@ -118,6 +118,10 @@ export function weightSteps(ex: Exercise, s: Settings): { list?: number[]; step:
     const b = s.homeBottle || 1;
     const h = s.homeDumbbell || 10;
     const base = ex.equipment === 'bodyweight' ? [0] : [];
+    // je eine Flasche pro Hand: schwerer geht pro Hand nicht (2 Flaschen in einer Hand fehlen dann der anderen)
+    if (ex.homeLoad === 'bottles') return { list: [b], step: 0 };
+    // beide Hände an der einen Hantel
+    if (ex.homeLoad === 'oneDumbbell') return { list: [h], step: 0 };
     return { list: [...new Set([...base, b, 2 * b, h])].sort((x, y) => x - y), step: 0 };
   }
   if (ex.increment) return { step: ex.increment };
@@ -154,6 +158,14 @@ export function prevWeight(current: number, ex: Exercise, s: Settings): number {
   }
   const v = r2(Math.ceil(current / step - 1e-6) * step - step);
   return v > 0 ? v : current;
+}
+
+/** Wofür das Gewicht gilt – bei Kurzhanteln/Flaschen „pro Hand“ */
+export function loadHint(ex: Exercise): string {
+  if (ex.homeLoad === 'bottles') return 'pro Hand (Flasche)';
+  if (ex.homeLoad === 'oneDumbbell') return 'eine Hantel, beidhändig';
+  if (ex.equipment === 'dumbbell') return 'pro Hand';
+  return '';
 }
 
 /** Rundet auf nächste verfügbare Stufe */
