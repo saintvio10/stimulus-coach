@@ -346,7 +346,7 @@ export function Toast({ message }: { message: string | null }) {
 }
 
 /** Breiter Fortschrittsbalken mit grünem Verlauf und Beschriftung im Balken */
-export function GlowProgress({ value, label, className, height = 44 }: { value: number; label?: ReactNode; className?: string; height?: number }) {
+export function GlowProgress({ value, label, className, height = 44, children }: { value: number; label?: ReactNode; className?: string; height?: number; children?: ReactNode }) {
   const v = Math.max(0, Math.min(1, value));
   const onFill = v > 0.62; // Text liegt auf dem hellen Ende des Verlaufs
   return (
@@ -362,13 +362,15 @@ export function GlowProgress({ value, label, className, height = 44 }: { value: 
       {label != null && (
         <span
           className={cn(
-            'tnum absolute inset-y-0 right-4 flex items-center whitespace-nowrap text-[14.5px] font-medium',
+            'tnum pointer-events-none absolute inset-y-0 right-4 flex items-center whitespace-nowrap font-medium',
+            height < 36 ? 'text-[12.5px]' : 'text-[14.5px]',
             onFill ? 'text-[#0d3b26]' : 'text-muted',
           )}
         >
           {label}
         </span>
       )}
+      {children}
     </div>
   );
 }

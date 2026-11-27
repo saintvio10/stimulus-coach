@@ -64,7 +64,7 @@ export function adviseExercise(...args: Parameters<typeof adviseExerciseCore>): 
   else {
     const base = a.type === 'increase' || a.type === 'decrease' || a.type === 'deload' ? a.weight : a.lastWeight ?? a.weight;
     const nxt = base ? nextWeight(base, ex, ctx.settings) : null;
-    a.increaseRule = nxt && base && nxt > base ? `Auf ${fmtNum(nxt)} kg erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen – oder der 1. Satz ${top + 2}+ und der Schnitt ${top - 1}+ Wdh.${(nxt - base) / base > 0.12 ? ` (Sprung +${Math.round(((nxt - base) / base) * 100)} % – deshalb Bereich bis ${top})` : ''}.` : `Erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen – oder der 1. Satz ${top + 2}+ und der Schnitt ${top - 1}+ Wdh.`;
+    a.increaseRule = nxt && base && nxt > base ? `Auf ${fmtNum(nxt)} kg erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen – oder der 1. Satz ${top + 2}+ und der Schnitt ${top - 1}+ Wdh.${(nxt - base) / base > 0.12 ? ` (Sprung +${Math.round(((nxt - base) / base) * 100)} % – deshalb Bereich bis ${top}).` : ''}` : `Erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen – oder der 1. Satz ${top + 2}+ und der Schnitt ${top - 1}+ Wdh.`;
   }
   return a;
 }

@@ -912,11 +912,17 @@ function WorkoutProgress({ session, now, onJump }: { session: Session; now: numb
   const total = list.reduce((a, e) => a + e.sets.length, 0);
   const done = list.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
   const pct = total ? Math.round((done / total) * 100) : 0;
+  // Gleiche Rechnung wie die Planung: ~3 s pro Wdh. (mind. 40/50 s), einseitig × 2, Pause, Gerät einstellen bei nicht begonnenen Übungen
   const remainingMin = Math.round(
     list.reduce((a, e) => {
       const ex = exMap.get(e.exerciseId);
       const open = e.sets.filter((x) => !x.done).length;
-      return a + (open * ((ex?.compound ? 50 : 40) + e.restSec)) / 60;
+      if (!open) return a;
+      const uni = ex?.unilateral || ex?.pattern === 'bayesian';
+      const work = Math.max(ex?.compound ? 50 : 40, ((e.repMin + e.repMax) / 2) * 3) * (uni ? 2 : 1);
+      const started = e.sets.some((x) => x.done);
+      const setup = started ? 0 : ex?.location === 'home' ? 0.5 : ex?.compound ? (ex.fatigue >= 3 ? 4 : 3) : 1;
+      return a + (open * (work + e.restSec)) / 60 + setup;
     }, 0) * tf,
   );
   const current = list.find((e) => e.sets.some((x) => !x.done));
@@ -934,7 +940,9 @@ function WorkoutProgress({ session, now, onJump }: { session: Session; now: numb
           <span className="font-semibold text-fg">{done}</span>/{total}
         </div>
       </div>
+      {/* Ein Balken: Gesamtfortschritt; feine Trennlinien = Übungen (antippen springt zur Übung) */}
       <GlowProgress
+        height={30}
         value={total ? done / total : 0}
         label={
           done === total && total ? (
@@ -945,28 +953,22 @@ function WorkoutProgress({ session, now, onJump }: { session: Session; now: numb
             </>
           )
         }
-      />
-      <div className="flex h-1.5 gap-1">
-        {list.map((e) => {
-          const d = e.sets.filter((x) => x.done).length;
-          const f = d / e.sets.length;
-          const isCur = e === current;
-          return (
-            <button
-              key={e.uid}
-              onClick={() => onJump(e.uid)}
-              aria-label={`${exMap.get(e.exerciseId)?.name ?? 'Übung'}: ${d} von ${e.sets.length} Sätzen`}
-              className={cn('relative h-full overflow-hidden rounded-full bg-raised', isCur && 'ring-1 ring-accent/60')}
-              style={{ flex: e.sets.length }}
-            >
-              <span
-                className={cn('absolute inset-y-0 left-0 rounded-full transition-[width] duration-500', f >= 1 ? 'bg-rec-green' : 'bg-accent')}
-                style={{ width: `${f * 100}%` }}
+      >
+        <div className="absolute inset-0 flex">
+          {list.map((e, i) => {
+            const d = e.sets.filter((x) => x.done).length;
+            return (
+              <button
+                key={e.uid}
+                onClick={() => onJump(e.uid)}
+                aria-label={`${exMap.get(e.exerciseId)?.name ?? 'Übung'}: ${d} von ${e.sets.length} Sätzen`}
+                className={cn('h-full', i < list.length - 1 && 'border-r border-white/[0.07]', e === current && 'bg-white/[0.03]')}
+                style={{ flex: e.sets.length }}
               />
-            </button>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      </GlowProgress>
       <div className="tnum flex justify-between text-[11px] text-muted">
         <span className="truncate">{current ? `Jetzt: ${exMap.get(current.exerciseId)?.name ?? ''}` : 'Alle Übungen erledigt – Training beenden'}</span>
         <span className="shrink-0">

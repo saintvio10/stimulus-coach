@@ -59,7 +59,6 @@ export default function Dashboard() {
       });
   }, [done, s.exercises]);
 
-  const bw = s.body.filter((b) => b.weight).slice(-30);
   const last30 = done.filter((x) => parseKey(x.date).getTime() > Date.now() - 30 * DAY).length;
   const avgDur = avgDurationMin(done);
   const streak = weekStreak(s.sessions);
@@ -179,15 +178,6 @@ export default function Dashboard() {
           ) : (
             <p className="text-[13px] text-muted">Nach den ersten Trainings erscheinen hier deine Kraftkurven.</p>
           )}
-        </Card>
-        <Card>
-          <SectionTitle action={<button className="text-[13px] text-muted hover:text-fg" onClick={() => go('fortschritt')}>Eintragen</button>}>
-            Körpergewicht
-          </SectionTitle>
-          <div className="flex items-end justify-between gap-3">
-            <Stat label="Aktuell" value={bw.length ? `${fmtNum(bw[bw.length - 1].weight)} kg` : '–'} sub={bw.length > 1 ? `${fmtNum(bw[bw.length - 1].weight! - bw[0].weight!, 1)} kg seit ${fmtShortDay(bw[0].date)}` : undefined} />
-            <div className="h-14 w-40">{bw.length > 1 && <Spark data={bw.map((b) => ({ v: b.weight! }))} color="rgb(var(--rec-green))" />}</div>
-          </div>
         </Card>
       </div>
 

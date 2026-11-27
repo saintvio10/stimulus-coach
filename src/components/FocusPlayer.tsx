@@ -16,6 +16,7 @@ import { LiveAdjustBanner } from './LiveAdjustBanner';
 import { setPR } from '../engine/prs';
 import { usePRCelebration } from '../lib/hooks';
 import { GlowProgress } from './ui';
+import { FocusProgress } from './FocusProgress';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
 export function FocusPlayer({ session, startUid, onClose }: { session: Session; startUid?: string; onClose: () => void }) {
@@ -153,27 +154,11 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           <div className="mt-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
             Übung {idx + 1}/{list.length} · {cur ? `Satz ${setIndex + 1}/${se.sets.length}` : 'alle Sätze erledigt'}
           </div>
-          <div className="tnum mt-2 text-[13px] text-white/60">
-            Ziel {se.repMin}–{se.repMax} Wdh. · RIR {se.targetRir}
-            {rec != null && ` · empfohlen ${fmtNum(rec)} kg`}
-          </div>
-        {advice?.increaseRule && <div className="-mt-2 text-[12.5px] text-white/50">Erhöhen: {advice.increaseRule}</div>}
         </div>
 
-        {/* Letztes Mal & Steigerung */}
-        {lastW != null && (
-          <div className="tnum -mt-2 text-[13px] text-white/60">
-            Letztes Mal:{' '}
-            {advice?.lastDetail ? (
-              <span className="font-semibold text-white/85">{advice.lastDetail} kg</span>
-            ) : (
-              <>
-                <span className="font-semibold text-white/85">{fmtNum(lastW)} kg</span>
-                {advice?.lastReps?.length ? ` × ${advice.lastReps.join(' / ')}` : ''}
-              </>
-            )}
-          </div>
-        )}
+        {/* Ziel je Satz & Vergleich mit dem letzten Mal */}
+        <FocusProgress part="goal" ex={ex} se={se} sessionId={session.id} sessions={s.sessions} advice={advice} />
+        {advice?.increaseRule && <div className="-mt-2 px-1 text-[12px] text-white/45">Erhöhen: {advice.increaseRule}</div>}
         {(se.adviceType ?? advice?.type) === 'increase' && lastW != null && rec != null && rec > lastW && !se.decision && setIndex === 0 && (
           <div className="flex flex-col gap-2.5 rounded-[20px] border border-rec-green/30 bg-rec-green/10 p-3.5">
             <div className="tnum text-[15px] font-semibold">
@@ -261,6 +246,9 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             <WeightFeedback dark value={se.feedback} onChange={(f) => s.patchExercise(session.id, se.uid, { feedback: f })} />
           </div>
         )}
+
+        {/* Verlauf: Volumen & Sätze, heute vs. frühere Einheiten */}
+        <FocusProgress part="history" ex={ex} se={se} sessionId={session.id} sessions={s.sessions} advice={advice} />
 
         {/* Steuerung */}
         <div className="sticky bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] mt-auto grid h-[72px] shrink-0 grid-cols-3 overflow-hidden rounded-[26px] bg-[#1c1c1f]/95 backdrop-blur">
