@@ -76,7 +76,9 @@ export function fmtShortDay(key: string): string {
 
 export function fmtNum(n: number | null | undefined, digits = 1): string {
   if (n == null || Number.isNaN(n)) return '–';
-  return n.toLocaleString('de-DE', { maximumFractionDigits: digits, minimumFractionDigits: 0 });
+  // Viertel-Kilos (1,25 · 3,75 kg an Gewichtsblöcken/Hantelscheiben) nicht auf „3,8“ runden
+  const quarter = digits === 1 && Math.abs(n * 4 - Math.round(n * 4)) < 1e-9 && Math.abs(n * 2 - Math.round(n * 2)) > 1e-9;
+  return n.toLocaleString('de-DE', { maximumFractionDigits: quarter ? 2 : digits, minimumFractionDigits: 0 });
 }
 
 export function fmtKg(n: number | null | undefined): string {
