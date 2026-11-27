@@ -7,7 +7,7 @@ import { MUSCLE } from '../lib/muscles';
 import { cn, fmtMin, fmtNum, relDayLabel } from '../lib/utils';
 import { sessionStats, sessionsThisWeek, fmtMinSec } from '../engine/sessionStats';
 import { weekStreak } from '../engine/stats';
-import { BodyMap } from './BodyMap';
+import { MuscleFigure } from './MuscleFigure';
 import { BackupButton } from './Backup';
 
 /** Zahl hochzählen lassen (kurz, ~0,9 s) */
@@ -59,7 +59,7 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
   const fills = useMemo(() => {
     const max = Math.max(1, ...st.muscles.map((m) => m.sets));
     const out: Partial<Record<MuscleId, string>> = {};
-    for (const m of st.muscles) out[m.muscle] = `rgb(var(--rec-green) / ${(0.35 + 0.65 * (m.sets / max)).toFixed(2)})`;
+    for (const m of st.muscles) out[m.muscle] = `rgb(var(--rec-green) / ${(0.5 + 0.5 * (m.sets / max)).toFixed(2)})`;
     return out;
   }, [st.muscles]);
 
@@ -201,12 +201,11 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
         {st.muscles.length > 0 && (
           <div className="animate-fade-up rounded-[24px] bg-white/[0.05] p-4 ring-1 ring-white/[0.06]" style={{ animationDelay: '700ms' }}>
             <div className="text-[12px] font-semibold uppercase tracking-wider text-white/45">Trainiert</div>
-            <div className="mt-3 flex items-center gap-4">
-              <div className="flex shrink-0 gap-1">
-                <BodyMap side="front" colors={{}} fills={fills} className="h-32 w-14" />
-                <BodyMap side="back" colors={{}} fills={fills} className="h-32 w-14" />
-              </div>
-              <ul className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <div className="mt-3 overflow-hidden rounded-2xl" style={{ background: '#262628' }}>
+              <MuscleFigure fills={fills} className="w-full" />
+            </div>
+            <div className="mt-3">
+              <ul className="flex min-w-0 flex-col gap-1.5">
                 {st.muscles.slice(0, 7).map((m) => (
                   <li key={m.muscle} className="flex items-center gap-2 text-[12.5px]">
                     <span className="w-[88px] shrink-0 truncate text-white/80">{MUSCLE[m.muscle].short}</span>
