@@ -289,7 +289,18 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   const nextPlanned = plan.sessions.find((p) => p.date > day);
   const avail: Availability | undefined = s.availability[day];
   const exMap = new Map(s.exercises.map((e) => [e.id, e]));
-  const lead = planned?.exercises[0] ? exMap.get(planned.exercises[0].exerciseId) : undefined;
+  // Hintergrundbild: erledigt → Übung mit den meisten Sätzen (mit Rendering), läuft → aktuelle Übung, sonst erste geplante
+  const shownSession = [...doneHere].pop();
+  const doneLead = shownSession
+    ? [...shownSession.exercises]
+        .filter((e) => e.sets.some((x) => x.done))
+        .sort((a, b) => b.sets.filter((x) => x.done).length - a.sets.filter((x) => x.done).length)
+        .map((e) => exMap.get(e.exerciseId))
+        .find((e) => e && exerciseImage(e.id))
+    : undefined;
+  const activeHere = s.sessions.find((x) => x.status === 'active' && x.date === day);
+  const activeLead = activeHere ? exMap.get((activeHere.exercises.find((e) => !e.skipped && e.sets.some((x) => !x.done)) ?? activeHere.exercises[0])?.exerciseId ?? '') : undefined;
+  const lead = doneLead ?? activeLead ?? (planned?.exercises[0] ? exMap.get(planned.exercises[0].exerciseId) : undefined);
 
   const start = (p: PlannedSession | null) => {
     unlockAudio();
