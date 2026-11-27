@@ -1,11 +1,12 @@
 import { MUSCLE, MUSCLES } from '../lib/muscles';
 import type { AppData, MuscleId, Session, VolumeAdjust } from '../lib/types';
-import { addDays, clamp, dateKey, diffDays, fmtNum } from '../lib/utils';
-import { bestE1rm, exposures } from './progression';
+import { addDays, clamp, dateKey, diffDays, e1rm, fmtNum } from '../lib/utils';
+import { exposures, workingWeight } from './progression';
 import { readinessScore } from './readiness';
 
 /**
  * Persönliche Volumenanpassung je Muskel (max. 1× pro Woche):
+ * Grundlage sind nur vergleichbare Einheiten (gleiche Übung, gleicher Wdh.-Bereich, gleiches Arbeitsgewicht-Niveau, keine schwachen Tage).
  * – Fortschritt (e1RM ≥ +1,5 % in 4 Wochen) → Volumen bleibt
  * – Stagnation bei guter Erholung → +10 % (max. +30 %)
  * – Leistungsabfall (≤ −2 %) oder häufig starker Muskelkater → −15 % (min. −30 %)
@@ -33,20 +34,45 @@ export function computeVolumeAdjust(data: AppData, now = Date.now()): { map: Par
     const prev = map[m] ?? { factor: 1, updatedOn: '', reason: 'Standard-Volumen', trend: null };
     if (prev.updatedOn && diffDays(today, prev.updatedOn) < 7) continue;
 
-    // Trend der Übungen mit diesem Zielmuskel
+    // Trend der Übungen mit diesem Zielmuskel – nur aus VERGLEICHBAREN Einheiten (Modellregel):
+    // • gleiche Übung, gleicher Wiederholungsbereich; Leistung = Mittel der e1RM-Schätzungen (inkl. RIR) der Sätze mit dem
+    //   Arbeitsgewicht – ein einzelner Spitzen- oder Ausreißersatz (z. B. 12,5 kg × 5 nach 10 kg × 9) bestimmt nicht den Wert
+    // • nach einer bewussten Gewichtskorrektur (Arbeitsgewicht > 5 % niedriger) oder einem anderen Wiederholungsbereich wird
+    //   neu gesammelt: der Wechsel zu passenderen Gewichten ist kein Leistungsabfall
+    // • schwache Tage (schweres Aufwärmen, Tagesform, Bereitschaft < 45) zählen nicht
+    // • erst ab 3 vergleichbaren Einheiten über ≥ 10 Tage je Übung, Änderungen erst ab 4 Messpunkten je Muskel
     const exIds = new Set(
       recent.flatMap((s: Session) => s.exercises.filter((e) => !e.skipped && exById.get(e.exerciseId)?.primary === m).map((e) => e.exerciseId)),
     );
     let wsum = 0,
       tsum = 0,
-      count = 0;
+      count = 0,
+      resets = 0;
     for (const id of exIds) {
       const ex = exposures(id, recent).reverse(); // älteste zuerst
       count += ex.length;
-      if (ex.length < 3) continue;
+      let seg: { x: number; y: number }[] = [];
+      let prevW: number | null = null;
+      let prevRange = '';
+      for (const e of ex) {
+        const weak = e.warmup === 'hard' || e.declineReason === 'dayform' || (readinessScore(data.checkIns[e.date]) ?? 100) < 45;
+        if (weak) continue;
+        const w = workingWeight(e.sets);
+        const range = `${e.repMin}-${e.repMax}`;
+        if (prevW != null && ((w > 0 && w < prevW * 0.95) || range !== prevRange)) {
+          if (seg.length) resets++;
+          seg = [];
+        }
+        prevW = w;
+        prevRange = range;
+        const atW = e.sets.filter((x) => (x.weight ?? 0) === w);
+        const ys = atW.map((x) => e1rm(w, x.repsL != null && x.repsR != null ? Math.min(x.repsL, x.repsR) : x.reps ?? 0, x.rir)).filter((y) => y > 0);
+        if (!ys.length) continue;
+        seg.push({ x: e.t / 86_400_000, y: ys.reduce((a, b) => a + b, 0) / ys.length });
+      }
+      if (seg.length < 3 || seg[seg.length - 1].x - seg[0].x < 10) continue;
       // Lineare Regression e1RM ~ Tage, hochgerechnet auf 4 Wochen, relativ zum Mittelwert
-      const pts = ex.map((e) => ({ x: e.t / 86_400_000, y: bestE1rm(e.sets) })).filter((p) => p.y > 0);
-      if (pts.length < 3) continue;
+      const pts = seg;
       const mx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
       const my = pts.reduce((a, p) => a + p.y, 0) / pts.length;
       const den = pts.reduce((a, p) => a + (p.x - mx) ** 2, 0);
@@ -56,7 +82,15 @@ export function computeVolumeAdjust(data: AppData, now = Date.now()): { map: Par
       wsum += pts.length;
     }
     if (!enoughHistory || count < 3 || !wsum) {
-      map[m] = { ...prev, reason: prev.factor === 1 ? 'Noch zu wenig Daten (mind. 3 Einheiten über 3 Wochen)' : prev.reason };
+      map[m] = {
+        ...prev,
+        reason:
+          prev.factor === 1
+            ? resets && enoughHistory
+              ? 'Nach Gewichts- oder Bereichswechsel werden erst vergleichbare Einheiten gesammelt (mind. 3 über 10 Tage) – Volumen bleibt'
+              : 'Noch zu wenig Daten (mind. 3 vergleichbare Einheiten über 3 Wochen)'
+            : prev.reason,
+      };
       continue;
     }
     const trend = tsum / wsum;
@@ -64,7 +98,10 @@ export function computeVolumeAdjust(data: AppData, now = Date.now()): { map: Par
     const avgSore = sore.length ? sore.reduce((a, b) => a + b, 0) / sore.length : 0;
     let factor = prev.factor;
     let reason: string;
-    if (trend <= -2 || avgSore >= 2) {
+    if (wsum < 4 && avgSore < 2) {
+      // Unsichere Datenlage: Trend anzeigen, aber nichts automatisch ändern
+      reason = `Trend ${trend >= 0 ? '+' : ''}${fmtNum(trend)} % aus nur ${wsum} vergleichbaren Einheiten – noch unsicher, Volumen bleibt`;
+    } else if (trend <= -2 || avgSore >= 2) {
       factor = clamp(+(prev.factor * 0.85).toFixed(2), 0.7, 1.3);
       reason = trend <= -2 ? `Leistung ${fmtNum(trend)} % in 4 Wochen → Volumen −15 % für bessere Erholung (Modellregel, Schwelle anpassbar)` : 'Häufig starker Muskelkater → Volumen −15 % (Modellregel)';
     } else if (trend < 1.5 && avgSore < 1.5 && (avgReady == null || avgReady >= 55)) {

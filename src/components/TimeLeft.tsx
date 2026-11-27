@@ -54,9 +54,19 @@ export function TimeLeftButton({ session }: { session: Session }) {
           {trim && (
             <>
               <p className="text-[13px] text-muted">
-                Vorschau für {fmtMin(min)}: ~{fmtMin(trim.estMin)} mit Pausen, Gerätewechseln und – bei einseitigen Übungen – beiden Seiten. Behalten wird, was nach deinen Prioritäten, dem noch offenen
-                Wochenvolumen und dem heute schon Erledigten am meisten bringt.
+                Vorschau für {fmtMin(min)}: ~{fmtMin(trim.estMin)} mit Pausen, Gerätewechseln und – bei einseitigen Übungen – beiden Seiten. Zuerst bleibt je eine Übung für Grundbewegungen, die sonst diese Woche ganz
+                ausfallen würden (letzte 7 Tage + nächster sicherer Termin); danach zählt, was nach deinen Prioritäten, dem offenen Wochenvolumen und dem heute schon Erledigten am meisten bringt.
               </p>
+              {trim.warnings.length > 0 && (
+                <div className="flex flex-col gap-1.5 rounded-xl bg-rec-orange/10 px-3 py-2.5 text-[12.5px]">
+                  <div className="font-medium">Versorgungslücke</div>
+                  {trim.warnings.map((w) => (
+                    <div key={w} className="text-muted">
+                      {w}
+                    </div>
+                  ))}
+                </div>
+              )}
               <ul className="flex flex-col gap-1.5">
                 {trim.items.map((i) => (
                   <li key={i.uid} className={cn('rounded-xl px-3 py-2.5 text-[13px]', i.keep === i.open ? 'bg-raised' : i.keep === 0 ? 'bg-rec-orange/10' : 'bg-accent/10')}>

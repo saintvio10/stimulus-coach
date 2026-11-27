@@ -150,7 +150,7 @@ export default function Dashboard() {
               );
             })}
           </ul>
-          <p className="mt-3 text-[11px] text-muted">Fraktionale Sätze: direkte Sätze = 1, indirekte = 0,5. Ziel abhängig von Priorität und {spw}× Training/Woche. Fehlendes Volumen gleicht der Planer automatisch aus. ↑/↓ = persönlich angepasstes Ziel (siehe Muskelanalyse).</p>
+          <p className="mt-3 text-[11px] text-muted">Fraktionale Sätze: direkte Sätze = 1, indirekte = 0,5. Ziel abhängig von Priorität und {fmtNum(spw)}× Training/Woche. Fehlendes Volumen gleicht der Planer automatisch aus. ↑/↓ = persönlich angepasstes Ziel (siehe Muskelanalyse).</p>
         </Card>
       </div>
 

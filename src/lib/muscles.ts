@@ -81,8 +81,12 @@ export interface FreqFactors {
 }
 /** Modellannahme (keine Studienwerte): Standard 0,55 bei 1×, 0,8 bei 2× – im Profil einstellbar */
 export function frequencyFactor(sessionsPerWeek: number, f: FreqFactors = {}): number {
-  if (sessionsPerWeek <= 1) return f.freqFactor1 ?? 0.55;
-  if (sessionsPerWeek === 2) return f.freqFactor2 ?? 0.8;
+  const f1 = f.freqFactor1 ?? 0.55;
+  const f2 = f.freqFactor2 ?? 0.8;
+  // Zwischenwerte (z. B. 1,5 = 1 fester + 1 vorläufiger Termin) linear dazwischen
+  if (sessionsPerWeek <= 1) return f1;
+  if (sessionsPerWeek < 2) return f1 + (f2 - f1) * (sessionsPerWeek - 1);
+  if (sessionsPerWeek < 3) return f2 + (1 - f2) * (sessionsPerWeek - 2);
   return 1;
 }
 

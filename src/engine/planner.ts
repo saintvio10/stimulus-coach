@@ -2,7 +2,7 @@ import { JOINT_LABEL, painConflict } from './joints';
 import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL, frequencyFactor } from '../lib/muscles';
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
-import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor } from '../lib/utils';
+import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor, fmtMin } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent, recoveryInfo } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
 import { adviseExercise, exposures, bestE1rm } from './progression';
@@ -127,6 +127,10 @@ export interface PlannedSession {
   rest: boolean;
   /** Training ohne Gym (unterwegs) */
   home?: HomeMode;
+  /** Grundabdeckung bei seltenem Termin: was nicht hineinpasst bzw. warum (für Vorschau und Tests) */
+  coverageNote?: string;
+  /** Grundabdeckung: abgedeckte bzw. fehlende Bewegungsgruppen */
+  coverage?: { covered: string[]; missing: string[] };
 }
 
 export interface Plan {
@@ -230,6 +234,8 @@ interface BuildOpts {
   prevPlanned?: { id: string; t: number }[];
   /** Planungstag (Standard: Geräte-Datum) */
   today?: string;
+  /** Seltener Termin (einziger sicherer im 7-Tage-Fenster): erst Grundabdeckung Drücken/Ziehen/Quadrizeps/Beinbeuger */
+  coverage?: boolean;
 }
 
 export type HomeMode = 'bw' | 'weights';
@@ -364,6 +370,61 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const startSets = short || o.minutes < 50 ? 2 : 3;
   // persönliches Tempo (gelernt aus abgeschlossenen Einheiten)
   const tf = data.settings.timeFactor || 1;
+
+  // ── Grundabdeckung bei seltenen Terminen (Modellregel): Ist heute der einzige sichere Termin im 7-Tage-Fenster,
+  // bekommen Ziehen, Drücken, Quadrizeps und Beinbeuger zuerst je eine Übung mit 2 Sätzen – sofern der Muskel erholt ist,
+  // sein Wochenziel noch offen ist und die Übung ins Zeitbudget passt. Danach verteilt die normale Bewertung
+  // (Priorität × Bedarf pro Minute) die restliche Zeit, v. a. auf deine Armprioritäten. Nichts wird über das Budget hinaus erzwungen.
+  const covered: string[] = [];
+  const missing: { label: string; why: string; min?: number }[] = [];
+  // Sehr kurze Einheiten (< 45 min): Grundabdeckung nutzt höchstens ~60 % der Zeit, damit deine Top-Prioritäten nicht ganz fehlen
+  const coverBudget = o.minutes < 45 ? budget * 0.6 : budget;
+  if (o.coverage && !o.home) {
+    const BASIC: { label: string; muscles: MuscleId[]; hit: (e: Exercise) => boolean }[] = [
+      { label: 'Ziehen', muscles: ['lats', 'upperBack'], hit: (e) => (e.muscles.lats ?? 0) >= 0.75 || (e.muscles.upperBack ?? 0) >= 0.75 },
+      { label: 'Drücken', muscles: ['chest'], hit: (e) => (e.muscles.chest ?? 0) >= 0.5 },
+      { label: 'Quadrizeps', muscles: ['quads'], hit: (e) => (e.muscles.quads ?? 0) >= 0.75 },
+      { label: 'Beinbeuger', muscles: ['hamstrings'], hit: (e) => (e.muscles.hamstrings ?? 0) >= 0.75 },
+    ];
+    const groupValue = (g: (typeof BASIC)[number]) => Math.max(...g.muscles.map((m) => scores[m].prio * Math.max(0.1, scores[m].need)));
+    for (const g of [...BASIC].sort((a, b) => groupValue(b) - groupValue(a))) {
+      if (items.some((i) => g.hit(i.ex))) {
+        covered.push(g.label);
+        continue;
+      }
+      const rec = Math.min(...g.muscles.map((m) => scores[m].rec));
+      if (rec < 0.35) {
+        missing.push({ label: g.label, why: 'noch ermüdet' });
+        continue;
+      }
+      if (g.muscles.every((m) => (carry[m] ?? 0) >= scores[m].target)) {
+        covered.push(g.label);
+        continue;
+      }
+      const n = 2;
+      let pick: { ex: Exercise; t: number; r: number } | null = null;
+      let cheapest = Infinity;
+      for (const ex of candidates) {
+        if (!g.hit(ex) || items.some((i) => i.ex.id === ex.id || (i.ex.primary === ex.primary && familyOf(i.ex) === familyOf(ex)))) continue;
+        const t = (n * setMinutes(ex, short) + setupMinutes(ex)) * tf;
+        cheapest = Math.min(cheapest, t);
+        if (used + t > coverBudget) continue;
+        const r = valueOfSets(ex, n) / t;
+        if (!pick || r > pick.r) pick = { ex, t, r };
+      }
+      if (!pick) {
+        missing.push(cheapest === Infinity ? { label: g.label, why: 'keine passende Übung verfügbar (gesperrt/pausiert/Beschwerden)' } : { label: g.label, why: 'passt nicht ins Zeitbudget', min: Math.max(1, Math.ceil(used + cheapest - coverBudget)) });
+        continue;
+      }
+      items.push({ ex: pick.ex, sets: n });
+      used += pick.t;
+      for (const [m, c] of Object.entries(pick.ex.muscles) as [MuscleId, number][]) {
+        sSets[m] += n * c;
+        if (c >= 0.75) sDirect[m] += n;
+      }
+      covered.push(g.label);
+    }
+  }
 
   for (let iter = 0; iter < 60; iter++) {
     let best: { ratio: number; apply: () => void } | null = null;
@@ -622,6 +683,21 @@ export function buildSession(o: BuildOpts): PlannedSession {
   if (short) reasons.push('Zeitmodus: Arm- und Schulterisolation als Supersätze (Agonist/Antagonist), um Zeit zu sparen.');
   const value = Object.entries(sSets).reduce((a, [m, s]) => a + scores[m as MuscleId].score * Math.log1p(s / 2), 0);
 
+  let coverageNote: string | undefined;
+  if (o.coverage && !o.home) {
+    const parts: string[] = [];
+    if (covered.length) parts.push(`Grundabdeckung (einziger sicherer Termin in 7 Tagen): ${covered.join(', ')} zuerst eingeplant, danach deine Prioritäten.`);
+    const noTime = missing.filter((x) => x.why === 'passt nicht ins Zeitbudget');
+    if (noTime.length)
+      parts.push(`Abstrich: ${noTime.map((x) => x.label).join(', ').replace(/, ([^,]*)$/, ' und $1')} ${noTime.length > 1 ? 'passen' : 'passt'} heute nicht in ${fmtMin(o.minutes)} (~${Math.max(...noTime.map((x) => x.min ?? 0))} min mehr nötig${o.minutes < 45 ? '; bei unter 45 min bekommt die Grundabdeckung nur ~60 % der Zeit, damit deine Armprioritäten nicht ganz fehlen' : ''}) – kommt beim nächsten Termin zuerst dran.`);
+    for (const x of missing.filter((y) => y.why !== 'passt nicht ins Zeitbudget')) parts.push(`${x.label}: ${x.why}.`);
+    const top = data.profile.priorities.slice(0, 2).filter((g) => g === 'biceps' || g === 'triceps') as MuscleId[];
+    const armsIndirect = top.filter((m) => planned.every((p) => (data.exercises.find((e) => e.id === p.exerciseId)?.muscles[m] ?? 0) < 0.75));
+    if (armsIndirect.length && covered.length) parts.push(`${armsIndirect.map((m) => MUSCLE[m].label).join(' und ')} heute nur indirekt – die Zeit reicht nach der Grundabdeckung nicht für eine eigene Übung.`);
+    coverageNote = parts.join(' ');
+    if (coverageNote) reasons.unshift(coverageNote);
+  }
+
   return {
     date: o.date,
     at,
@@ -637,6 +713,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
     value,
     rest: planned.length === 0,
     home: o.home,
+    coverageNote,
+    coverage: o.coverage ? { covered, missing: missing.map((x) => x.label) } : undefined,
   };
 }
 
@@ -899,7 +977,28 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   // Tatsächliche Trainingshäufigkeit: das Größere aus absolvierten Einheiten der letzten 7 Tage und geplanten Terminen
   // (sonst schrumpft das Ziel nach einer vollen Woche, sobald nur noch wenige Termine im Plan stehen)
   const recentCount = new Set(doneSessions.filter((s) => s.date > addDays(today, -7) && s.date <= today).map((s) => s.date)).size;
-  const spw = clamp(opts.forceToday ? Math.max(data.settings.sessionsPerWeek, recentCount) : Math.max(dates.length, recentCount) || data.settings.sessionsPerWeek, 1, 3);
+  // Gemeinsamer Bezugszeitraum: dasselbe rollierende 7-Tage-Fenster, in dem auch das geleistete Volumen gezählt wird.
+  // Frequenz = größte Zahl an Einheiten (absolvierte + geplante) in einem 7-Tage-Fenster, das einen geplanten Termin enthält.
+  // So senkt das bloße Abschließen einer geplanten Einheit das Ziel nicht (sie wandert von „geplant“ nach „absolviert“);
+  // nur eine echte Änderung der Verfügbarkeit (Absage, weniger Termine) verändert es. Vorläufige Termine zählen halb.
+  const doneDays = [...new Set(doneSessions.map((s) => s.date))].filter((x) => x > addDays(today, -7) && x <= today);
+  const planW = (x: string) => (tentativeSet.has(x) ? 0.5 : 1);
+  let windowCount = recentCount;
+  let windowSure = recentCount;
+  for (const d of dates)
+    for (let k = 0; k < 7; k++) {
+      const from = addDays(d, -k);
+      const to = addDays(from, 6);
+      const doneIn = doneDays.filter((x) => x >= from && x <= to).length;
+      const planIn = dates.filter((x) => x >= from && x <= to && !doneDays.includes(x));
+      const n = doneIn + planIn.reduce((a, x) => a + planW(x), 0);
+      if (n > windowCount) (windowCount = n), (windowSure = doneIn + planIn.filter((x) => !tentativeSet.has(x)).length);
+    }
+  const spw = clamp(
+    opts.forceToday ? Math.max(data.settings.sessionsPerWeek, windowCount) : windowCount || data.settings.sessionsPerWeek,
+    1,
+    3,
+  );
 
   let events = allEvents(data, now);
   if (activeToday) {
@@ -932,7 +1031,9 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     // vorläufige Tage werden für die Grundabdeckung nicht vorausgesetzt.
     const sureInWindow = dates.filter((x) => !tentativeSet.has(x));
     const onlySure = i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1 && dates.length > 1;
-    const templates: TemplateId[] = onlySure ? ['full', 'fbA', 'fbB'] : strat.templates;
+    // Seltener Termin: einziger sicherer im Fenster (mit oder ohne vorläufige) → Grundabdeckung zuerst
+    const coverage = !uncertain && i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1;
+    const templates: TemplateId[] = coverage ? ['full'] : strat.templates;
     for (const tid of templates) {
       const s = buildSession({
         date: d,
@@ -947,6 +1048,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
         prevPlanned,
         today,
+        coverage,
       });
       let sc = s.value;
       if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
@@ -957,7 +1059,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     // Begründung auf Einheitsebene
     const focus = best.decisions.filter((x) => x.status === 'focus').map((x) => MUSCLE[x.muscle].short);
     const skippedTired = best.decisions.filter((x) => x.status === 'skipped' && x.reason.startsWith('Noch ermüdet')).map((x) => MUSCLE[x.muscle].short);
-    if (onlySure) best.reasons.unshift('Nur ein fester Termin – die „Vielleicht“-Tage werden nicht fest eingeplant. Darum heute breite Abdeckung (Ganzkörper) mit deinen Armprioritäten.');
+    if (onlySure) best.reasons.unshift('Nur ein fester Termin – die „Vielleicht“-Tage werden nicht fest eingeplant. Darum heute Ganzkörper: erst Grundabdeckung, dann deine Armprioritäten.');
     else if (strat.templates.length > 1) best.reasons.unshift(`„${best.label}“ gewählt: höchster erwarteter Nutzen unter den Optionen ${strat.templates.map((t) => TEMPLATES[t].label).join(', ')}.`);
     if (i >= dates.length) best.reasons.unshift(`Woche 2 (${strategy2.label}): wird bei jedem Training neu berechnet.`);
     if (focus.length) best.reasons.push(`Schwerpunkt: ${focus.join(', ')}.`);
@@ -992,8 +1094,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
 
   const sure = dates.filter((d) => !tentativeSet.has(d)).length;
   const goalNote =
-    `Wochenziele ausgelegt auf ${spw} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage (${recentCount} absolviert in den letzten 7 Tagen, ${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'keine im Plan'} – das Größere zählt). ` +
-    (spw < 3 ? `Bei ${spw === 1 ? 'einer Einheit' : 'zwei Einheiten'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw, data.settings), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Startannahme, im Profil einstellbar. ` : '') +
+    `Wochenziele ausgelegt auf ${fmtNum(spw)} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage. Bezugszeitraum ist dasselbe rollierende 7-Tage-Fenster wie beim geleisteten Volumen: absolvierte und geplante Einheiten darin zusammen (${recentCount} absolviert in den letzten 7 Tagen, ${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'keine im Plan'}; vorläufige zählen halb${windowSure !== windowCount ? `, sicher wären es ${windowSure}` : ''}). Eine abgeschlossene Einheit ändert das Ziel daher nicht – nur eine Änderung deiner Verfügbarkeit. ` +
+    (spw < 3 ? `Bei ${fmtNum(spw)} Einheit${spw === 1 ? '' : 'en'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw, data.settings), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Startannahme, im Profil einstellbar. ` : '') +
     'Gezählt: direkte Sätze voll, indirekte mit 0,5 (Pelland 2026). Geplante Sätze sind eine Prognose.';
   return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays, spw, goalNote };
 }
