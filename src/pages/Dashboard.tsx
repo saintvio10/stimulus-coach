@@ -14,6 +14,7 @@ import type { AppData } from '../lib/types';
 import { planToday, personalTarget } from '../engine/planner';
 import { WeightCard } from '../components/Extras';
 import { BackupReminder } from '../components/Backup';
+import { RecentWorkouts } from '../components/RecentWorkouts';
 import { WeekReviewCard } from './WeekReview';
 
 export default function Dashboard() {
@@ -74,6 +75,7 @@ export default function Dashboard() {
       </div>
       <SwipeDays plan={plan} day={day} onDay={setDay} />
       <UpcomingDays plan={plan} />
+      <RecentWorkouts />
       <BackupReminder />
       <WeightCard />
       <WeeklyNeed plan={plan} />

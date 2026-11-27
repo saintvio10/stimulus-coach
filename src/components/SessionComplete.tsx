@@ -46,7 +46,7 @@ function Tile({ icon, label, children, sub, delay }: { icon: ReactNode; label: s
 }
 
 /** Großer Abschluss-Screen nach dem Training (auch später aus der Übersicht aufrufbar) */
-export function SessionComplete({ session, prs, onClose }: { session: Session; prs?: string[]; onClose: () => void }) {
+export function SessionComplete({ session, prs, onClose, review }: { session: Session; prs?: string[]; onClose: () => void; /** Rückblick auf ein vergangenes Training (aus „Letzte Trainings“) */ review?: boolean }) {
   const s = useStore();
   const go = useRouter((r) => r.go);
   const st = useMemo(() => sessionStats(session, s.sessions, s.exercises), [session, s.sessions, s.exercises]);
@@ -84,7 +84,7 @@ export function SessionComplete({ session, prs, onClose }: { session: Session; p
         ),
     });
 
-  const title = records.length ? 'Neue Rekorde!' : ratio >= 0.999 ? 'Training geschafft!' : 'Gut gemacht!';
+  const title = review ? session.title.split(' (')[0] : records.length ? 'Neue Rekorde!' : ratio >= 0.999 ? 'Training geschafft!' : 'Gut gemacht!';
 
   return (
     <div className="fixed inset-0 z-[60] overflow-y-auto bg-black text-white" role="dialog" aria-modal="true" aria-label="Trainingsabschluss">
@@ -132,7 +132,7 @@ export function SessionComplete({ session, prs, onClose }: { session: Session; p
           <div className="animate-fade-up" style={{ animationDelay: '200ms' }}>
             <h1 className="text-[32px] font-bold leading-tight tracking-tight">{title}</h1>
             <p className="mt-1 text-[14px] text-white/60">
-              {session.title.split(' (')[0]} · {relDayLabel(session.date).split(',')[0]} · {st.exercises} {st.exercises === 1 ? 'Übung' : 'Übungen'}
+              {review ? relDayLabel(session.date) : `${session.title.split(' (')[0]} · ${relDayLabel(session.date).split(',')[0]}`} · {st.exercises} {st.exercises === 1 ? 'Übung' : 'Übungen'}
             </p>
           </div>
         </div>
@@ -230,10 +230,14 @@ export function SessionComplete({ session, prs, onClose }: { session: Session; p
         </div>
 
         <div className="mt-auto flex flex-col gap-2 pt-2">
-          <BackupButton dark />
-          <p className="-mt-0.5 mb-1 text-center text-[11.5px] text-white/45">Speichert alle Daten als Datei, z. B. in „Dateien“ oder iCloud Drive.</p>
+          {!review && (
+            <>
+              <BackupButton dark />
+              <p className="-mt-0.5 mb-1 text-center text-[11.5px] text-white/45">Speichert alle Daten als Datei, z. B. in „Dateien“ oder iCloud Drive.</p>
+            </>
+          )}
           <button onClick={onClose} className="h-14 rounded-full bg-white text-[16px] font-semibold text-black active:scale-[0.99]">
-            Fertig
+            {review ? 'Schließen' : 'Fertig'}
           </button>
           <button
             onClick={() => {
