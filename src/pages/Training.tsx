@@ -41,6 +41,7 @@ import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
 import { timeEstimator } from '../engine/timing';
 import { exerciseVerdict, setFeedback } from '../engine/verdict';
 import { BusySheet } from '../components/BusySheet';
+import { DoneSheet } from '../components/DoneSheet';
 import { WeightStepsSheet } from '../components/WeightSteps';
 import { prSetIds, setPR } from '../engine/prs';
 import { JOINT_LABEL, painConflict } from '../engine/joints';
@@ -294,16 +295,15 @@ function Workout({ session }: { session: Session }) {
         text={`${doneN} von ${total} Sätzen erledigt. Nicht abgehakte Sätze werden nicht gespeichert. Der Plan für die nächsten Tage wird danach neu berechnet.`}
         confirmLabel="Speichern & beenden"
       />
-      <Confirm
+      <DoneSheet
         open={doneOpen && allDone}
+        session={session}
         onClose={() => setDoneOpen(false)}
-        onConfirm={() => {
+        onFinish={() => {
           setDoneOpen(false);
           finish();
         }}
-        title="Training geschafft! 🎉"
-        text={`Alle ${total} Sätze erledigt in ${fmtMin(Math.max(1, Math.round((now - session.startedAt) / 60_000)))}. Jetzt beenden und die Auswertung ansehen? Mit „Abbrechen“ kannst du noch Sätze ergänzen.`}
-        confirmLabel="Training beenden"
+        onAdded={(uid) => setOpenUid(uid)}
       />
       <Confirm
         open={discard}

@@ -202,7 +202,7 @@ interface Store extends AppData {
   missExercise: (sessionId: string, exUid: string, undo?: boolean) => void;
   /** „Zeit übrig“: offene Sätze je Übung auf keep kürzen, Rest als ausgelassen dokumentieren */
   trimSession: (sessionId: string, keep: Record<string, number>) => void;
-  addExerciseToSession: (sessionId: string, exercise: Exercise, afterUid?: string) => void;
+  addExerciseToSession: (sessionId: string, exercise: Exercise, afterUid?: string, sets?: number) => void;
   swapExercise: (sessionId: string, exUid: string, exercise: Exercise) => void;
   /** „Gerät besetzt – später“: Übung ans Ende der Einheit verschieben */
   deferExercise: (sessionId: string, exUid: string) => void;
@@ -377,9 +377,10 @@ export const useStore = create<Store>()(
             if (se.sets.some((x) => x.done)) se.sets = se.sets.filter((x) => x.done);
             else se.skipped = true;
           }),
-        addExerciseToSession: (sid, exercise, afterUid) =>
+        addExerciseToSession: (sid, exercise, afterUid, setsOverride) =>
           {
-            const opt = optimalSetsFor(get() as unknown as AppData, exercise, sid);
+            const opt0 = optimalSetsFor(get() as unknown as AppData, exercise, sid);
+            const opt = setsOverride ? { ...opt0, sets: setsOverride, reason: 'Zusatzübung („Noch Zeit?“) – passend zu Plan und Erholung.' } : opt0;
             // Gewicht vom letzten Mal (bzw. empfohlene Steigerung) direkt eintragen
             const adv = adviseExercise(exercise, get().sessions.filter((x) => x.id !== sid), { settings: get().settings, checkIns: get().checkIns });
             mutSession(sid, (s) => {
