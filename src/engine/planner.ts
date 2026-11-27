@@ -153,11 +153,15 @@ const MAX_SETS_PER_EXERCISE = 4;
 /** Bewegungsfamilien: zwei Übungen derselben Familie für denselben Muskel in einer Einheit sind redundant */
 const FAMILY: Partial<Record<string, string>> = { row: 'row', cableRow: 'row', chestPress: 'press', inclinePress: 'press', lateralRaise: 'lateral' };
 const familyOf = (ex: Exercise) => FAMILY[ex.pattern] ?? ex.pattern;
+const GROUP_OF: Partial<Record<MuscleId, string>> = {
+  biceps: 'biceps', triceps: 'triceps', chest: 'chest', lats: 'back', upperBack: 'back', sideDelts: 'shoulders', rearDelts: 'shoulders', quads: 'legs', hamstrings: 'legs', glutes: 'legs',
+};
 const MIN_SET_VALUE = 0.06;
 
 function setMinutes(ex: Exercise, short: boolean): number {
   const unilateral = ex.pattern === 'bayesian' || !!ex.unilateral;
-  const work = (ex.compound ? 50 : 40) * (unilateral ? 2 : 1);
+  // Arbeitszeit ~3 s pro Wdh. (mind. 40/50 s) – Sätze mit 20–30 Wdh. dauern merklich länger
+  const work = Math.max(ex.compound ? 50 : 40, ((ex.repMin + ex.repMax) / 2) * 3) * (unilateral ? 2 : 1);
   let m = (work + ex.restSec) / 60;
   if (short && !ex.compound && ['biceps', 'triceps', 'sideDelts', 'rearDelts'].includes(ex.primary)) m *= 0.65;
   return m;
@@ -185,13 +189,14 @@ function scoreMuscles(
   data: AppData,
   at: number,
   sessionsPerWeek: number,
+  carry?: Partial<Record<MuscleId, number>>,
 ): Record<MuscleId, MuscleScore> {
   const out = {} as Record<MuscleId, MuscleScore>;
   for (const m of MUSCLE_IDS) {
     const st = states[m];
     const target = personalTarget(data, m, sessionsPerWeek);
     const prio = priorityWeight(m, data.profile.priorities);
-    const need7 = clamp(1 - st.vol7 / target, 0, 1);
+    const need7 = clamp(1 - (carry ? carry[m] ?? 0 : st.vol7) / target, 0, 1);
     const need14 = clamp(1 - st.vol14 / (2 * target), 0, 1);
     const need = 0.6 * need7 + 0.4 * need14;
     const daysSince = st.lastDirect == null ? null : (at - st.lastDirect) / DAY;
@@ -223,6 +228,8 @@ interface BuildOpts {
   home?: HomeMode;
   /** in diesem Plan bereits vorher eingeplante Übungen (für die Bereichs-Rotation) */
   prevPlanned?: { id: string; t: number }[];
+  /** Planungstag (Standard: Geräte-Datum) */
+  today?: string;
 }
 
 export type HomeMode = 'bw' | 'weights';
@@ -230,9 +237,16 @@ export type HomeMode = 'bw' | 'weights';
 export function buildSession(o: BuildOpts): PlannedSession {
   const { data, at, templateId } = o;
   const tpl = TEMPLATES[templateId];
-  const isToday = o.date === dateKey();
+  // „heute“ = Tag der Planung (nicht die Geräteuhr) – wichtig für Check-in, Beschwerden, Bereitschaft
+  const isToday = o.date === (o.today ?? dateKey());
   const states = computeAllStates(o.events, at, isToday ? data.checkIns : {});
-  const scores = scoreMuscles(states, tpl.mask, data, at, o.sessionsPerWeek);
+  // Volumen, das beim nächsten festen Termin noch im 7-Tage-Fenster liegt – älteres zählt für „Ziel erreicht“ nicht
+  // (sonst blockiert bei 1×/Woche die Einheit von vor 6 Tagen den heutigen Prioritätsmuskel, obwohl sie morgen herausfällt)
+  const nextT = o.nextDates[0] ? parseKey(o.nextDates[0]).getTime() + 17 * HOUR : at + 7 * DAY;
+  const windowStart = Math.max(at - 7 * DAY, nextT - 7 * DAY);
+  const carry: Partial<Record<MuscleId, number>> = {};
+  for (const e of o.events) if (e.t > windowStart && e.t <= at) carry[e.muscle] = (carry[e.muscle] ?? 0) + e.sets;
+  const scores = scoreMuscles(states, tpl.mask, data, at, o.sessionsPerWeek, carry);
   const readiness = isToday ? readinessScore(data.checkIns[o.date]) : null;
   const radj = readinessAdjust(readiness);
   const short = o.minutes <= 50 && data.settings.autoSuperset;
@@ -270,14 +284,15 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const sDirect: Record<MuscleId, number> = Object.fromEntries(MUSCLE_IDS.map((m) => [m, 0])) as Record<MuscleId, number>;
 
   const isFull = templateId === 'full';
-  const maxSets = isFull && o.minutes <= 60 ? 3 : MAX_SETS_PER_EXERCISE;
+  // Ganzkörper: Breite vor Tiefe – max. 3 Sätze je Übung, damit Brust, Rücken, Arme und Beine in eine Einheit passen (Modellregel)
+  const maxSets = isFull ? 3 : MAX_SETS_PER_EXERCISE;
   const muscleValue = (m: MuscleId, s: number, sd: number) => {
     const sc = scores[m];
     if (s >= MUSCLE[m].sessionCap) return 0;
-    const overWeek = states[m].vol7 + s >= sc.target * 1.3 ? 0.3 : 1;
+    const overWeek = (carry[m] ?? 0) + s >= sc.target * 1.3 ? 0.3 : 1;
     // Breiten-Bonus: der erste DIREKTE Satz eines Muskels ist am wertvollsten (v. a. im Ganzkörpertraining).
     // Indirekte Sätze (z. B. Bizeps beim Rudern) verbrauchen den Bonus nicht – sonst bekäme Priorität 1 evtl. gar keine eigene Übung.
-    const breadth = sd < 1 ? (isFull ? 0.8 : 0.2) : 0;
+    const breadth = sd < 1 ? (isFull ? 1.4 : 0.2) : 0;
     return sc.score * (1 / (1 + s / (isFull ? 2 : 3))) * overWeek * (1 + breadth);
   };
 
@@ -394,7 +409,13 @@ export function buildSession(o: BuildOpts): PlannedSession {
               ? 1.12
               : 1.08
             : 1;
-        const ratio = (v / t) * varietyBonus;
+        // Ganzkörper: erste Übung einer noch fehlenden Muskelgruppe bevorzugen (Abdeckung vor Tiefe; Beine ab 45 min) – Modellregel
+        const grp = GROUP_OF[ex.primary];
+        // Top-2-Prioritäten (bei dir Bizeps/Trizeps) bekommen eine eigene Übung bevorzugt, auch wenn Zugübungen sie schon indirekt treffen
+        const top2 = (m: MuscleId) => MUSCLE[m].group != null && data.profile.priorities.indexOf(MUSCLE[m].group!) < 2;
+        const COVER: Record<string, number> = { chest: 1.6, back: 1.6, legs: o.minutes >= 45 ? 1.6 : 1, biceps: top2('biceps') ? 1.9 : 1.4, triceps: top2('triceps') ? 1.9 : 1.4, shoulders: o.minutes >= 60 ? 1.2 : 1 };
+        const coverage = isFull && grp && !items.some((i) => GROUP_OF[i.ex.primary] === grp) ? COVER[grp] ?? 1 : 1;
+        const ratio = (v / t) * varietyBonus * coverage;
         if (!best || ratio > best.ratio)
           best = {
             ratio,
@@ -560,8 +581,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
       reason = `Noch ermüdet (${recoveryInfo(st, at).label}, Modellschätzung${act.length ? `, u. a. durch ${act.map((a) => ACTIVITY_TYPES[a.type as keyof typeof ACTIVITY_TYPES]?.label ?? a.type).join(', ')}` : st.lastAny ? `, letzter Reiz vor ${Math.round((at - st.lastAny) / HOUR)} h` : ''}) – voraussichtlich bereit ${relDayLabel(dateKey(st.readyAt))}.`;
     } else if ((tpl.mask[m] ?? 0) === 0) {
       reason = `Nicht Teil von „${tpl.label}“${nextLabel ? ` – nächste Gelegenheit: ${nextLabel}` : ''}.`;
-    } else if (st.vol7 >= sc.target) {
-      reason = `7-Tage-Ziel bereits erreicht (${fmtNum(st.vol7)}/${fmtNum(sc.target)}).`;
+    } else if ((carry[m] ?? 0) >= sc.target) {
+      reason = `Wochenziel bis zum nächsten Termin abgedeckt (${fmtNum(carry[m] ?? 0)}/${fmtNum(sc.target)} Sätze im 7-Tage-Fenster).`;
     } else {
       reason = 'Aus Zeitgründen nachrangig (geringerer Nutzen pro Minute).';
     }
@@ -875,7 +896,10 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   const strategy2 = chooseStrategy(dates2, false);
   const allDates = [...dates, ...dates2];
   // Ziele an realistische Frequenz koppeln
-  const spw = clamp(opts.forceToday ? data.settings.sessionsPerWeek : dates.length || data.settings.sessionsPerWeek, 1, 3);
+  // Tatsächliche Trainingshäufigkeit: das Größere aus absolvierten Einheiten der letzten 7 Tage und geplanten Terminen
+  // (sonst schrumpft das Ziel nach einer vollen Woche, sobald nur noch wenige Termine im Plan stehen)
+  const recentCount = new Set(doneSessions.filter((s) => s.date > addDays(today, -7) && s.date <= today).map((s) => s.date)).size;
+  const spw = clamp(opts.forceToday ? Math.max(data.settings.sessionsPerWeek, recentCount) : Math.max(dates.length, recentCount) || data.settings.sessionsPerWeek, 1, 3);
 
   let events = allEvents(data, now);
   if (activeToday) {
@@ -922,6 +946,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         nextDates: allDates.slice(i + 1).filter((x) => !tentativeSet.has(x)),
         home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
         prevPlanned,
+        today,
       });
       let sc = s.value;
       if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
@@ -967,7 +992,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
 
   const sure = dates.filter((d) => !tentativeSet.has(d)).length;
   const goalNote =
-    `Wochenziele ausgelegt auf ${spw} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage (${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'Profil-Standard'}). ` +
+    `Wochenziele ausgelegt auf ${spw} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage (${recentCount} absolviert in den letzten 7 Tagen, ${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'keine im Plan'} – das Größere zählt). ` +
     (spw < 3 ? `Bei ${spw === 1 ? 'einer Einheit' : 'zwei Einheiten'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw, data.settings), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Startannahme, im Profil einstellbar. ` : '') +
     'Gezählt: direkte Sätze voll, indirekte mit 0,5 (Pelland 2026). Geplante Sätze sind eine Prognose.';
   return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays, spw, goalNote };
@@ -1015,6 +1040,7 @@ export function planTemplate(data: AppData, templateId: TemplateId, minutes: num
     sessionsPerWeek: data.settings.sessionsPerWeek,
     tentative: false,
     nextDates: [],
+    today: dateKey(now),
   });
   s.reasons.unshift(`Schnellstart „${s.label}“: gewählte Muskelgruppen, gewichtet nach Bedarf, Erholung und Priorität.`);
   return s;

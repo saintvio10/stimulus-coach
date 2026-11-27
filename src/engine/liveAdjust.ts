@@ -1,5 +1,5 @@
 import type { Exercise, SessionExercise, Settings, SetLog } from '../lib/types';
-import { fmtNum, nextWeight, prevWeight } from '../lib/utils';
+import { e1rm, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 
 export interface LiveAdjust {
   dir: 'down' | 'up';
@@ -40,24 +40,35 @@ export function liveAdjust(se: SessionExercise, ex: Exercise, settings: Settings
     return v;
   };
   const base = { afterSetId: last.id, nextSetId: next.id, from: w };
+  // Bei großen Gewichtssprüngen (z. B. Kabel 7,5 → 10 kg = +33 %) nur wechseln, wenn das neue Gewicht laut Schätzung
+  // näher am Zielbereich liegt – sonst pendelt die Empfehlung zwischen zwei Stufen.
+  const est = w > 0 ? e1rm(w, reps, rir ?? se.targetRir) : 0;
+  const dist = (r: number) => (r < se.repMin ? se.repMin - r : r > se.repMax ? r - se.repMax : 0);
+  const predicted = (to: number) => Math.max(0, 30 * (est / to - 1) - (se.targetRir ?? 1) - 1); // −1 Wdh. Ermüdung der Folgesätze
+  const better = (to: number) => !est || to <= 0 || dist(predicted(to)) < dist(reps) - 0.5;
+  // Schon einmal in dieser Einheit angepasst? Dann nicht wieder zurück (kein Pendeln zwischen zwei Stufen)
+  const firstW = doneSets[0].weight ?? 0;
+  const prevDir = w > firstW ? 1 : w < firstW ? -1 : 0;
+  const allowed = (dir: 1 | -1) => prevDir === 0 || prevDir === dir;
   const bw = ex.equipment === 'bodyweight';
 
   // ── zu schwer
   if (!(bw && w <= 0)) {
     if (reps < se.repMin - 2) {
-      const to = step(2, -1);
-      if (to < w)
+      let to = step(2, -1);
+      if (!better(to)) to = step(1, -1);
+      if (to < w && better(to) && allowed(-1))
         return { ...base, dir: 'down', to, title: `Zu schwer: ${fmtNum(to)} kg statt ${fmtNum(w)} kg`, reason: `Nur ${reps} Wdh. – deutlich unter deinem Ziel (${se.repMin}–${se.repMax}). Mit weniger Gewicht schaffst du wieder saubere Wdh. im Zielbereich und mehr Gesamtvolumen.` };
     }
     // In späteren Sätzen ist 1 Wdh. unter dem Ziel normale Ermüdung – erst ab 2 darunter eingreifen
     if (reps < se.repMin - (isFirst ? 0 : 1)) {
       const to = step(1, -1);
-      if (to < w)
+      if (to < w && allowed(-1) && (rir === 0 && reps >= se.repMin ? true : better(to)))
         return { ...base, dir: 'down', to, title: `Etwas zu schwer: ${fmtNum(to)} kg?`, reason: `${reps} Wdh. liegen unter deinem Ziel von ${se.repMin}–${se.repMax}. Eine Stufe leichter hält die restlichen Sätze im Zielbereich.` };
     }
     if (isFirst && rir === 0 && reps <= se.repMin + 1 && doneSets.length < se.sets.length) {
       const to = step(1, -1);
-      if (to < w)
+      if (to < w && allowed(-1) && (rir === 0 && reps >= se.repMin ? true : better(to)))
         return { ...base, dir: 'down', to, title: `Schon im 1. Satz am Limit – ${fmtNum(to)} kg?`, reason: `Muskelversagen schon im ersten Satz bei nur ${reps} Wdh.: Die Wdh. fallen in den nächsten Sätzen meist stark ab. Eine Stufe leichter bringt mehr Gesamt-Wdh.` };
     }
   }
@@ -67,7 +78,7 @@ export function liveAdjust(se: SessionExercise, ex: Exercise, settings: Settings
   const farFromFailure = reps >= se.repMax && rir != null && rir >= 3;
   if (tooManyReps || farFromFailure) {
     const to = step(1, 1);
-    if (to > w)
+    if (to > w && allowed(1) && (better(to) || (farFromFailure && predicted(to) >= se.repMin)))
       return {
         ...base,
         dir: 'up',

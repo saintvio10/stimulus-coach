@@ -1,6 +1,6 @@
 import { readinessScore } from './readiness';
 import type { CheckIn, Exercise, ProgressionAdvice, Session, SetLog, Settings } from '../lib/types';
-import { e1rm, fmtNum, nextWeight, prevWeight } from '../lib/utils';
+import { e1rm, fmtNum, fmtShortDay, nextWeight, prevWeight } from '../lib/utils';
 
 export interface Exposure {
   date: string;
@@ -11,6 +11,8 @@ export interface Exposure {
   targetRir: number;
   feedback?: 'easy' | 'ok' | 'hard';
   decision?: 'accepted' | 'declined';
+  warmup?: 'easy' | 'ok' | 'hard';
+  declineReason?: string;
   sessionId: string;
   uid: string;
 }
@@ -25,7 +27,7 @@ export function exposures(exerciseId: string, sessions: Session[]): Exposure[] {
       // Sätze ohne Gewicht zählen nur bei Körpergewicht (Gewicht = 0); sonst kann ohne Gewicht gar nicht gespeichert werden
       const sets = se.sets.filter((x) => x.done && x.reps != null && x.reps > 0).map((x) => (x.weight == null ? { ...x, weight: 0 } : x));
       if (!sets.length) continue;
-      out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir, feedback: se.feedback, decision: se.decision, sessionId: s.id, uid: se.uid });
+      out.push({ date: s.date, t: s.endedAt ?? s.startedAt, sets, repMin: se.repMin, repMax: se.repMax, targetRir: se.targetRir, feedback: se.feedback, decision: se.decision, warmup: se.warmup, declineReason: se.declineReason, sessionId: s.id, uid: se.uid });
     }
   }
   return out.sort((a, b) => b.t - a.t);
@@ -62,7 +64,7 @@ export function adviseExercise(...args: Parameters<typeof adviseExerciseCore>): 
   else {
     const base = a.type === 'increase' || a.type === 'decrease' || a.type === 'deload' ? a.weight : a.lastWeight ?? a.weight;
     const nxt = base ? nextWeight(base, ex, ctx.settings) : null;
-    a.increaseRule = nxt && base && nxt > base ? `Auf ${fmtNum(nxt)} kg erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen${(nxt - base) / base > 0.12 ? ` (Sprung +${Math.round(((nxt - base) / base) * 100)} % – deshalb Bereich bis ${top})` : ''}.` : `Erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen.`;
+    a.increaseRule = nxt && base && nxt > base ? `Auf ${fmtNum(nxt)} kg erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen – oder der 1. Satz ${top + 2}+ und der Schnitt ${top - 1}+ Wdh.${(nxt - base) / base > 0.12 ? ` (Sprung +${Math.round(((nxt - base) / base) * 100)} % – deshalb Bereich bis ${top})` : ''}.` : `Erhöhen, sobald alle Sätze ${top} Wdh. bei höchstens ${tr + 1} RIR erreichen – oder der 1. Satz ${top + 2}+ und der Schnitt ${top - 1}+ Wdh.`;
   }
   return a;
 }
@@ -148,6 +150,10 @@ function adviseExerciseCore(
     learn.push(`du die Steigerung ${declined}× abgelehnt hast`);
   }
   const topReps = (bigJump ? repMax + 2 : repMax) + adj;
+  // Modellregel: Bei RIR ~1 in jedem Satz fallen die Wdh. von Satz zu Satz – „alle Sätze am oberen Ende“ wird dann kaum erreicht,
+  // obwohl das Gewicht zu leicht ist. Daher auch steigern, wenn der 1. Satz ≥ oberes Ende + 2 und der Schnitt ≥ oberes Ende − 1 ist.
+  const avgReps = reps.length ? reps.reduce((x, y) => x + y, 0) / reps.length : 0;
+  const repDropReady = reps.length >= 2 && reps[0] >= topReps + 2 && avgReps >= topReps - 1;
   const rirOk = avgRir == null || avgRir <= targetRir + 1 || fb === 'easy';
   const tooEasy = fb !== 'hard' && ((avgRir != null && avgRir >= targetRir + 3) || (fb === 'easy' && reps.every((r) => r >= repMin)));
   const learnTxt = learn.length ? ` (Angepasst, weil ${learn.join(' und ')}.)` : '';
@@ -176,17 +182,38 @@ function adviseExerciseCore(
   const lighterOk = last.sets.filter((s) => (s.weight ?? 0) < w && (s.reps ?? 0) >= repMin).map((s) => s.weight ?? 0);
   const lighter = lighterOk.length ? Math.max(...lighterOk) : null;
 
-  if (fb === 'hard' && reps.some((r) => r < repMin) && w > 0) {
+  // Vorübergehende Reduktion / schwacher Tag (schweres Aufwärmen, Live-Anpassung nach unten, Tagesform, schwacher Check-in)
+  // ist keine neue Basis – sonst entsteht eine „Sperrklinke“ nach unten. Empfehlung dann aus der letzten normalen Einheit.
+  const lastReady = readinessScore(ctx.checkIns[last.date]);
+  const weakDay = (e: Exposure) => e.warmup === 'hard' || e.declineReason === 'dayform' || (readinessScore(ctx.checkIns[e.date]) ?? 100) < 45;
+  if (fb !== 'hard' && hist.length >= 2 && weakDay(last)) {
+    const alt = adviseExerciseCore(ex, sessions.filter((s) => s.id !== last.sessionId), ctx, _repMin, _repMax, targetRir);
+    const why = last.warmup === 'hard' ? 'Aufwärmen fühlte sich schwer an' : lastReady != null && lastReady < 45 ? 'schwache Tagesform laut Check-in' : 'Tagesform';
+    alt.text = `Die letzte Einheit (${fmtShortDay(last.date)}) war ein schwächerer Tag (${why}) und zählt nicht als neue Basis. ${alt.text}`;
+    alt.lastDetail = res.lastDetail;
+    return alt;
+  }
+  // „Unter dem Ziel“ = Schnitt unter dem unteren Ende oder mehr als die Hälfte der Sätze darunter –
+  // ein einzelner letzter Satz darunter ist normaler Wiederholungsabfall (Modellregel)
+  function belowRange(rs: number[]) {
+    if (!rs.length) return false;
+    return rs.reduce((x, y) => x + y, 0) / rs.length < repMin || rs.filter((r) => r < repMin).length > rs.length / 2;
+  }
+  if (fb === 'hard' && belowRange(reps) && w > 0) {
     const lower = prevWeight(w, ex, ctx.settings);
     res.type = 'decrease';
     res.weight = lower;
     res.repTarget = repMin + 2;
     res.text = `Letztes Mal zu schwer und unter ${repMin} Wdh. → heute ${fmtNum(lower)} kg und sauber im Bereich aufbauen.`;
-  } else if (atW.length >= 1 && reps.every((r) => r >= topReps) && rirOk && next > w) {
+  } else if (atW.length >= 1 && (reps.every((r) => r >= topReps) || repDropReady) && rirOk && next > w) {
     res.type = 'increase';
     res.weight = next;
     res.repTarget = repMin + (bigJump ? 0 : 1);
-    res.text = `Alle Sätze bei ${fmtNum(w)} kg am oberen Ende (${reps.join('/')} Wdh.)${avgRir != null ? ` mit Ø ${fmtNum(avgRir)} RIR` : ''} → nächste Stufe ${fmtNum(next)} kg, Ziel ${res.repTarget}+ Wdh.${learnTxt}`;
+    res.text = `${reps.every((r) => r >= topReps) ? 'Alle Sätze' : `1. Satz ${reps[0]} Wdh., Schnitt ${fmtNum(avgReps, 1)} –`} bei ${fmtNum(w)} kg am oberen Ende (${reps.join('/')} Wdh.)${avgRir != null ? ` mit Ø ${fmtNum(avgRir)} RIR` : ''} → nächste Stufe ${fmtNum(next)} kg, Ziel ${res.repTarget}+ Wdh.${learnTxt}`;
+  } else if (atW.length >= 1 && reps.every((r) => r >= topReps) && next <= w && w > 0) {
+    res.type = 'extend';
+    res.repTarget = Math.min(30, Math.max(...reps));
+    res.text = `${fmtNum(w)} kg ist das schwerste verfügbare Gewicht und alle Sätze liegen am oberen Ende (${reps.join('/')}). Schwerer machen ohne Gewicht: 3 s ablassen, 1–2 s Pause in der Dehnung, 1½-Wiederholungen oder eine schwerere Variante – bis ~30 Wdh. nah am Versagen bleibt der Reiz wirksam.`;
   } else if (reps.every((r) => r >= repMax) && rirOk && bigJump) {
     res.type = 'extend';
     res.repTarget = Math.min(topReps, Math.max(...reps) + 1);
@@ -196,8 +223,8 @@ function adviseExerciseCore(
     res.weight = next;
     res.repTarget = repMin + 1;
     res.text = fb === 'easy' ? `Du hast ${fmtNum(w)} kg zuletzt als zu leicht bewertet → heute ${fmtNum(next)} kg.` : `Letztes Mal Ø ${fmtNum(avgRir!)} RIR – deutlich leichter als Ziel-RIR ${targetRir}. Gewicht auf ${fmtNum(next)} kg erhöhen.`;
-  } else if (reps.some((r) => r < repMin)) {
-    const prevBelow = hist[1] && workingWeight(hist[1].sets) === w && hist[1].sets.some((s) => (s.reps ?? 0) < repMin);
+  } else if (belowRange(reps)) {
+    const prevBelow = hist[1] && workingWeight(hist[1].sets) === w && belowRange(hist[1].sets.filter((s) => s.weight === w).map((s) => s.reps ?? 0));
     const avg = reps.reduce((x, y) => x + y, 0) / reps.length;
     const deficit = repMin - avg;
     const lower = lighter ?? prevWeight(w, ex, ctx.settings);
@@ -231,10 +258,13 @@ function adviseExerciseCore(
   }
 
   // Stagnations- und Leistungsabfall-Erkennung über e1RM
-  const series = hist.slice(0, 4).map((h) => bestE1rm(h.sets));
+  // Stagnation nie aus einem einzelnen schwachen Tag ableiten: solche Einheiten zählen nicht
+  const series = hist.filter((h) => !(h.warmup === 'hard' || h.declineReason === 'dayform' || (readinessScore(ctx.checkIns[h.date]) ?? 100) < 45)).slice(0, 4).map((h) => bestE1rm(h.sets));
   if (series.length >= 3) {
     const [a, b, c] = series;
-    const stalled = a <= c * 1.01 && b <= c * 1.01;
+    // nach bewusster Gewichtsreduktion keine „Stagnation“ melden (e1RM sinkt dann zwangsläufig)
+    const olderWs = Math.max(...hist.slice(1, 4).map((h) => workingWeight(h.sets)));
+    const stalled = a <= c * 1.01 && b <= c * 1.01 && w >= olderWs;
     const prevBest = Math.max(...series.slice(1));
     const older = Math.max(...series.slice(2));
     // Leistungsabfall nur werten, wenn das Arbeitsgewicht nicht bewusst reduziert wurde

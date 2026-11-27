@@ -52,7 +52,7 @@ export function planTrim(data: AppData, session: Session, minutes: number, now =
     const open = se.sets.length - done;
     if (!open) continue;
     const uni = ex.unilateral || ex.pattern === 'bayesian';
-    const cost = (((ex.compound ? 50 : 40) * (uni ? 2 : 1) + se.restSec) / 60) * tf;
+    const cost = ((Math.max(ex.compound ? 50 : 40, ((se.repMin + se.repMax) / 2) * 3) * (uni ? 2 : 1) + se.restSec) / 60) * tf;
     items.push({ uid: se.uid, exerciseId: ex.id, name: ex.name, done, open, keep: 0, note: '', cost, setup: done ? 0 : ex.compound ? 2 : 1, started: done > 0, primary: ex.primary });
   }
   const added: Partial<Record<MuscleId, number>> = {};
