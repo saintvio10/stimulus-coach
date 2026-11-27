@@ -3,6 +3,8 @@ const OUT = '/tmp/claude-0/-home-user/77587700-1482-5af7-9d38-099b28ee21ee/scrat
 (async () => {
   const b = await chromium.launch();
   const p = await b.newPage({ viewport: { width: 390, height: 844 } });
+  await p.addLocatorHandler(p.locator('div.fixed.inset-0.z-\\[65\\]'), async (o) => { await o.locator('button[aria-label="Satz starten"]').click(); });
+  await p.addLocatorHandler(p.getByRole('dialog', { name: 'Feedback zur Übung' }), async (o) => { await o.getByRole('button', { name: /Weiter zur nächsten Übung|^Fertig$/ }).click(); });
   const errs = [];
   p.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
   p.on('console', (m) => m.type() === 'error' && errs.push(m.text()));

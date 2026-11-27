@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ExerciseVisual } from '../components/ExerciseVisual';
-import { WeightFeedback } from '../components/WeightFeedback';
 import {
   ArrowDown,
   ArrowUp,
@@ -38,6 +37,7 @@ import { ExerciseHistory } from '../components/ExerciseHistory';
 import { TimeLeftButton } from '../components/TimeLeft';
 import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
 import { timeEstimator } from '../engine/timing';
+import { exerciseVerdict } from '../engine/verdict';
 import { BusySheet } from '../components/BusySheet';
 import { WeightStepsSheet } from '../components/WeightSteps';
 import { prSetIds, setPR } from '../engine/prs';
@@ -844,9 +844,35 @@ function ExerciseCard({
               <Check size={15} className="shrink-0" /> Optimale Satzzahl erreicht ({se.sets.length}). Weitere Sätze bringen heute kaum Zusatznutzen – weiter zur nächsten Übung.
             </div>
           )}
-          {doneN > 0 && (complete || !se.sets.some((x) => !x.done)) && (
-            <WeightFeedback value={se.feedback} onChange={(f) => s.patchExercise(session.id, se.uid, { feedback: f })} />
-          )}
+          {doneN > 0 && (complete || !se.sets.some((x) => !x.done)) && (() => {
+            // Bewertung durch die App anhand deiner Werte (Zielbereich, Reserve, Vergleich mit letztem Mal)
+            const v = exerciseVerdict(ex, se, session, s.sessions, { settings: s.settings, checkIns: s.checkIns });
+            if (!v) return null;
+            const toneCls = { good: 'text-rec-green', mixed: 'text-rec-yellow', light: 'text-accent', heavy: 'text-rec-orange' };
+            return (
+              <div className="rounded-xl bg-raised px-3.5 py-3 text-[13px]">
+                <div className={cn('text-[14.5px] font-semibold', toneCls[v.tone])}>{v.title}</div>
+                <ul className="mt-1.5 flex flex-col gap-1 text-fg/80">
+                  {v.points.map((pt) => (
+                    <li key={pt}>· {pt}</li>
+                  ))}
+                </ul>
+                <div className="mt-2 font-semibold">{v.next}</div>
+                <div className="mt-2 flex items-center gap-2 text-[12px] text-muted">
+                  Gefühlt anders?
+                  {(['easy', 'hard'] as const).map((fv) => (
+                    <button
+                      key={fv}
+                      onClick={() => s.patchExercise(session.id, se.uid, { feedback: se.feedback === fv ? undefined : fv })}
+                      className={cn('rounded-full px-2.5 py-1 font-medium', se.feedback === fv ? 'bg-fg text-bg' : 'bg-bg text-muted')}
+                    >
+                      {fv === 'easy' ? 'war leichter' : 'war schwerer'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" variant={complete ? 'ghost' : 'secondary'} onClick={() => s.addSet(session.id, se.uid)} title="Zusätzlicher Satz (über der Empfehlung)">
               <Plus size={14} /> {complete ? 'Extra-Satz' : 'Satz'}

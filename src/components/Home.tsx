@@ -369,7 +369,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                     )}
                   >
                     <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={40} />
-                    <span className={cn('min-w-0 flex-1 truncate text-[14px]', cur ? 'font-semibold' : fin ? 'text-muted line-through decoration-muted/50' : '')}>{ex.name}</span>
+                    <span className={cn('min-w-0 flex-1 truncate text-[14px]', cur ? 'font-semibold' : fin ? 'text-rec-green line-through decoration-rec-green/60' : '')}>{ex.name}</span>
                     {cur ? (
                       <span className="flex shrink-0 items-center gap-1 text-[11px] font-bold uppercase text-white">
                         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.9)]" /> Jetzt

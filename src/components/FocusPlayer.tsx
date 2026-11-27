@@ -10,9 +10,9 @@ import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
 import { cn, fmtMin, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 import { timeEstimator } from '../engine/timing';
+import { exerciseVerdict } from '../engine/verdict';
 import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
-import { WeightFeedback } from './WeightFeedback';
 import { LiveAdjustBanner } from './LiveAdjustBanner';
 import { setPR } from '../engine/prs';
 import { usePRCelebration } from '../lib/hooks';
@@ -38,6 +38,8 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const lastW = se?.lastWeight ?? advice?.lastWeight ?? null;
 
   const [busy, setBusy] = useState(false);
+  const [fbUid, setFbUid] = useState<string | null>(null);
+  const [hideStart, setHideStart] = useState(false);
   // Eingabe für den aktuellen Satz
   const [w, setW] = useState<number | null>(null);
   const [noWeight, setNoWeight] = useState(false);
@@ -64,7 +66,10 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => setWatch({ start: Date.now(), acc: 0, running: false }), [se?.uid, setIndex]);
+  useEffect(() => {
+    setWatch({ start: Date.now(), acc: 0, running: false });
+    setHideStart(false);
+  }, [se?.uid, setIndex]);
   const timerNow = s.timer;
   const restingNow = !!timerNow && (timerNow.pausedLeft ?? (timerNow.endsAt - now) / 1000) > 0;
   useEffect(() => {
@@ -138,7 +143,8 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
       const nextEx = nextSe ? s.exercises.find((e) => e.id === nextSe.exerciseId) : undefined;
       if (nextSe && nextEx) s.startTimer(Math.max(rest.sec, transitionRest(se.restSec, nextSe.restSec)), `Wechsel zu ${nextEx.name}`);
     } else s.startTimer(rest.sec, `${ex.name} · Satz ${setIndex + 2}${rest.note ? ` · ${rest.note}` : ''}`);
-    if (last && idx < list.length - 1) setTimeout(() => setIdx((i) => Math.min(list.length - 1, i + 1)), 500);
+    // Nach der letzten Übung-Satz: erst Feedback zum Gewicht, dann weiter zur nächsten Übung
+    if (last) setTimeout(() => setFbUid(se.uid), 350);
   };
   const stepW = (dir: 1 | -1) => {
     const base = w ?? rec ?? 0;
@@ -185,24 +191,11 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
 
         <div>
           {awaiting ? (
-            <div className="flex items-center gap-3">
-              <button
-                onClick={startSet}
-                className={cn(
-                  'flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-rec-green text-[17px] font-bold text-black active:scale-[0.98]',
-                  restEndedAt && 'animate-[pulse_1.4s_ease-in-out_infinite] shadow-[0_0_28px_rgba(61,220,151,0.55)]',
-                )}
-              >
-                <Play size={18} fill="currentColor" /> {restEndedAt ? 'Los! Satz starten' : 'Satz starten'}
+            <div className="flex items-baseline gap-3">
+              <div className="tnum text-[44px] font-bold leading-none tracking-tight text-white/35">00:00</div>
+              <button onClick={startSet} className="text-[12px] font-semibold uppercase tracking-[0.12em] text-rec-green">
+                {restEndedAt ? `Pause vorbei · +${Math.floor(over / 60)}:${String(Math.floor(over % 60)).padStart(2, '0')}` : 'Bereit'} · Starten
               </button>
-              {restEndedAt && (
-                <div className="tnum shrink-0 text-right">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Pause vorbei</div>
-                  <div className="text-[15px] font-semibold text-white/80">
-                    +{String(Math.floor(over / 60))}:{String(Math.floor(over % 60)).padStart(2, '0')}
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
             <div className="flex items-baseline gap-3">
@@ -212,12 +205,22 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
               <span className={cn('text-[12px] font-semibold uppercase tracking-[0.12em]', resting ? 'text-accent' : 'text-white/45')}>
                 {resting ? (paused ? 'Pause angehalten' : 'Satzpause') : paused ? 'angehalten' : 'Satzzeit'}
               </span>
+              <button onClick={togglePause} className="ml-auto grid h-10 w-10 shrink-0 place-items-center self-center rounded-full bg-white/10" aria-label={paused ? 'Fortsetzen' : 'Anhalten'}>
+                {paused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />}
+              </button>
             </div>
           )}
           <div className="mt-2 text-[22px] font-semibold leading-tight">{ex.name}</div>
           <div className="mt-1 flex items-center justify-between gap-2">
-            <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
-              Übung {idx + 1}/{list.length} · {cur ? `Satz ${setIndex + 1}/${se.sets.length}` : 'alle Sätze erledigt'}
+            <span className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
+              <button disabled={idx === 0} onClick={() => setIdx(idx - 1)} className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-white disabled:opacity-25" aria-label="Vorherige Übung">
+                <SkipBack size={12} fill="currentColor" />
+              </button>
+              Übung {idx + 1}/{list.length}
+              <button disabled={idx >= list.length - 1} onClick={() => setIdx(idx + 1)} className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-white disabled:opacity-25" aria-label="Nächste Übung">
+                <SkipForward size={12} fill="currentColor" />
+              </button>
+              <span className="ml-1">· {cur ? `Satz ${setIndex + 1}/${se.sets.length}` : 'fertig'}</span>
             </span>
             {cur && (
               <button onClick={() => setBusy(true)} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[12px] font-medium text-white/80">
@@ -314,26 +317,110 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             <div className="rounded-[24px] bg-rec-green/10 p-4 text-[14px] text-rec-green">
               Übung abgeschlossen.{idx < list.length - 1 ? ' Weiter zur nächsten Übung.' : ' Letzte Übung – beende das Training in der Übersicht.'}
             </div>
-            <WeightFeedback dark value={se.feedback} onChange={(f) => s.patchExercise(session.id, se.uid, { feedback: f })} />
+            {(() => {
+              const v = exerciseVerdict(ex, se, session, s.sessions, { settings: s.settings, checkIns: s.checkIns });
+              return v ? (
+                <div className="rounded-[24px] bg-white/[0.06] p-4 text-[13.5px]">
+                  <div className="text-[15px] font-semibold">{v.title}</div>
+                  <ul className="mt-1.5 flex flex-col gap-1 text-white/75">
+                    {v.points.map((pt) => (
+                      <li key={pt}>· {pt}</li>
+                    ))}
+                  </ul>
+                  <div className="mt-2 font-semibold">{v.next}</div>
+                </div>
+              ) : null;
+            })()}
           </div>
         )}
 
         {/* Verlauf: Volumen & Sätze, heute vs. frühere Einheiten */}
         <FocusProgress part="history" ex={ex} se={se} sessionId={session.id} sessions={s.sessions} advice={advice} />
 
-        {/* Steuerung */}
-        <div className="sticky bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] mt-auto grid h-[72px] shrink-0 grid-cols-3 overflow-hidden rounded-[26px] bg-[#1c1c1f]/95 backdrop-blur">
-          <button className="relative grid place-items-center disabled:opacity-30" disabled={idx === 0} onClick={() => setIdx(idx - 1)} aria-label="Vorherige Übung">
-            <SkipBack size={26} fill="currentColor" />
-          </button>
-          <button className="relative grid place-items-center" onClick={togglePause} aria-label={awaiting ? 'Satz starten' : paused ? 'Fortsetzen' : 'Pausieren'}>
-            {paused ? <Play size={28} fill="currentColor" /> : <Pause size={28} fill="currentColor" />}
-          </button>
-          <button className="relative grid place-items-center disabled:opacity-30" disabled={idx >= list.length - 1} onClick={() => setIdx(idx + 1)} aria-label="Nächste Übung">
-            <SkipForward size={26} fill="currentColor" />
-          </button>
-        </div>
         {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} />}
+
+        {/* Schwebender Start-Knopf: groß, mittig über allem */}
+        {awaiting && !hideStart && !fbUid && !busy && (
+          <div className="fixed inset-0 z-[65] flex flex-col items-center justify-center gap-4 bg-black/55 backdrop-blur-[3px]" onClick={() => setHideStart(true)}>
+            <div className="relative grid place-items-center">
+              {restEndedAt && <span className="absolute h-44 w-44 animate-ping rounded-full bg-rec-green/40" />}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startSet();
+                }}
+                className="relative flex h-44 w-44 flex-col items-center justify-center gap-1.5 rounded-full bg-rec-green text-black shadow-[0_0_60px_rgba(61,220,151,0.6)] active:scale-95"
+                aria-label="Satz starten"
+              >
+                <Play size={44} fill="currentColor" />
+                <span className="text-[18px] font-bold">{restEndedAt ? 'Los!' : 'Satz starten'}</span>
+                <span className="text-[12.5px] font-semibold opacity-70">
+                  {ex.name.length > 18 ? `Satz ${setIndex + 1}/${se.sets.length}` : `${ex.name.split(' ')[0]} · ${setIndex + 1}/${se.sets.length}`}
+                </span>
+              </button>
+            </div>
+            {restEndedAt ? (
+              <div className="tnum rounded-full bg-white/10 px-3.5 py-1.5 text-[14px] font-semibold text-white/85">
+                Pause vorbei · +{Math.floor(over / 60)}:{String(Math.floor(over % 60)).padStart(2, '0')}
+              </div>
+            ) : (
+              <div className="max-w-[260px] text-center text-[13px] text-white/60">{ex.name}</div>
+            )}
+            <span className="text-[12px] text-white/40">Daneben tippen zum Ausblenden</span>
+          </div>
+        )}
+
+        {/* Feedback nach jeder Übung */}
+        {fbUid && (() => {
+          const fse = session.exercises.find((x) => x.uid === fbUid);
+          const fex = fse && s.exercises.find((x) => x.id === fse.exerciseId);
+          if (!fse || !fex) return null;
+          const doneS = fse.sets.filter((x) => x.done);
+          const close = (v?: 'easy' | 'ok' | 'hard') => {
+            if (v) s.patchExercise(session.id, fse.uid, { feedback: v });
+            setFbUid(null);
+            const pos = list.findIndex((x) => x.uid === fse.uid);
+            if (pos >= 0 && pos < list.length - 1) setIdx(pos + 1);
+          };
+          const v = exerciseVerdict(fex, fse, session, s.sessions, { settings: s.settings, checkIns: s.checkIns });
+          const toneCls = { good: 'text-rec-green', mixed: 'text-rec-yellow', light: 'text-accent', heavy: 'text-rec-orange' };
+          return (
+            <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/55 p-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] backdrop-blur-sm" role="dialog" aria-label="Feedback zur Übung">
+              <div className="w-full max-w-lg animate-fade-up rounded-[28px] bg-[#1c1c1f] p-5 ring-1 ring-white/10">
+                <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-rec-green">Übung geschafft</div>
+                <div className="mt-1 text-[20px] font-semibold leading-tight">{fex.name}</div>
+                <div className="tnum mt-1 text-[13px] text-white/55">
+                  {doneS.map((x) => `${fmtNum(x.weight ?? 0)}×${x.repsL != null && x.repsR != null ? Math.min(x.repsL, x.repsR) : x.reps}`).join(' · ')} · Ziel {fse.repMin}–{fse.repMax} Wdh.
+                </div>
+                {v && (
+                  <>
+                    <div className={cn('mt-4 text-[18px] font-bold', toneCls[v.tone])}>{v.title}</div>
+                    <ul className="mt-2 flex flex-col gap-1.5 text-[13.5px] text-white/80">
+                      {v.points.map((pt) => (
+                        <li key={pt} className="flex gap-2">
+                          <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-white/40" />
+                          {pt}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 rounded-2xl bg-white/[0.06] px-3.5 py-3 text-[14px] font-semibold">{v.next}</div>
+                  </>
+                )}
+                <button onClick={() => close()} className="mt-4 h-12 w-full rounded-full bg-white text-[15px] font-semibold text-black active:scale-[0.99]">
+                  {list.findIndex((x) => x.uid === fse.uid) < list.length - 1 ? 'Weiter zur nächsten Übung' : 'Fertig'}
+                </button>
+                <div className="mt-3 flex items-center justify-center gap-2 text-[12px] text-white/45">
+                  Gefühlt anders?
+                  {(['easy', 'hard'] as const).map((fv) => (
+                    <button key={fv} onClick={() => close(fv)} className={cn('rounded-full px-2.5 py-1 font-medium', fse.feedback === fv ? 'bg-white text-black' : 'bg-white/10 text-white/70')}>
+                      {fv === 'easy' ? 'war leichter' : 'war schwerer'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>,
     document.body,
