@@ -7,7 +7,7 @@ import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
 import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
 import { planTemplate, planToday, PLAN_DAYS, personalTarget, TEMPLATE_SHORT, TEMPLATES } from '../engine/planner';
 import { MUSCLES } from '../lib/muscles';
-import { BodyMap } from './BodyMap';
+import { MuscleFigure } from './MuscleFigure';
 import type { MuscleId } from '../lib/types';
 import { useMuscleStates } from '../lib/hooks';
 import { MUSCLE } from '../lib/muscles';
@@ -846,8 +846,9 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
   const covered = rows.filter((r) => r.status === 'covered').length;
   const dayLbl = (d: string) => (d === today ? 'heute' : d === addDays(today, 1) ? 'morgen' : WEEKDAYS_SHORT[weekdayOf(d)]);
   // Körperkarte: Farbe = Anteil am Wochenziel (erledigt); geplante Einheiten als Text in der Liste
-  const fill = (x: number) => (x >= 0.95 ? 'rgb(var(--rec-green))' : x >= 0.5 ? 'rgb(var(--rec-green) / 0.55)' : x > 0.05 ? 'rgb(var(--rec-yellow) / 0.6)' : 'rgb(var(--line) / 0.12)');
-  const fills = Object.fromEntries(rows.map((r) => [r.m.id, fill(r.target ? r.done / r.target : 0)])) as Partial<Record<MuscleId, string>>;
+  // Figur: Farbe = Anteil am Wochenziel (erledigt); nicht begonnen bleibt grau
+  const fill = (x: number) => (x >= 0.95 ? 'rgb(var(--rec-green))' : x >= 0.5 ? 'rgb(var(--rec-yellow))' : x > 0.05 ? 'rgb(var(--rec-orange))' : null);
+  const fills = Object.fromEntries(rows.map((r) => [r.m.id, fill(r.target ? r.done / r.target : 0)]).filter(([, c]) => c)) as Partial<Record<MuscleId, string>>;
   const totDone = rows.reduce((a, r) => a + (MUSCLE[r.m.id].indirectOnly ? 0 : states[r.m.id].direct7), 0);
   const totPlanned = plan.sessions.reduce((a, p) => a + p.exercises.reduce((b, e) => b + e.sets, 0), 0);
   return (
@@ -859,26 +860,25 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
         </span>
       </div>
       <p className="mb-4 text-[12px] text-muted">Sätze pro Muskel in den letzten 7 Tagen plus die geplanten Einheiten – gemessen an deinem Wochenziel.</p>
-      <div className="card mb-3 flex items-center gap-4 p-4">
-        <div className="flex shrink-0 gap-1">
-          <BodyMap side="front" colors={{}} fills={fills} onSelect={(m) => setOpen(m)} selected={open ?? undefined} className="h-36 w-16" />
-          <BodyMap side="back" colors={{}} fills={fills} onSelect={(m) => setOpen(m)} selected={open ?? undefined} className="h-36 w-16" />
+      <div className="card mb-3 flex flex-col gap-3 p-3">
+        <div className="overflow-hidden rounded-2xl" style={{ background: '#262628' }}>
+          <MuscleFigure fills={fills} selected={open ?? undefined} onSelect={(m) => setOpen(open === m ? null : m)} className="w-full" />
         </div>
-        <div className="flex min-w-0 flex-col gap-2.5">
-          <div>
-            <div className="tnum text-[26px] font-semibold leading-none">{fmtNum(totDone, 0)}</div>
-            <div className="text-[12px] text-muted">direkte Sätze erledigt (7 Tage)</div>
-          </div>
-          <div>
-            <div className="tnum text-[20px] font-semibold leading-none text-accent">+{fmtNum(totPlanned, 0)}</div>
-            <div className="text-[12px] text-muted">
-              Sätze geplant{plan.sessions.length ? ` (${plan.sessions.map((p) => dayLbl(p.date)).join(', ')})` : ''}
+        <div className="flex items-end justify-between gap-3 px-1">
+          <div className="flex gap-5">
+            <div>
+              <div className="tnum text-[24px] font-semibold leading-none">{fmtNum(totDone, 0)}</div>
+              <div className="text-[11.5px] text-muted">Sätze erledigt</div>
+            </div>
+            <div>
+              <div className="tnum text-[24px] font-semibold leading-none text-accent">+{fmtNum(totPlanned, 0)}</div>
+              <div className="text-[11.5px] text-muted">geplant{plan.sessions.length ? ` (${plan.sessions.map((p) => dayLbl(p.date)).join(', ')})` : ''}</div>
             </div>
           </div>
           <div className="flex flex-col gap-1 text-[11px] text-muted">
             <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-full bg-rec-green" /> Ziel erreicht</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-full bg-rec-green/55" /> mind. Hälfte</span>
-            <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-full bg-rec-yellow/60" /> begonnen</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-full bg-rec-yellow" /> mind. Hälfte</span>
+            <span className="flex items-center gap-1.5"><span className="h-2 w-3 rounded-full bg-rec-orange" /> begonnen</span>
           </div>
         </div>
       </div>
