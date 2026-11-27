@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, usePlan, useToast } from '../lib/hooks';
 import { Badge, Button, Card, Confirm, PageHeader, SectionTitle, Sheet, Switch } from '../components/ui';
-import { QuickAvailability, SessionPreview } from '../components/Coach';
+import { DayDuration, QuickAvailability, SessionPreview } from '../components/Coach';
 import type { Availability, Session } from '../lib/types';
 import { MONTHS, WEEKDAYS_LONG, addDays, cn, dateKey, fmtNum, parseKey, relDayLabel, weekdayOf } from '../lib/utils';
 import { sessionSets, sessionVolume } from '../engine/stats';
@@ -195,6 +195,9 @@ function DaySheet({ day, onClose }: { day: string | null; onClose: () => void })
           <div>
             <div className="label mb-2">
               Geplant: {planned.label} {planned.tentative && <Badge>vorläufig</Badge>}
+            </div>
+            <div className="mb-3">
+              <DayDuration date={day} plan={planned} />
             </div>
             <SessionPreview s={planned} />
           </div>

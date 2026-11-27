@@ -4,7 +4,7 @@ import { defaultData, exportData, migrate, useStore } from '../lib/store';
 import { useRouter, useToast } from '../lib/hooks';
 import { Button, Card, Chip, Confirm, Field, Input, PageHeader, SectionTitle, Segmented, Select, Sheet, Switch } from '../components/ui';
 import { GROUP_LABEL, weeklyTarget, MUSCLES } from '../lib/muscles';
-import { WEEKDAYS_SHORT, dateKey, downloadFile, fmtNum } from '../lib/utils';
+import { WEEKDAYS_SHORT, dateKey, downloadFile, fmtNum, fmtMin } from '../lib/utils';
 import { clearDemo, generateDemo, hasDemo } from '../lib/demo';
 import { mergeData, parseExport } from '../lib/merge';
 import type { AppData } from '../lib/types';
@@ -81,7 +81,7 @@ export default function ProfilePage() {
               <Select id="s-min" value={st.defaultMinutes} onChange={(e) => setS({ defaultMinutes: +e.target.value })}>
                 {[45, 60, 75, 90, 105, 120].map((m) => (
                   <option key={m} value={m}>
-                    {m} Minuten
+                    {fmtMin(m)}
                   </option>
                 ))}
               </Select>

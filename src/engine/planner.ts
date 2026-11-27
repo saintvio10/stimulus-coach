@@ -1,7 +1,7 @@
 import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL } from '../lib/muscles';
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
-import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf } from '../lib/utils';
+import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
 import { adviseExercise } from './progression';
@@ -793,10 +793,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     const d = allDates[i];
     const strat = i < dates.length ? strategy : strategy2;
     const at = d === today ? now : parseKey(d).getTime() + 17 * HOUR;
-    const minutes =
-      d === today
-        ? opts.minutesToday ?? (data.planOptions.todayMinutes?.date === today ? data.planOptions.todayMinutes.minutes : data.settings.defaultMinutes)
-        : data.settings.defaultMinutes;
+    const minutes = d === today ? opts.minutesToday ?? minutesFor(data, d) : minutesFor(data, d);
     let best: PlannedSession | null = null;
     let bestScore = -Infinity;
     for (const tid of strat.templates) {
@@ -856,7 +853,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
 export function planToday(data: AppData, minutes?: number, now = Date.now()): PlannedSession | null {
   const plan = buildPlan(data, now);
   const today = dateKey(now);
-  const m = minutes ?? (data.planOptions.todayMinutes?.date === today ? data.planOptions.todayMinutes.minutes : data.settings.defaultMinutes);
+  const m = minutes ?? minutesFor(data, today);
   if (plan.sessions[0]?.date === today && (minutes == null || plan.sessions[0].minutes === m)) return plan.sessions[0];
   // Heute einschieben: Strategie inkl. heute neu berechnen
   const withToday: AppData = { ...data, availability: { ...data.availability, [today]: 'yes' } };

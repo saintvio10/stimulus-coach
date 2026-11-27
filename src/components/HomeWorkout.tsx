@@ -7,7 +7,7 @@ import { planHome, type HomeMode } from '../engine/planner';
 import { Button, Chip, Sheet } from './ui';
 import { SessionPreview } from './Coach';
 import { unlockAudio } from './RestTimer';
-import { cn } from '../lib/utils';
+import { cn, fmtMin } from '../lib/utils';
 
 /** Training ohne Gym: der Coach plant mit Körpergewicht (optional deine Hantel und Flaschen) passend zu Erholung und Wochenvolumen */
 export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -85,7 +85,7 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
         <div className="flex flex-wrap gap-1.5">
           {[20, 30, 45, 60, 75].map((m) => (
             <Chip key={m} active={minutes === m} onClick={() => setMinutes(m)} className="h-8">
-              {m} Min
+              {fmtMin(m)}
             </Chip>
           ))}
         </div>

@@ -8,7 +8,7 @@ import { DayHero, DayPicker, HomeHeader, MoreAvailability, QuickStart, SwipeDays
 import { MUSCLE, MUSCLES, RECOVERY_COLORS, minDose14, weeklyTarget } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
 import { avgDurationMin, doneSessions, exerciseSeries, personalRecords, sessionSets, weekStreak } from '../engine/stats';
-import { cn, dateKey, fmtDuration, fmtNum, fmtShortDay, parseKey, relDayLabel, WEEKDAYS_LONG, MONTHS, DAY } from '../lib/utils';
+import { cn, dateKey, fmtDuration, fmtNum, fmtShortDay, parseKey, relDayLabel, WEEKDAYS_LONG, MONTHS, DAY, fmtMin } from '../lib/utils';
 import type { AppData } from '../lib/types';
 import { planToday, personalTarget } from '../engine/planner';
 import { QuickLog } from '../components/Extras';
@@ -81,7 +81,7 @@ export default function Dashboard() {
       <Card className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
         <Stat label="Trainings" value={done.length} sub={`${last30} in 30 Tagen`} />
-        <Stat label="Ø Dauer" value={avgDur ? `${avgDur}′` : '–'} sub="pro Einheit" />
+        <Stat label="Ø Dauer" value={avgDur ? fmtMin(avgDur) : '–'} sub="pro Einheit" />
         <Stat
           label="Serie"
           value={
@@ -226,7 +226,7 @@ export default function Dashboard() {
                       <div className="text-[12px] text-muted">{fmtShortDay(x.date)}</div>
                     </div>
                     <span className="tnum shrink-0 text-muted">
-                      {sessionSets(x)} Sätze{x.endedAt ? ` · ${Math.round((x.endedAt - x.startedAt) / 60000)}′` : ''}
+                      {sessionSets(x)} Sätze{x.endedAt ? ` · ${fmtMin((x.endedAt - x.startedAt) / 60000)}` : ''}
                     </span>
                   </li>
                 ))}

@@ -36,7 +36,7 @@ import { SwipeRow } from '../components/SwipeRow';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
-import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight } from '../lib/utils';
+import { cn, dateKey, fmtClock, fmtNum, fmtShortDay, nextWeight, prevWeight, fmtMin } from '../lib/utils';
 import { unlockAudio } from '../components/RestTimer';
 
 export default function Training() {
@@ -781,7 +781,7 @@ function WorkoutProgress({ session, now, onJump }: { session: Session; now: numb
             'Geschafft – Training beenden'
           ) : (
             <>
-              Noch&nbsp;<span className="font-semibold">{total - done}</span>&nbsp;Sätze · ~{remainingMin}′
+              Noch&nbsp;<span className="font-semibold">{total - done}</span>&nbsp;Sätze · ~{fmtMin(remainingMin)}
             </>
           )
         }
@@ -810,7 +810,7 @@ function WorkoutProgress({ session, now, onJump }: { session: Session; now: numb
       <div className="tnum flex justify-between text-[11px] text-muted">
         <span className="truncate">{current ? `Jetzt: ${exMap.get(current.exerciseId)?.name ?? ''}` : 'Alle Übungen erledigt – Training beenden'}</span>
         <span className="shrink-0">
-          {elapsedMin}′ von ~{session.estMinutes ?? session.plannedMinutes}′
+          {fmtMin(elapsedMin)} von ~{fmtMin(session.estMinutes ?? session.plannedMinutes)}
         </span>
       </div>
     </div>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { CalendarCheck2, CalendarPlus, Clock, HelpCircle, Repeat2, Sun, Sunrise, Info, ChevronDown } from 'lucide-react';
 import { quick, useStore } from '../lib/store';
 import { useToast } from '../lib/hooks';
-import { addDays, cn, dateKey, endOfWeek, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT } from '../lib/utils';
+import { addDays, cn, dateKey, endOfWeek, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, fmtMin, minutesFor } from '../lib/utils';
 import { Badge, Button, Chip, Sheet } from './ui';
 import type { Plan, PlannedSession } from '../engine/planner';
 import { MUSCLE, MUSCLE_IDS } from '../lib/muscles';
@@ -81,10 +81,10 @@ export function QuickAvailability({ compact }: { compact?: boolean }) {
               active={tMin === m}
               onClick={() => {
                 quick.minutesToday(tMin === m ? null : m);
-                toast(tMin === m ? 'Standarddauer' : `Heute ${m} Minuten – Plan wird angepasst`);
+                toast(tMin === m ? 'Standarddauer' : `Heute ${fmtMin(m)} – Plan wird angepasst`);
               }}
             >
-              {m}′
+              {fmtMin(m)}
             </Chip>
           ))}
         </div>
@@ -365,3 +365,63 @@ export function CheckInSheet({ open, onClose }: { open: boolean; onClose: () => 
 
 export const ALL_MUSCLES = MUSCLE_IDS;
 export { relDayLabel };
+
+/** Trainingsdauer für einen bestimmten Tag einstellen – der Plan rechnet sofort neu (auch die Folgetage) */
+export function DayDuration({ date, plan, dark }: { date: string; plan?: PlannedSession | null; dark?: boolean }) {
+  const s = useStore();
+  const toast = useToast((t) => t.show);
+  const [open, setOpen] = useState(false);
+  const cur = minutesFor(s, date);
+  const def = s.settings.defaultMinutes;
+  const custom = cur !== def;
+  const opts = [45, 60, 75, 90, 105, 120, 150, 180];
+  const unused = plan && !plan.rest ? cur - plan.estMinutes : 0;
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'tnum inline-flex h-8 w-fit items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium backdrop-blur',
+          custom ? 'bg-accent/20 text-fg ring-1 ring-accent/40' : dark ? 'bg-white/10 text-white/85' : 'bg-fg/[0.07] text-fg/85',
+        )}
+        aria-expanded={open}
+      >
+        <Clock size={14} /> {plan && !plan.rest ? `~${fmtMin(plan.estMinutes)}` : fmtMin(cur)}
+        <span className="text-muted">· Zeit {fmtMin(cur)} ändern</span>
+      </button>
+      {open && (
+        <div className="flex flex-col gap-2 rounded-2xl bg-fg/[0.05] p-3">
+          <div className="text-[12px] text-muted">Wie viel Zeit hast du an diesem Tag?</div>
+          <div className="flex flex-wrap gap-1.5">
+            {opts.map((m) => (
+              <Chip
+                key={m}
+                active={cur === m}
+                onClick={() => {
+                  quick.dayMinutes(date, m);
+                  toast(`${relDayLabel(date).split(',')[0]}: ${fmtMin(m)} – Plan neu berechnet`);
+                }}
+                className="h-8"
+              >
+                {fmtMin(m)}
+              </Chip>
+            ))}
+            {custom && (
+              <Chip active={false} onClick={() => quick.dayMinutes(date, null)} className="h-8">
+                Standard ({fmtMin(def)})
+              </Chip>
+            )}
+          </div>
+          <p className="text-[11.5px] text-muted">
+            {cur < def
+              ? 'Kürzer: heute weniger Sätze, priorisiert nach dem, was am meisten bringt. Fehlendes Wochenvolumen holen die nächsten Einheiten automatisch nach.'
+              : cur > def
+                ? 'Länger: mehr Übungen und Sätze – aber nur, solange sie noch echten Zusatznutzen bringen (max. ~6–10 Sätze pro Muskel und Einheit). Die Folgetage werden entsprechend entlastet.'
+                : 'Standarddauer aus deinem Profil.'}
+            {unused >= 15 && ` Mehr als ~${fmtMin(plan!.estMinutes)} bringt an diesem Tag kaum etwas – die eingeplanten Muskeln sind ausgelastet bzw. noch in Erholung.`}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

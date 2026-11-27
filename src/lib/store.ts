@@ -567,9 +567,18 @@ export const quick = {
     useStore.getState().mutate((d) => {
       d.planOptions.uncertain = !d.planOptions.uncertain;
     }),
-  minutesToday: (m: number | null) =>
+  minutesToday: (m: number | null) => quick.dayMinutes(dateKey(), m),
+  /** Trainingsdauer für einen Tag setzen (null = Standarddauer) */
+  dayMinutes: (date: string, m: number | null) =>
     useStore.getState().mutate((d) => {
-      d.planOptions.todayMinutes = m == null ? null : { date: dateKey(), minutes: m };
+      const dm = { ...(d.planOptions.dayMinutes ?? {}) };
+      if (m == null || m === d.settings.defaultMinutes) delete dm[date];
+      else dm[date] = m;
+      // alte Einträge aufräumen
+      const today = dateKey();
+      for (const k of Object.keys(dm)) if (k < today) delete dm[k];
+      d.planOptions.dayMinutes = dm;
+      if (date === today) d.planOptions.todayMinutes = m == null ? null : { date, minutes: m };
     }),
   clearWeekCap: () =>
     useStore.getState().mutate((d) => {

@@ -11,12 +11,12 @@ import type { MuscleId } from '../lib/types';
 import { useMuscleStates } from '../lib/hooks';
 import { MUSCLE } from '../lib/muscles';
 import { readinessLabel, readinessScore } from '../engine/readiness';
-import { addDays, cn, dateKey, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, WEEKDAYS_LONG, MONTHS } from '../lib/utils';
+import { addDays, cn, dateKey, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, WEEKDAYS_LONG, MONTHS, fmtMin } from '../lib/utils';
 import { Badge, Button, Chip, GlowProgress, Ring, Sheet } from './ui';
 import { sessionStats, sessionsThisWeek } from '../engine/sessionStats';
 import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
 import { SwipeToStart } from './SwipeToStart';
-import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability } from './Coach';
+import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability, DayDuration } from './Coach';
 import { useStartScreen } from './StartScreen';
 import { unlockAudio } from './RestTimer';
 import { RECOVERY_COLORS } from '../lib/muscles';
@@ -338,8 +338,8 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
               <div className="text-[13px] text-muted">{planned.tentative ? 'Vielleicht – falls du Zeit hast' : isToday ? 'Deine Empfehlung' : 'Geplant'}</div>
               <h2 className="mt-0.5 text-[28px] font-semibold leading-[1.1] tracking-tight">{planned.label}</h2>
             </div>
+            <DayDuration date={planned.date} plan={planned} />
             <div className="flex flex-wrap gap-2">
-              <Pill icon={<Clock size={14} />}>~{planned.estMinutes} Min</Pill>
               <Pill icon={<Dumbbell size={14} />}>{planned.exercises.length} Übungen</Pill>
               <Pill icon={<Layers size={14} />}>{planned.exercises.reduce((a, p) => a + p.sets, 0)} Sätze</Pill>
             </div>
@@ -521,7 +521,7 @@ export function QuickStart() {
             >
               <div className="absolute left-2.5 right-2.5 top-2.5 flex gap-1.5">
                 <span className="tnum inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-[11px] font-medium backdrop-blur">
-                  <Clock size={11} /> {defaultMin} Min
+                  <Clock size={11} /> {fmtMin(defaultMin)}
                 </span>
                 <span className="tnum inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-[11px] font-medium backdrop-blur">
                   {p.exercises.length} Üb.
@@ -565,7 +565,7 @@ export function QuickStart() {
         <div className="mb-4 flex flex-wrap gap-1.5">
           {[30, 45, 60, 75, 90].map((m) => (
             <Chip key={m} active={minutes === m} onClick={() => setMinutes(m)} className="h-8">
-              {m} Min
+              {fmtMin(m)}
             </Chip>
           ))}
         </div>
@@ -674,7 +674,7 @@ export function UpcomingDays({ plan }: { plan: Plan }) {
                   </div>
                   <div className="mt-1 max-w-[60%] text-[20px] font-semibold leading-tight text-white">{p.label.split(' (')[0]}</div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">~{p.estMinutes} Min</span>
+                    <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">~{fmtMin(p.estMinutes)}</span>
                     <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85 backdrop-blur">{p.exercises.length} Übungen</span>
                     {p.exercises.some((x) => x.why?.startsWith('Nachholen') || x.why?.includes(' Nachholen:')) && (
                       <span className="rounded-full bg-amber-400/20 px-2 py-0.5 text-[11px] font-semibold text-amber-300 backdrop-blur">↺ Nachholen</span>
@@ -948,7 +948,7 @@ function DoneToday({ session, nextPlanned, onNext }: { session: Session; nextPla
       <GlowProgress value={ratio} height={14} />
       <div className="grid grid-cols-3 gap-2">
         {[
-          ['Dauer', `${st.durationMin} min`],
+          ['Dauer', fmtMin(st.durationMin)],
           st.volume > 0 ? ['Volumen', st.volume >= 1000 ? `${fmtNum(st.volume / 1000, 1)} t` : `${Math.round(st.volume)} kg`] : ['Wdh.', `${st.reps}`],
           ['Pausen', st.restMin != null ? `${Math.round(st.restMin)} min` : `${st.reps} Wdh.`],
         ].map(([l, v], i) => (

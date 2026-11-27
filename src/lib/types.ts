@@ -166,6 +166,8 @@ export interface PlanOptions {
   uncertain: boolean;
   weekCap: { count: number; until: string } | null;
   todayMinutes: { date: string; minutes: number } | null;
+  /** eigene Trainingsdauer je Tag (Minuten), sonst Standarddauer */
+  dayMinutes?: Record<string, number>;
   /** Datum, an dem zuletzt nach der Verfügbarkeit gefragt wurde */
   askedOn?: string;
 }

@@ -176,3 +176,20 @@ export function downloadFile(name: string, content: string, type = 'application/
     a.remove();
   }, 500);
 }
+
+/** Geplante Trainingsdauer eines Tages: eigene Einstellung für den Tag, sonst Standarddauer */
+export function minutesFor(data: { planOptions: { todayMinutes: { date: string; minutes: number } | null; dayMinutes?: Record<string, number> }; settings: { defaultMinutes: number } }, date: string): number {
+  const po = data.planOptions;
+  if (po.todayMinutes && po.todayMinutes.date === date) return po.todayMinutes.minutes;
+  return po.dayMinutes?.[date] ?? data.settings.defaultMinutes;
+}
+
+/** Dauer lesbar: 45 min · 1 h · 1 h 26 min */
+export function fmtMin(min: number | null | undefined): string {
+  if (min == null || !isFinite(min)) return '–';
+  const m = Math.max(0, Math.round(min));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} h ${r} min` : `${h} h`;
+}

@@ -5,7 +5,7 @@ import { ArrowRight, CalendarCheck2, HelpCircle, Sparkles } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useRouter, useToast } from '../lib/hooks';
 import type { AppData, Availability } from '../lib/types';
-import { addDays, cn, dateKey, endOfWeek, weekdayOf, WEEKDAYS_LONG, fmtDate } from '../lib/utils';
+import { addDays, cn, dateKey, endOfWeek, weekdayOf, WEEKDAYS_LONG, fmtDate, fmtMin } from '../lib/utils';
 import { buildPlan, PLAN_DAYS } from '../engine/planner';
 import { generateDemo } from '../lib/demo';
 import { exportData } from '../lib/store';
@@ -64,6 +64,7 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
         uncertain,
         weekCap: onlyOnce ? { count: 1, until: endOfWeek(today) } : null,
         todayMinutes: { date: today, minutes },
+        dayMinutes: s.planOptions.dayMinutes,
       },
     });
   }, [draft, explicit, uncertain, onlyOnce, minutes, s.sessions, s.exercises, s.settings, s.profile]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -77,6 +78,11 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
       d.planOptions.uncertain = uncertain;
       d.planOptions.weekCap = onlyOnce ? { count: 1, until: endOfWeek(today) } : null;
       d.planOptions.todayMinutes = minutes !== d.settings.defaultMinutes ? { date: today, minutes } : null;
+      if (d.planOptions.dayMinutes) {
+        d.planOptions.dayMinutes = { ...d.planOptions.dayMinutes };
+        if (minutes === d.settings.defaultMinutes) delete d.planOptions.dayMinutes[today];
+        else d.planOptions.dayMinutes[today] = minutes;
+      }
       d.planOptions.askedOn = today;
       d.settings.onboarded = true;
     });
@@ -230,7 +236,7 @@ export function StartScreen({ onClose }: { onClose: () => void }) {
             <div className="scroll-x flex gap-1.5">
               {[30, 45, 60, 75, 90, 120].map((m) => (
                 <Chip key={m} active={minutes === m} onClick={() => setMinutes(m)} className="h-9">
-                  {m} Min
+                  {fmtMin(m)}
                 </Chip>
               ))}
             </div>

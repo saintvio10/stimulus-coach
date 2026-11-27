@@ -4,7 +4,7 @@ import { useStore } from '../lib/store';
 import { useRouter } from '../lib/hooks';
 import type { MuscleId, Session } from '../lib/types';
 import { MUSCLE } from '../lib/muscles';
-import { cn, fmtNum, relDayLabel } from '../lib/utils';
+import { cn, fmtMin, fmtNum, relDayLabel } from '../lib/utils';
 import { sessionStats, sessionsThisWeek, fmtMinSec } from '../engine/sessionStats';
 import { weekStreak } from '../engine/stats';
 import { BodyMap } from './BodyMap';
@@ -138,8 +138,16 @@ export function SessionComplete({ session, prs, onClose }: { session: Session; p
 
         {/* Kennzahlen */}
         <div className="grid grid-cols-2 gap-2.5">
-          <Tile icon={<Clock size={12} />} label="Dauer" delay={250} sub={session.estMinutes ? `geplant ~${session.estMinutes} min` : undefined}>
-            <Count value={st.durationMin} /> <span className="text-[15px] text-white/60">min</span>
+          <Tile icon={<Clock size={12} />} label="Dauer" delay={250} sub={session.estMinutes ? `geplant ~${fmtMin(session.estMinutes)}` : undefined}>
+            {st.durationMin >= 60 ? (
+              <>
+                {Math.floor(st.durationMin / 60)} <span className="text-[15px] text-white/60">h</span> {st.durationMin % 60 ? <>{st.durationMin % 60} <span className="text-[15px] text-white/60">min</span></> : null}
+              </>
+            ) : (
+              <>
+                <Count value={st.durationMin} /> <span className="text-[15px] text-white/60">min</span>
+              </>
+            )}
           </Tile>
           <Tile icon={<Dumbbell size={12} />} label={st.volume > 0 ? 'Volumen' : 'Wiederholungen'} delay={300} sub={st.volume > 0 ? 'Gewicht × Wdh.' : 'mit Körpergewicht'}>
             {st.volume <= 0 ? (
