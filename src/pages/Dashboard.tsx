@@ -76,8 +76,8 @@ export default function Dashboard() {
       <UpcomingDays plan={plan} />
       <BackupReminder />
       <WeightCard />
-      <WeekReviewCard onOpen={() => go('rueckblick')} />
       <WeeklyNeed plan={plan} />
+      <WeekReviewCard onOpen={() => go('rueckblick')} />
       <QuickStart />
 
       {/* Kennzahlen */}

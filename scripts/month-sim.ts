@@ -98,8 +98,9 @@ function train(day: string, p: PlannedSession, opts: Day) {
   const st = computeAllStates(allEvents(d, t0), t0, d.checkIns);
   for (const se of ses.exercises) {
     const ex = exMap.get(se.exerciseId)!;
-    const cat = recoveryInfo(st[ex.primary], t0).short;
-    if (cat === 'frisch belastet') tiredTrained.push(`${lbl(day)} ${ex.name} (${MUSCLE[ex.primary].short}: ${cat})`);
+    const ri = recoveryInfo(st[ex.primary], t0);
+    const cat = ri.short;
+    if (ri.level === 'fresh') tiredTrained.push(`${lbl(day)} ${ex.name} (${MUSCLE[ex.primary].short}: ${cat})`);
   }
   let t = t0;
   let exIdx = 0;

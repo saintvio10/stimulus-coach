@@ -259,7 +259,7 @@ export function useWeightSeries(days: number) {
     const pts = body.filter((b) => b.weight && parseKey(b.date).getTime() >= from).map((b) => ({ date: b.date, t: parseKey(b.date).getTime(), weight: b.weight! }));
     return pts.map((p) => {
       const win = pts.filter((q) => q.t <= p.t && q.t > p.t - 7 * DAY);
-      return { label: fmtDate(p.date), weight: p.weight, avg: +(win.reduce((a, q) => a + q.weight, 0) / win.length).toFixed(2) };
+      return { date: p.date, label: fmtDate(p.date), weight: p.weight, avg: +(win.reduce((a, q) => a + q.weight, 0) / win.length).toFixed(2) };
     });
   }, [body, days]);
 }
@@ -282,46 +282,82 @@ export function WeightChart({ series, height = 200 }: { series: { label: string;
   );
 }
 
-/** Gewichtskarte auf der Übersicht: heute noch nicht gewogen → Schieberegler, sonst kompakt mit Trend */
+/** Gewichtskarte auf der Übersicht: groß, mit Verlauf (Tageswerte + 7-Tage-Schnitt), Trend und Einordnung für den Muskelaufbau */
 export function WeightCard() {
   const s = useStore();
   const today = dateKey();
   const todayW = s.body.find((b) => b.date === today && b.weight)?.weight;
   const [edit, setEdit] = useState(false);
   const [sheet, setSheet] = useState(false);
-  const series = useWeightSeries(28);
+  const series = useWeightSeries(42);
   const avg7 = series.length ? series[series.length - 1].avg : null;
   const trend = weightTrend(s as unknown as AppData);
-  if (todayW && !edit)
-    return (
-      <div className="card flex items-center gap-3 p-4">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-raised text-muted">
-          <Scale size={18} />
-        </span>
-        <button className="min-w-0 flex-1 text-left" onClick={() => setSheet(true)}>
-          <div className="tnum text-[17px] font-semibold">{fmtNum(todayW)} kg heute</div>
-          <div className="tnum truncate text-[12px] text-muted">
-            {avg7 != null && `Ø 7 Tage ${fmtNum(avg7, 1)} kg`}
-            {trend && ` · ${trend.perWeek >= 0 ? '+' : ''}${fmtNum(trend.perWeek, 2)} kg/Woche`}
-          </div>
-        </button>
-        <button onClick={() => setEdit(true)} className="h-9 rounded-full bg-raised px-3.5 text-[12.5px] font-medium">
-          Ändern
-        </button>
-        <WeightSheet open={sheet} onClose={() => setSheet(false)} />
-      </div>
-    );
+  const last = s.body.filter((b) => b.weight).sort((a, b) => (a.date < b.date ? -1 : 1)).pop();
+  // Veränderung über 4 Wochen anhand des 7-Tage-Schnitts (glättet Wasser-/Salzschwankungen)
+  const fourWeeksAgo = parseKey(today).getTime() - 28 * DAY;
+  const old = series.find((p) => parseKey(p.date).getTime() >= fourWeeksAgo - 3 * DAY);
+  const delta4 = avg7 != null && old && parseKey(old.date).getTime() <= fourWeeksAgo + 7 * DAY ? avg7 - old.avg : null;
+  const pct = trend?.pctPerWeek ?? null;
+  // Richtwert für fortgeschrittenen Muskelaufbau: ~0,1–0,3 % Körpergewicht pro Woche (wie Ernährungs-Empfehlung der App)
+  const assess =
+    pct == null
+      ? { tone: 'muted', title: 'Noch kein Trend', text: 'Ab 3 Messungen über ≥ 10 Tage zeigt die App, ob du im Aufbau-Korridor liegst. Am besten morgens nach dem Aufstehen wiegen.' }
+      : pct < 0.1
+        ? { tone: 'yellow', title: pct < -0.05 ? 'Gewicht sinkt' : 'Zunahme sehr langsam', text: `Für Muskelaufbau bei Fortgeschrittenen sind ~0,1–0,3 % pro Woche ein guter Richtwert (bei dir ~${fmtNum(((last?.weight ?? 75) * 0.1) / 100, 2)}–${fmtNum(((last?.weight ?? 75) * 0.3) / 100, 2)} kg/Woche).${s.settings.nutritionEnabled ? ' Etwas mehr essen (~+150–200 kcal/Tag).' : ''}` }
+        : pct > 0.35
+          ? { tone: 'orange', title: 'Zunahme recht schnell', text: `Über ~0,3 % pro Woche steigt vor allem der Fettanteil. Richtwert bei dir: ~${fmtNum(((last?.weight ?? 75) * 0.1) / 100, 2)}–${fmtNum(((last?.weight ?? 75) * 0.3) / 100, 2)} kg/Woche.` }
+          : { tone: 'green', title: 'Im Aufbau-Korridor', text: 'Langsame, stetige Zunahme – passt zu Muskelaufbau mit wenig Fettzuwachs. Steigt dazu deine Kraft, ist das ein gutes Zeichen.' };
+  const toneCls = { green: 'bg-rec-green/10 text-rec-green', yellow: 'bg-rec-yellow/10 text-rec-yellow', orange: 'bg-rec-orange/10 text-rec-orange', muted: 'bg-raised text-muted' }[assess.tone as 'green'];
+  const sign = (x: number, d = 1) => `${x >= 0 ? '+' : '−'}${fmtNum(Math.abs(x), d)}`;
   return (
-    <div className="card p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="card flex flex-col gap-3.5 p-4">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-[14px] font-semibold">
-          <Scale size={16} className="text-muted" /> Gewicht heute
+          <Scale size={16} className="text-muted" /> Körpergewicht
         </div>
-        <button onClick={() => setSheet(true)} className="text-[12.5px] text-muted">
-          Verlauf →
+        <button onClick={() => setSheet(true)} className="text-[12.5px] text-muted hover:text-fg">
+          Alle Einträge →
         </button>
       </div>
-      <WeightSlider compact onSaved={() => setEdit(false)} />
+      {todayW && !edit ? (
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="tnum text-[40px] font-semibold leading-none tracking-tight">
+              {fmtNum(todayW)}
+              <span className="ml-1 text-[18px] font-medium text-muted">kg</span>
+            </div>
+            <div className="mt-1 text-[12px] text-muted">heute gewogen</div>
+          </div>
+          <button onClick={() => setEdit(true)} className="h-9 rounded-full bg-raised px-3.5 text-[12.5px] font-medium">
+            Ändern
+          </button>
+        </div>
+      ) : (
+        <WeightSlider compact onSaved={() => setEdit(false)} />
+      )}
+      <div className="tnum grid grid-cols-3 gap-2">
+        <div className="rounded-2xl bg-raised px-2.5 py-2">
+          <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted">Ø 7 Tage</div>
+          <div className="text-[16px] font-semibold">{avg7 != null ? `${fmtNum(avg7, 1)} kg` : '–'}</div>
+        </div>
+        <div className="rounded-2xl bg-raised px-2.5 py-2">
+          <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted">pro Woche</div>
+          <div className="text-[16px] font-semibold">{trend ? `${sign(trend.perWeek, 2)} kg` : '–'}</div>
+        </div>
+        <div className="rounded-2xl bg-raised px-2.5 py-2">
+          <div className="text-[10.5px] font-medium uppercase tracking-wider text-muted">4 Wochen</div>
+          <div className="text-[16px] font-semibold">{delta4 != null ? `${sign(delta4)} kg` : '–'}</div>
+        </div>
+      </div>
+      <WeightChart series={series} height={150} />
+      <div className={cn('rounded-2xl px-3 py-2.5', toneCls)}>
+        <div className="text-[13.5px] font-semibold">
+          {assess.title}
+          {pct != null && <span className="tnum font-normal opacity-80"> · {sign(pct, 2)} %/Woche</span>}
+        </div>
+        <div className="mt-0.5 text-[12px] leading-snug text-fg/75">{assess.text}</div>
+      </div>
+      <p className="text-[11px] text-muted">Die Waage zeigt Muskeln, Fett und Wasser zusammen – aussagekräftig ist der Trend über Wochen, zusammen mit steigender Kraft.</p>
       <WeightSheet open={sheet} onClose={() => setSheet(false)} />
     </div>
   );
