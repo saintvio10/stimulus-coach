@@ -12,6 +12,7 @@ import { cn, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
 import { WeightFeedback } from './WeightFeedback';
+import { LiveAdjustBanner } from './LiveAdjustBanner';
 import { GlowProgress } from './ui';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
@@ -212,6 +213,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
                 ))}
               </div>
             </div>
+            <LiveAdjustBanner sessionId={session.id} se={se} ex={ex} dark onApplied={(nw) => setW(nw)} />
             {noWeight && <p className="text-center text-[13px] font-medium text-rec-red">Bitte zuerst ein Gewicht einstellen (mit + oder −).</p>}
             <button onClick={completeSet} className="flex h-14 items-center justify-center gap-2 rounded-full bg-white text-[16px] font-semibold text-black active:scale-[0.98]">
               <Check size={18} /> Satz {setIndex + 1} erledigt

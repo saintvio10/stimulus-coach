@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { CalendarClock, Clock, Dumbbell, Flame, Footprints, Hourglass, Layers, Star, TrendingUp, Trophy } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { useRouter } from '../lib/hooks';
 import type { AppData } from '../lib/types';
 import { MUSCLE } from '../lib/muscles';
 import { fmtNum } from '../lib/utils';
@@ -41,6 +42,7 @@ function Row({ label, value, hint }: { label: string; value: ReactNode; hint?: s
 export default function StatsPage() {
   const s = useStore();
   const [range, setRange] = useState<Range>('90');
+  const go = useRouter((r) => r.go);
   const data = s as unknown as AppData;
   const st = useMemo(() => overallStats(data, range === 'all' ? null : Number(range)), [s.sessions, s.exercises, s.activities, range]); // eslint-disable-line react-hooks/exhaustive-deps
   const rangeTxt = range === 'all' ? 'insgesamt' : `in ${range} Tagen`;
@@ -48,6 +50,9 @@ export default function StatsPage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="Statistiken" sub="Dein Training in Zahlen" />
+      <button onClick={() => go('rueckblick')} className="card flex items-center justify-between p-4 text-left text-[14px] font-medium">
+        Wochenrückblick ansehen <span className="text-muted">→</span>
+      </button>
       <Segmented
         value={range}
         onChange={setRange}

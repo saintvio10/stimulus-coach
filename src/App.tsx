@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Activity,
   BarChart3,
+  CalendarCheck,
   BookOpen,
   CalendarDays,
   Dumbbell,
@@ -35,6 +36,7 @@ import type { AppData } from './lib/types';
 import { useEffect } from 'react';
 import { SessionComplete } from './components/SessionComplete';
 import StatsPage from './pages/Stats';
+import WeekReviewPage from './pages/WeekReview';
 
 const NAV: { id: Route; label: string; icon: typeof Gauge }[] = [
   { id: 'uebersicht', label: 'Übersicht', icon: LayoutGrid },
@@ -44,6 +46,7 @@ const NAV: { id: Route; label: string; icon: typeof Gauge }[] = [
   { id: 'muskeln', label: 'Muskelanalyse', icon: PersonStanding },
   { id: 'fortschritt', label: 'Fortschritt', icon: LineChart },
   { id: 'statistik', label: 'Statistiken', icon: BarChart3 },
+  { id: 'rueckblick', label: 'Wochenrückblick', icon: CalendarCheck },
   { id: 'ernaehrung', label: 'Ernährung', icon: Salad },
   { id: 'profil', label: 'Profil', icon: UserRound },
 ];
@@ -104,6 +107,7 @@ export default function App() {
     profil: ProfilePage,
     wissenschaft: SciencePage,
     statistik: StatsPage,
+    rueckblick: WeekReviewPage,
   }[route];
 
   return (

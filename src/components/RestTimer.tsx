@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Maximize2, Minus, Plus, TimerReset, X } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { fmtClock } from '../lib/utils';
+import { fmtClock, fmtNum } from '../lib/utils';
+import { LiveAdjustBanner } from './LiveAdjustBanner';
 import { useFocusRequest, useRouter } from '../lib/hooks';
 
 let audioCtx: AudioContext | null = null;
@@ -63,7 +64,9 @@ export function RestTimer() {
   const settings = useStore((s) => s.settings);
   const stop = useStore((s) => s.stopTimer);
   const adjust = useStore((s) => s.adjustTimer);
-  const hasActive = useStore((s) => s.sessions.some((x) => x.status === 'active'));
+  const activeSession = useStore((s) => s.sessions.find((x) => x.status === 'active'));
+  const exercises = useStore((s) => s.exercises);
+  const hasActive = !!activeSession;
   const go = useRouter((r) => r.go);
   const requestFocus = useFocusRequest((f) => f.request);
   const openFocus = () => {
@@ -100,6 +103,13 @@ export function RestTimer() {
 
   if (!timer) return null;
   const done = left <= 0;
+  // Satzvorschau: was kommt als Nächstes?
+  const nextSe = activeSession?.exercises.find((e) => !e.skipped && e.sets.some((x) => !x.done));
+  const nextEx = nextSe ? exercises.find((e) => e.id === nextSe.exerciseId) : undefined;
+  const nextIdx = nextSe ? nextSe.sets.findIndex((x) => !x.done) : -1;
+  const nextSet = nextSe && nextIdx >= 0 ? nextSe.sets[nextIdx] : null;
+  const nw = nextSet ? nextSet.weight ?? nextSe!.recWeight : null;
+  const bwEx = nextEx?.equipment === 'bodyweight';
   const frac = Math.max(0, Math.min(1, left / timer.total));
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-[calc(80px+env(safe-area-inset-bottom,0px))] z-40 flex justify-center px-4 lg:bottom-6 lg:left-64">
@@ -121,7 +131,7 @@ export function RestTimer() {
           <TimerReset size={18} className={done ? 'text-rec-green' : 'text-accent'} />
           <div className="min-w-0 flex-1">
             <div className="tnum text-[22px] font-semibold leading-none">{done ? 'Los geht’s' : fmtClock(left)}{timer.pausedLeft != null && <span className="ml-2 text-[12px] font-medium text-muted">pausiert</span>}</div>
-            <div className="mt-1 truncate text-[12px] text-muted">{done ? `Nächster Satz: ${timer.label}` : `Satzpause · ${timer.label}`}</div>
+            <div className="mt-1 truncate text-[12px] text-muted">{done ? 'Pause vorbei' : 'Satzpause'}{nextSe ? '' : ` · ${timer.label}`}</div>
           </div>
           {hasActive && <Maximize2 size={15} className="shrink-0 text-muted" />}
           </button>
@@ -139,6 +149,24 @@ export function RestTimer() {
             <X size={16} />
           </button>
         </div>
+        {nextSe && nextEx && nextSet && (
+          <button onClick={openFocus} className="flex w-full items-center gap-2 border-t border-line/[0.06] px-4 py-2.5 text-left text-[12.5px]">
+            <span className="shrink-0 text-muted">Als Nächstes</span>
+            <span className="min-w-0 flex-1 truncate">
+              <span className="font-semibold">{nextEx.name}</span> <span className="text-muted">· Satz {nextIdx + 1}/{nextSe.sets.length}</span>
+            </span>
+            <span className="tnum shrink-0 rounded-full bg-fg/10 px-2 py-0.5 font-semibold">
+              {bwEx && !nw ? 'KG' : nw != null ? `${fmtNum(nw)} kg` : '– kg'} × {nextSet.reps ?? nextSe.repMin}
+              {nextEx.unilateral ? ' je Arm' : ''}
+            </span>
+            <span className="tnum shrink-0 text-muted">RIR {nextSet.rir ?? nextSe.targetRir}</span>
+          </button>
+        )}
+        {activeSession && nextSe && nextEx && (
+          <div className="px-3 pb-3 empty:hidden">
+            <LiveAdjustBanner sessionId={activeSession.id} se={nextSe} ex={nextEx} compact />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -33,6 +33,7 @@ import { PlanReasons, QuickAvailability, SessionPreview } from '../components/Co
 import { ExerciseAnimation, ExerciseIcon } from '../components/ExerciseAnimation';
 import { FocusPlayer } from '../components/FocusPlayer';
 import { SwipeRow } from '../components/SwipeRow';
+import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
 import { BodyMap, targetFills } from '../components/BodyMap';
 import { MUSCLE, MUSCLES } from '../lib/muscles';
@@ -654,6 +655,7 @@ function ExerciseCard({
                 </div>
               );
             })}
+            <LiveAdjustBanner sessionId={session.id} se={se} ex={ex} />
             <p className="px-1 text-[11px] text-muted">Vorausgefüllt mit der Empfehlung. Ein geändertes Gewicht wird automatisch in die folgenden Sätze übernommen – meist musst du nur die Wiederholungen anpassen. Tippe auf die Satznummer für Notiz/Löschen.</p>
           </div>
 

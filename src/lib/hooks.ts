@@ -67,9 +67,10 @@ export type Route =
   | 'ernaehrung'
   | 'profil'
   | 'wissenschaft'
-  | 'statistik';
+  | 'statistik'
+  | 'rueckblick';
 
-const ROUTES: Route[] = ['uebersicht', 'training', 'kalender', 'uebungen', 'muskeln', 'fortschritt', 'ernaehrung', 'profil', 'wissenschaft', 'statistik'];
+const ROUTES: Route[] = ['uebersicht', 'training', 'kalender', 'uebungen', 'muskeln', 'fortschritt', 'ernaehrung', 'profil', 'wissenschaft', 'statistik', 'rueckblick'];
 
 function readHash(): Route {
   const h = (typeof location !== 'undefined' ? location.hash.replace('#', '') : '') as Route;

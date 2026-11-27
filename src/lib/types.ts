@@ -134,6 +134,8 @@ export interface SessionExercise {
   decision?: 'accepted' | 'declined';
   /** Im Training per Wischen entfernt (nicht geschafft) – Anzahl nicht gemachter Sätze; wird in den nächsten Tagen nachgeholt */
   missed?: number;
+  /** Live-Gewichtsvorschlag nach diesem Satz ausgeblendet */
+  liveDismissed?: string;
   /** Bewertung nach der Übung */
   feedback?: 'easy' | 'ok' | 'hard';
 }

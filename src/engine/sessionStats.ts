@@ -1,6 +1,6 @@
 import type { AppData, Exercise, MuscleId, Session, SetLog } from '../lib/types';
-import { MUSCLE } from '../lib/muscles';
-import { addDays, dateKey, e1rm, startOfWeek, WEEKDAYS_LONG, weekdayOf } from '../lib/utils';
+import { MUSCLE, MUSCLES } from '../lib/muscles';
+import { addDays, dateKey, e1rm, fmtNum, startOfWeek, WEEKDAYS_LONG, weekdayOf } from '../lib/utils';
 import { sessionSets, sessionVolume, weekStreak } from './stats';
 import { activityMinutes } from './activities';
 
@@ -212,3 +212,118 @@ export function overallStats(data: AppData, days: number | null, today = dateKey
 }
 
 export const fmtMinSec = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+
+// ───────────────────────── Wochenrückblick ─────────────────────────
+
+export interface WeekReview {
+  start: string;
+  end: string;
+  complete: boolean;
+  sessions: number;
+  prevSessions: number;
+  minutes: number;
+  sets: number;
+  prevSets: number;
+  volume: number;
+  prevVolume: number;
+  reps: number;
+  prs: string[];
+  gains: { name: string; pct: number }[];
+  muscles: { muscle: MuscleId; sets: number; target: number; prev: number }[];
+  avgRir: number | null;
+  avgGapSec: number | null;
+  activities: number;
+  activityMin: number;
+  weight: { avg: number; prevAvg: number | null } | null;
+  streak: number;
+  score: number;
+  headline: string;
+  focus: string[];
+}
+
+const weekSets = (data: AppData, start: string) => {
+  const end = addDays(start, 6);
+  const ss = data.sessions.filter((s) => s.status === 'done' && s.date >= start && s.date <= end);
+  const exMap = new Map(data.exercises.map((e) => [e.id, e]));
+  const m = new Map<MuscleId, number>();
+  for (const s of ss)
+    for (const se of s.exercises) {
+      const ex = exMap.get(se.exerciseId);
+      const n = se.sets.filter((x) => x.done).length;
+      if (!ex || !n) continue;
+      for (const [mm, c] of Object.entries(ex.muscles) as [MuscleId, number][]) m.set(mm, (m.get(mm) ?? 0) + c * n);
+    }
+  return { ss, m };
+};
+
+export function weekReview(data: AppData, start: string, targetOf: (m: MuscleId) => number, today = dateKey()): WeekReview {
+  const end = addDays(start, 6);
+  const prevStart = addDays(start, -7);
+  const all = data.sessions.filter((s) => s.status === 'done').sort((a, b) => a.startedAt - b.startedAt);
+  const cur = weekSets(data, start);
+  const prev = weekSets(data, prevStart);
+  const st = cur.ss.map((s) => sessionStats(s, all, data.exercises));
+  const prevSt = prev.ss.map((s) => sessionStats(s, all, data.exercises));
+  const gainsMap = new Map<string, number>();
+  for (const x of st) if (x.bestGain) gainsMap.set(x.bestGain.name, Math.max(gainsMap.get(x.bestGain.name) ?? 0, x.bestGain.pct));
+  const rirs = cur.ss.flatMap((s) => s.exercises.flatMap((e) => e.sets.filter((x) => x.done && x.rir != null).map((x) => x.rir!)));
+  const gaps = st.filter((x) => x.avgGapSec != null);
+  const muscles = MUSCLES.filter((m) => !m.indirectOnly).map((m) => ({ muscle: m.id, sets: cur.m.get(m.id) ?? 0, target: targetOf(m.id), prev: prev.m.get(m.id) ?? 0 }));
+  const reached = muscles.filter((m) => m.sets >= m.target * 0.9).length;
+  const acts = (data.activities ?? []).filter((a) => a.date >= start && a.date <= end);
+  const wAvg = (from: string, to: string) => {
+    const w = data.body.filter((b) => b.weight && b.date >= from && b.date <= to).map((b) => b.weight!);
+    return w.length ? w.reduce((a, b) => a + b, 0) / w.length : null;
+  };
+  const wa = wAvg(start, end);
+  const sets = st.reduce((a, x) => a + x.sets, 0);
+  const prs = cur.ss.flatMap((s) => s.prs ?? []);
+  // Wochen-Score 0–100: Volumen-Zielerreichung (60 %), Konstanz (25 %), Intensität (15 %)
+  const volScore = muscles.reduce((a, m) => a + Math.min(1, m.target ? m.sets / m.target : 1), 0) / Math.max(1, muscles.length);
+  const consScore = Math.min(1, cur.ss.length / Math.max(1, data.settings.sessionsPerWeek));
+  const avgRir = rirs.length ? rirs.reduce((a, b) => a + b, 0) / rirs.length : null;
+  const intScore = avgRir == null ? 0.7 : avgRir <= 2 ? 1 : avgRir <= 3 ? 0.7 : 0.4;
+  const score = Math.round(100 * (0.6 * volScore + 0.25 * consScore + 0.15 * intScore));
+  const under = muscles
+    .filter((m) => m.sets < m.target * 0.75)
+    .sort((a, b) => a.sets / Math.max(1, a.target) - b.sets / Math.max(1, b.target))
+    .slice(0, 3);
+  const focus: string[] = [];
+  if (under.length) focus.push(`Mehr Volumen für ${under.map((m) => MUSCLE[m.muscle].short).join(', ')} – der Plan priorisiert das automatisch.`);
+  if (avgRir != null && avgRir > 2.5) focus.push(`Ø ${fmtNum(avgRir, 1)} RIR: Sätze 1–2 Wdh. näher ans Versagen bringen.`);
+  if (cur.ss.length < data.settings.sessionsPerWeek) focus.push(`${cur.ss.length}/${data.settings.sessionsPerWeek} Einheiten – trag deine freien Tage früh ein, dann verteilt der Plan besser.`);
+  if (!focus.length) focus.push('Alles im Soll – genauso weitermachen und Gewichte steigern, wo die App es vorschlägt.');
+  const headline =
+    cur.ss.length === 0
+      ? 'Keine Einheit diese Woche'
+      : score >= 85
+        ? 'Starke Woche 💪'
+        : score >= 65
+          ? 'Solide Woche'
+          : 'Ausbaufähige Woche';
+  return {
+    start,
+    end,
+    complete: end < today,
+    sessions: cur.ss.length,
+    prevSessions: prev.ss.length,
+    minutes: st.reduce((a, x) => a + x.durationMin, 0),
+    sets,
+    prevSets: prevSt.reduce((a, x) => a + x.sets, 0),
+    volume: st.reduce((a, x) => a + x.volume, 0),
+    prevVolume: prevSt.reduce((a, x) => a + x.volume, 0),
+    reps: st.reduce((a, x) => a + x.reps, 0),
+    prs,
+    gains: [...gainsMap.entries()].map(([name, pct]) => ({ name, pct })).sort((a, b) => b.pct - a.pct).slice(0, 4),
+    muscles,
+    avgRir,
+    avgGapSec: gaps.length ? gaps.reduce((a, x) => a + x.avgGapSec!, 0) / gaps.length : null,
+    activities: acts.length,
+    activityMin: acts.reduce((a, x) => a + activityMinutes(x), 0),
+    weight: wa != null ? { avg: wa, prevAvg: wAvg(prevStart, addDays(start, -1)) } : null,
+    streak: weekStreak(all, end < today ? end : today),
+    score: cur.ss.length ? score : 0,
+    headline,
+    focus,
+  };
+}
