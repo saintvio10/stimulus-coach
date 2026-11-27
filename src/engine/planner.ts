@@ -7,6 +7,7 @@ import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type S
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
 import { adviseExercise, exposures, bestE1rm } from './progression';
 import { readinessAdjust, readinessScore } from './readiness';
+import { timeEstimator } from './timing';
 
 // ───────────────────────── Vorlagen (Masken) ─────────────────────────
 
@@ -162,18 +163,6 @@ const GROUP_OF: Partial<Record<MuscleId, string>> = {
 };
 const MIN_SET_VALUE = 0.06;
 
-function setMinutes(ex: Exercise, short: boolean): number {
-  const unilateral = ex.pattern === 'bayesian' || !!ex.unilateral;
-  // Arbeitszeit ~3 s pro Wdh. (mind. 40/50 s) – Sätze mit 20–30 Wdh. dauern merklich länger
-  const work = Math.max(ex.compound ? 50 : 40, ((ex.repMin + ex.repMax) / 2) * 3) * (unilateral ? 2 : 1);
-  let m = (work + ex.restSec) / 60;
-  if (short && !ex.compound && ['biceps', 'triceps', 'sideDelts', 'rearDelts'].includes(ex.primary)) m *= 0.65;
-  return m;
-}
-function setupMinutes(ex: Exercise): number {
-  if (ex.location === 'home') return 0.5; // kein Geräte-Einstellen, kein Warten
-  return ex.compound ? (ex.fatigue >= 3 ? 4 : 3) : 1;
-}
 
 // ───────────────────────── Muskel-Scoring ─────────────────────────
 
@@ -382,8 +371,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
   // Optimale Satzzahl: neue Übungen starten mit 3 Arbeitssätzen (2 nur im Zeitmodus),
   // weitere Sätze werden nur ergänzt, solange der Grenznutzen hoch genug ist.
   const startSets = short || o.minutes < 50 ? 2 : 3;
-  // persönliches Tempo (gelernt aus abgeschlossenen Einheiten)
-  const tf = data.settings.timeFactor || 1;
+  // Zeit je Satz/Wechsel: Modell × persönlicher Tempo-Faktor, schrittweise ersetzt durch deine gemessenen Zeiten (engine/timing)
+  const TE = timeEstimator(data);
 
   // ── Grundabdeckung bei seltenen Terminen (Modellregel): Ist heute der einzige sichere Termin im 7-Tage-Fenster,
   // bekommen Ziehen, Drücken, Quadrizeps und Beinbeuger zuerst je eine Übung mit 2 Sätzen – sofern der Muskel erholt ist,
@@ -420,7 +409,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       let cheapest = Infinity;
       for (const ex of candidates) {
         if (!g.hit(ex) || items.some((i) => i.ex.id === ex.id || (i.ex.primary === ex.primary && familyOf(i.ex) === familyOf(ex)))) continue;
-        const t = (n * setMinutes(ex, short) + setupMinutes(ex)) * tf;
+        const t = n * TE.perSet(ex, { short }) + TE.setup(ex);
         cheapest = Math.min(cheapest, t);
         if (used + t > coverBudget) continue;
         const r = valueOfSets(ex, n) / t;
@@ -448,7 +437,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       const fiveOk = !it.ex.compound && !short && !isFull && (familyOf(it.ex) === 'lateral' || it.ex.pattern === 'calfRaise');
       if (it.sets >= (fiveOk ? maxSets + 1 : maxSets)) continue;
       if (it.sets >= 3 && extraBlock(it.ex.primary)) continue;
-      const t = setMinutes(it.ex, short) * tf;
+      const t = TE.perSet(it.ex, { short });
       if (used + t > budget) continue;
       const v = valueOfSets(it.ex, 1);
       if (v < MIN_SET_VALUE) continue;
@@ -481,7 +470,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
         if (samePrimary.length === 1 && samePrimary[0].sets < 3) continue;
         // keine fast identische Variante (z. B. Seitheben Kabel + Kurzhantel, zwei Ruder-Varianten)
         if (samePrimary.some((i) => familyOf(i.ex) === familyOf(ex))) continue;
-        const t = (startSets * setMinutes(ex, short) + setupMinutes(ex)) * tf;
+        const t = startSets * TE.perSet(ex, { short }) + TE.setup(ex);
         if (used + t > budget) continue;
         const v = valueOfSets(ex, startSets);
         if (v / startSets < MIN_SET_VALUE) continue;
@@ -582,7 +571,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       advice,
       reason: parts.join(' · '),
       setsReason,
-      minutes: (sets * setMinutes(it.ex, short) + setupMinutes(it.ex)) * tf,
+      minutes: sets * TE.perSet(it.ex, { short }) + TE.setup(it.ex),
     };
   });
 
@@ -629,7 +618,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       const st = states[ex.primary];
       if (st.lastAny != null && st.fatigueEff >= F_GREEN && p.sets > 2) {
         p.sets -= 1;
-        p.minutes -= setMinutes(ex, short) * tf;
+        p.minutes -= TE.perSet(ex, { short });
         cautious.push(`${ex.name} (${MUSCLE[ex.primary].short} ${recoveryInfo(st, at).short})`);
       }
     }

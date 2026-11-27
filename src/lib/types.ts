@@ -284,6 +284,10 @@ export interface Settings {
   /** persönlicher Tempo-Faktor (tatsächliche / geschätzte Zeit), aus abgeschlossenen Einheiten gelernt */
   timeFactor: number;
   timeSamples: number;
+  /** Zeitpunkt der letzten Sicherung (Datei geteilt/gespeichert) */
+  lastBackupAt?: number;
+  /** Erinnerung an die Sicherung bis dahin ausgeblendet */
+  backupSnoozeUntil?: number;
   targets: { kcalMin: number; kcalMax: number; protein: number; creatine: number; sleepMin: number; sleepMax: number };
   supabase: { url: string; anonKey: string; autoSync: boolean };
 }

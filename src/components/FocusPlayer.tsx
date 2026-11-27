@@ -17,6 +17,7 @@ import { setPR } from '../engine/prs';
 import { usePRCelebration } from '../lib/hooks';
 import { GlowProgress } from './ui';
 import { FocusProgress } from './FocusProgress';
+import { BusySheet } from './BusySheet';
 
 /** Vollbild-Fokusmodus: eine Übung, großer Timer, Satz erfassen, vor/zurück. */
 export function FocusPlayer({ session, startUid, onClose }: { session: Session; startUid?: string; onClose: () => void }) {
@@ -35,6 +36,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const rec = se?.recWeight ?? advice?.weight ?? null;
   const lastW = se?.lastWeight ?? advice?.lastWeight ?? null;
 
+  const [busy, setBusy] = useState(false);
   // Eingabe für den aktuellen Satz
   const [w, setW] = useState<number | null>(null);
   const [noWeight, setNoWeight] = useState(false);
@@ -151,8 +153,15 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             </span>
           </div>
           <div className="mt-2 text-[22px] font-semibold leading-tight">{ex.name}</div>
-          <div className="mt-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
-            Übung {idx + 1}/{list.length} · {cur ? `Satz ${setIndex + 1}/${se.sets.length}` : 'alle Sätze erledigt'}
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
+              Übung {idx + 1}/{list.length} · {cur ? `Satz ${setIndex + 1}/${se.sets.length}` : 'alle Sätze erledigt'}
+            </span>
+            {cur && (
+              <button onClick={() => setBusy(true)} className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-[12px] font-medium text-white/80">
+                Gerät besetzt
+              </button>
+            )}
           </div>
         </div>
 
@@ -264,6 +273,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
           </button>
         </div>
         <p className="text-center text-[11px] text-white/35">Fortschrittsbalken = erledigte Sätze der gesamten Einheit</p>
+        {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} />}
       </div>
     </div>,
     document.body,

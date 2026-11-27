@@ -13,6 +13,7 @@ import { cn, dateKey, fmtDuration, fmtNum, fmtShortDay, parseKey, relDayLabel, W
 import type { AppData } from '../lib/types';
 import { planToday, personalTarget } from '../engine/planner';
 import { WeightCard } from '../components/Extras';
+import { BackupReminder } from '../components/Backup';
 import { WeekReviewCard } from './WeekReview';
 
 export default function Dashboard() {
@@ -73,6 +74,7 @@ export default function Dashboard() {
       </div>
       <SwipeDays plan={plan} day={day} onDay={setDay} />
       <UpcomingDays plan={plan} />
+      <BackupReminder />
       <WeightCard />
       <WeekReviewCard onOpen={() => go('rueckblick')} />
       <WeeklyNeed plan={plan} />

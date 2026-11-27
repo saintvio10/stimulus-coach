@@ -4,6 +4,7 @@ import { clamp, dateKey, diffDays, fmtMin, relDayLabel } from '../lib/utils';
 import { computeAllStates } from './fatigue';
 import { allEvents } from './activities';
 import { buildPlan, personalTarget } from './planner';
+import { timeEstimator } from './timing';
 
 export interface TrimItem {
   uid: string;
@@ -42,7 +43,7 @@ const BASIC: { label: string; muscles: MuscleId[] }[] = [
  * nächsten 2 Tagen ohnehin geplant sind, werden etwas niedriger gewichtet (sie werden dort abgedeckt). Modellregel.
  */
 export function planTrim(data: AppData, session: Session, minutes: number, now = Date.now()): TrimPlan {
-  const tf = data.settings.timeFactor || 1;
+  const TE = timeEstimator(data);
   const exMap = new Map(data.exercises.map((e) => [e.id, e]));
   const states = computeAllStates(allEvents(data, now), now, data.checkIns);
   const plan = buildPlan(data, now);
@@ -67,9 +68,9 @@ export function planTrim(data: AppData, session: Session, minutes: number, now =
     const done = se.sets.filter((x) => x.done).length;
     const open = se.sets.length - done;
     if (!open) continue;
-    const uni = ex.unilateral || ex.pattern === 'bayesian';
-    const cost = ((Math.max(ex.compound ? 50 : 40, ((se.repMin + se.repMax) / 2) * 3) * (uni ? 2 : 1) + se.restSec) / 60) * tf;
-    items.push({ uid: se.uid, exerciseId: ex.id, name: ex.name, done, open, keep: 0, note: '', cost, setup: done ? 0 : ex.compound ? 2 : 1, started: done > 0, primary: ex.primary });
+    // gleiche Zeitschätzung wie die Planung (gelernte Satz-/Wechselzeiten, sonst Modell)
+    const cost = TE.perSet(ex, { repMin: se.repMin, repMax: se.repMax, restSec: se.restSec });
+    items.push({ uid: se.uid, exerciseId: ex.id, name: ex.name, done, open, keep: 0, note: '', cost, setup: done ? 0 : TE.setup(ex), started: done > 0, primary: ex.primary });
   }
   // Versorgungslücken: Grundbewegung in den letzten 7 Tagen (inkl. heute Erledigtem) praktisch nicht trainiert UND
   // kein sicherer Termin in den nächsten 3 Tagen, der sie abdeckt → sonst fällt sie für diese Woche komplett aus.

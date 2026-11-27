@@ -193,6 +193,8 @@ interface Store extends AppData {
   trimSession: (sessionId: string, keep: Record<string, number>) => void;
   addExerciseToSession: (sessionId: string, exercise: Exercise, afterUid?: string) => void;
   swapExercise: (sessionId: string, exUid: string, exercise: Exercise) => void;
+  /** „Gerät besetzt – später“: Übung ans Ende der Einheit verschieben */
+  deferExercise: (sessionId: string, exUid: string) => void;
   moveExercise: (sessionId: string, exUid: string, dir: -1 | 1) => void;
   finishSession: (sessionId: string, prs: string[]) => void;
   runAdaptation: () => void;
@@ -413,6 +415,13 @@ export const useStore = create<Store>()(
             se.sets = se.sets.map((x) => (x.done ? x : { ...x, weight: adv.weight, reps: adv.repTarget, rir: exercise.targetRir }));
           });
         },
+        deferExercise: (sid, xu) =>
+          mutSession(sid, (s) => {
+            const i = s.exercises.findIndex((e) => e.uid === xu);
+            if (i < 0) return;
+            const [se] = s.exercises.splice(i, 1);
+            s.exercises.push(se);
+          }),
         moveExercise: (sid, xu, dir) =>
           mutSession(sid, (s) => {
             const i = s.exercises.findIndex((e) => e.uid === xu);

@@ -8,6 +8,7 @@ import { cn, fmtMin, fmtNum, relDayLabel } from '../lib/utils';
 import { sessionStats, sessionsThisWeek, fmtMinSec } from '../engine/sessionStats';
 import { weekStreak } from '../engine/stats';
 import { BodyMap } from './BodyMap';
+import { BackupButton } from './Backup';
 
 /** Zahl hochzählen lassen (kurz, ~0,9 s) */
 function useCountUp(target: number, ms = 900, delay = 0) {
@@ -229,6 +230,8 @@ export function SessionComplete({ session, prs, onClose }: { session: Session; p
         </div>
 
         <div className="mt-auto flex flex-col gap-2 pt-2">
+          <BackupButton dark />
+          <p className="-mt-0.5 mb-1 text-center text-[11.5px] text-white/45">Speichert alle Daten als Datei, z. B. in „Dateien“ oder iCloud Drive.</p>
           <button onClick={onClose} className="h-14 rounded-full bg-white text-[16px] font-semibold text-black active:scale-[0.99]">
             Fertig
           </button>

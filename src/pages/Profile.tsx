@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, BookOpen, Cloud, Copy, Download, Upload } from 'lucide-react';
 import { defaultData, exportData, migrate, useStore } from '../lib/store';
+import { backupNow } from '../lib/backup';
 import { useRouter, useToast } from '../lib/hooks';
 import { Button, Card, Chip, Confirm, Field, Input, PageHeader, SectionTitle, Segmented, Select, Sheet, Switch } from '../components/ui';
 import { GROUP_LABEL, weeklyTarget, MUSCLES } from '../lib/muscles';
@@ -348,22 +349,9 @@ function DataCard({ onReset }: { onReset: () => void }) {
     setPaste('');
   };
   const share = async () => {
-    const text = json();
-    try {
-      const file = new File([text], filename(), { type: 'application/json' });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Stimulus Backup' });
-        return;
-      }
-    } catch (e) {
-      if ((e as Error).name === 'AbortError') return;
-    }
-    try {
-      downloadFile(filename(), text);
-      toast('Backup gespeichert');
-    } catch {
-      setShowJson(true);
-    }
+    const r = await backupNow();
+    if (r === 'shared' || r === 'downloaded') toast(r === 'shared' ? 'Gesichert' : 'Backup gespeichert');
+    else if (r === 'failed') setShowJson(true);
   };
   const preview = pending
     ? (() => {
@@ -380,6 +368,13 @@ function DataCard({ onReset }: { onReset: () => void }) {
       <p className="mb-3 text-[13px] text-muted">
         Alle Daten liegen lokal auf diesem Gerät (IndexedDB) und überstehen Neuladen, Schließen und App-Updates unter derselben Adresse. Zum Umziehen (z. B. Safari → Home-Bildschirm,
         neues Gerät): hier sichern und in der anderen App „Importieren“ → „Zusammenführen“.
+      </p>
+      <p className="text-[12.5px] text-muted">
+        Letzte Sicherung:{' '}
+        <span className="font-medium text-fg">
+          {s.settings.lastBackupAt ? new Date(s.settings.lastBackupAt).toLocaleString('de-DE', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'noch nie'}
+        </span>{' '}
+        · Nach jedem Training kannst du direkt sichern; ist die letzte Sicherung ≥ 7 Tage alt, erinnert dich die Übersicht.
       </p>
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" onClick={share}>

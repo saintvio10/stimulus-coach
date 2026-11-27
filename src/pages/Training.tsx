@@ -20,6 +20,7 @@ import {
   Minus,
   History,
   TrendingUp,
+  Clock,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, useFocusRequest, useNow, usePRCelebration, useRouter, useToast } from '../lib/hooks';
@@ -36,6 +37,8 @@ import { SwipeRow } from '../components/SwipeRow';
 import { ExerciseHistory } from '../components/ExerciseHistory';
 import { TimeLeftButton } from '../components/TimeLeft';
 import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
+import { timeEstimator } from '../engine/timing';
+import { BusySheet } from '../components/BusySheet';
 import { prSetIds, setPR } from '../engine/prs';
 import { JOINT_LABEL, painConflict } from '../engine/joints';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
@@ -129,6 +132,7 @@ function Workout({ session }: { session: Session }) {
   const exMap = useMemo(() => new Map(s.exercises.map((e) => [e.id, e])), [s.exercises]);
   const [openUid, setOpenUid] = useState<string | null>(() => session.exercises.find((e) => !e.skipped && e.sets.some((x) => !x.done))?.uid ?? null);
   const [picker, setPicker] = useState<{ mode: 'add' | 'swap'; uid?: string } | null>(null);
+  const [busyUid, setBusyUid] = useState<string | null>(null);
   const [finishOpen, setFinishOpen] = useState(false);
   const [discard, setDiscard] = useState(false);
   const [focusUid, setFocusUid] = useState<string | null>(null);
@@ -208,6 +212,7 @@ function Workout({ session }: { session: Session }) {
             open={openUid === se.uid}
             onToggle={() => setOpenUid(openUid === se.uid ? null : se.uid)}
             onSwap={() => setPicker({ mode: 'swap', uid: se.uid })}
+            onBusy={() => setBusyUid(se.uid)}
             onFocus={() => setFocusUid(se.uid)}
             onNext={() => {
               const nxt = session.exercises.slice(i + 1).find((e) => !e.skipped && e.sets.some((x) => !x.done));
@@ -218,6 +223,19 @@ function Workout({ session }: { session: Session }) {
       })}
 
       {focusUid && <FocusPlayer session={session} startUid={focusUid} onClose={() => setFocusUid(null)} />}
+      {busyUid && session.exercises.find((e) => e.uid === busyUid) && (
+        <BusySheet
+          open
+          session={session}
+          se={session.exercises.find((e) => e.uid === busyUid)!}
+          onClose={() => setBusyUid(null)}
+          onOther={() => setPicker({ mode: 'swap', uid: busyUid })}
+          onDone={() => {
+            const nxt = session.exercises.find((e) => e.uid !== busyUid && !e.skipped && e.sets.some((x) => !x.done));
+            if (nxt) setOpenUid(nxt.uid);
+          }}
+        />
+      )}
       <Button variant="outline" size="lg" onClick={() => setPicker({ mode: 'add' })}>
         <Plus size={16} /> Übung hinzufügen
       </Button>
@@ -282,6 +300,7 @@ function ExerciseCard({
   open,
   onToggle,
   onSwap,
+  onBusy,
   onNext,
   onFocus,
 }: {
@@ -292,6 +311,7 @@ function ExerciseCard({
   open: boolean;
   onToggle: () => void;
   onSwap: () => void;
+  onBusy: () => void;
   onNext: () => void;
   onFocus: () => void;
 }) {
@@ -854,6 +874,11 @@ function ExerciseCard({
                 <Check size={14} /> Übung fertig ({doneN} Sätze)
               </Button>
             )}
+            {se.sets.some((x) => !x.done) && (
+              <Button size="sm" variant="secondary" onClick={onBusy}>
+                <Clock size={14} /> Gerät besetzt
+              </Button>
+            )}
             <Button size="sm" variant="secondary" onClick={onSwap}>
               <Repeat size={14} /> Austauschen
             </Button>
@@ -907,23 +932,22 @@ function ExerciseCard({
 function WorkoutProgress({ session, now, onJump }: { session: Session; now: number; onJump: (uid: string) => void }) {
   const exercises = useStore((s) => s.exercises);
   const tf = useStore((s) => s.settings.timeFactor || 1);
+  const allSessions = useStore((s) => s.sessions);
   const exMap = new Map(exercises.map((e) => [e.id, e]));
   const list = session.exercises.filter((e) => !e.skipped && e.sets.length);
   const total = list.reduce((a, e) => a + e.sets.length, 0);
   const done = list.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
   const pct = total ? Math.round((done / total) * 100) : 0;
-  // Gleiche Rechnung wie die Planung: ~3 s pro Wdh. (mind. 40/50 s), einseitig × 2, Pause, Gerät einstellen bei nicht begonnenen Übungen
+  // Gleiche Zeitschätzung wie die Planung (gelernte Satz-/Wechselzeiten, sonst Modell)
+  const TE = timeEstimator({ sessions: allSessions, settings: { timeFactor: tf } });
   const remainingMin = Math.round(
     list.reduce((a, e) => {
       const ex = exMap.get(e.exerciseId);
       const open = e.sets.filter((x) => !x.done).length;
-      if (!open) return a;
-      const uni = ex?.unilateral || ex?.pattern === 'bayesian';
-      const work = Math.max(ex?.compound ? 50 : 40, ((e.repMin + e.repMax) / 2) * 3) * (uni ? 2 : 1);
+      if (!open || !ex) return a;
       const started = e.sets.some((x) => x.done);
-      const setup = started ? 0 : ex?.location === 'home' ? 0.5 : ex?.compound ? (ex.fatigue >= 3 ? 4 : 3) : 1;
-      return a + (open * (work + e.restSec)) / 60 + setup;
-    }, 0) * tf,
+      return a + open * TE.perSet(ex, { repMin: e.repMin, repMax: e.repMax, restSec: e.restSec }) + (started ? 0 : TE.setup(ex));
+    }, 0),
   );
   const current = list.find((e) => e.sets.some((x) => !x.done));
   const curIdx = current ? list.indexOf(current) : list.length;
