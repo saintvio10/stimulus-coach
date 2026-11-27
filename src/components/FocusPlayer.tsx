@@ -341,6 +341,18 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
         {/* Verlauf: Volumen & Sätze, heute vs. frühere Einheiten */}
         <FocusProgress part="history" ex={ex} se={se} sessionId={session.id} sessions={s.sessions} advice={advice} />
 
+        {/* Steuerung ganz unten (nicht schwebend – erscheint erst beim Runterscrollen, verdeckt nichts) */}
+        <div className="mt-auto grid h-[72px] shrink-0 grid-cols-3 overflow-hidden rounded-[26px] bg-[#1c1c1f]">
+          <button className="grid place-items-center disabled:opacity-30" disabled={idx === 0} onClick={() => setIdx(idx - 1)} aria-label="Vorherige Übung (unten)">
+            <SkipBack size={26} fill="currentColor" />
+          </button>
+          <button className="grid place-items-center" onClick={togglePause} aria-label={awaiting ? 'Satz starten (unten)' : paused ? 'Fortsetzen (unten)' : 'Pausieren (unten)'}>
+            {paused || awaiting ? <Play size={28} fill="currentColor" /> : <Pause size={28} fill="currentColor" />}
+          </button>
+          <button className="grid place-items-center disabled:opacity-30" disabled={idx >= list.length - 1} onClick={() => setIdx(idx + 1)} aria-label="Nächste Übung (unten)">
+            <SkipForward size={26} fill="currentColor" />
+          </button>
+        </div>
         {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} />}
 
         {/* Schwebender Start-Knopf: groß, mittig über allem */}
