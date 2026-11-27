@@ -184,6 +184,7 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
                   {p.advice.type === 'deload' && <span className="ml-1 text-rec-orange">↓</span>}
                 </div>
               </div>
+              <span className="tnum shrink-0 text-[12px] text-muted" title="Geschätzte Dauer inkl. Pausen und Gerät einstellen">~{fmtMin(Math.max(1, Math.round(p.minutes)))}</span>
               <Info size={15} className={cn('shrink-0', whyOpen === p.exerciseId ? 'text-accent' : 'text-muted/60')} />
               </button>
               {whyOpen === p.exerciseId && (

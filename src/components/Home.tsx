@@ -453,6 +453,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                         {p.advice.type === 'deload' && <span className="ml-1 text-rec-orange">↓</span>}
                       </div>
                     </div>
+                    <span className="tnum shrink-0 text-[12px] text-muted" title="Geschätzte Dauer inkl. Pausen und Gerät einstellen">~{fmtMin(Math.max(1, Math.round(p.minutes)))}</span>
                     <Info size={15} className={cn('shrink-0 transition', whyOpen === p.exerciseId ? 'text-accent' : 'text-muted/60')} />
                     </button>
                     {whyOpen === p.exerciseId && (
@@ -483,14 +484,6 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                 </div>
               ) : (
                 <div className="flex-1 text-[12.5px] text-muted">Wird automatisch neu berechnet, wenn sich Training oder Verfügbarkeit ändern.</div>
-              )}
-              {nextPlanned && (
-                <button
-                  onClick={() => onNext(nextPlanned.date)}
-                  className="flex h-14 shrink-0 items-center gap-1 rounded-full bg-fg/[0.08] px-5 text-[15px] font-medium hover:bg-fg/[0.12]"
-                >
-                  Weiter <ChevronRight size={16} />
-                </button>
               )}
             </div>
           </>
