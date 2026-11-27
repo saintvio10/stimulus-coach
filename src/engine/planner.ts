@@ -236,6 +236,8 @@ interface BuildOpts {
   today?: string;
   /** Seltener Termin (einziger sicherer im 7-Tage-Fenster): erst Grundabdeckung Drücken/Ziehen/Quadrizeps/Beinbeuger */
   coverage?: boolean;
+  /** Muskeln, die im 7-Tage-Fenster (inkl. später geplanter Einheiten) ihr Ziel schon mit 3 Sätzen je Übung erreichen → kein 4./5. Satz */
+  noExtra?: Set<MuscleId>;
 }
 
 export type HomeMode = 'bw' | 'weights';
@@ -362,7 +364,19 @@ export function buildSession(o: BuildOpts): PlannedSession {
   interface Item {
     ex: Exercise;
     sets: number;
+    /** Begründung für Zusatzsätze (4./5. Satz) */
+    why4?: string;
   }
+  // Zusatzsätze (4./5.) nur gezielt (Modellregel, s. Pelland 2025: mehr Wochensätze → mehr Wachstum, aber abnehmend;
+  // kein belegtes Optimum pro Übung): Standard 3 Sätze; ein weiterer nur, wenn der Muskel zu deinen Top-2-Prioritäten zählt
+  // (bis ~110 % Wochenziel) oder ihm im 7-Tage-Fenster sonst noch Sätze fehlen.
+  const isTop2 = (m: MuscleId) => MUSCLE[m].group != null && data.profile.priorities.indexOf(MUSCLE[m].group!) >= 0 && data.profile.priorities.indexOf(MUSCLE[m].group!) < 2;
+  const extraBlock = (m: MuscleId): string | null => {
+    if (o.noExtra?.has(m)) return 'Wochenziel wird im 7-Tage-Fenster schon mit 3 Sätzen je Übung erreicht';
+    const have = (carry[m] ?? 0) + sSets[m];
+    const lim = scores[m].target * (isTop2(m) ? 1.1 : 1);
+    return have >= lim ? `Wochenziel erreicht (${fmtNum(have)}/${fmtNum(scores[m].target)})` : null;
+  };
   const items: Item[] = [];
   let used = 0;
   // Optimale Satzzahl: neue Übungen starten mit 3 Arbeitssätzen (2 nur im Zeitmodus),
@@ -433,6 +447,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
       // Bei allen anderen Muskeln kommt stattdessen eine ergänzende 2. Übung (andere Bewegung) dazu.
       const fiveOk = !it.ex.compound && !short && !isFull && (familyOf(it.ex) === 'lateral' || it.ex.pattern === 'calfRaise');
       if (it.sets >= (fiveOk ? maxSets + 1 : maxSets)) continue;
+      if (it.sets >= 3 && extraBlock(it.ex.primary)) continue;
       const t = setMinutes(it.ex, short) * tf;
       if (used + t > budget) continue;
       const v = valueOfSets(it.ex, 1);
@@ -442,6 +457,13 @@ export function buildSession(o: BuildOpts): PlannedSession {
         best = {
           ratio,
           apply: () => {
+            if (it.sets >= 3) {
+              const m = it.ex.primary;
+              const rank = data.profile.priorities.indexOf(MUSCLE[m].group!) + 1;
+              it.why4 = isTop2(m)
+                ? `${it.sets + 1}. Satz: ${MUSCLE[m].label} ist Priorität ${rank} und liegt im 7-Tage-Fenster bei ${fmtNum((carry[m] ?? 0) + sSets[m])}/${fmtNum(scores[m].target)} Sätzen.`
+                : `${it.sets + 1}. Satz: ${MUSCLE[m].label} fehlen im 7-Tage-Fenster sonst noch Sätze (${fmtNum((carry[m] ?? 0) + sSets[m])}/${fmtNum(scores[m].target)}).`;
+            }
             it.sets += 1;
             used += t;
             for (const [m, c] of Object.entries(it.ex.muscles) as [MuscleId, number][]) {
@@ -510,7 +532,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
     const capTxt = MUSCLE[pm].sessionCap;
     const setsReason = MUSCLE[pm].indirectOnly
       ? `${sets} Arbeitssätze: Mehrgelenksübung, deckt ${Object.keys(it.ex.muscles).length} Muskeln ab.`
-      : `${sets} Arbeitssätze geplant. Begründung: ${MUSCLE[pm].label} steht bei ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätzen in 7 Tagen, heute kommen insgesamt ~${fmtNum(sSets[pm])} dazu (direkt + ½ indirekt). Pro Einheit plant die App höchstens ~${capTxt} Sätze für diesen Muskel – Modellregel, weil der Zusatznutzen pro Satz abnimmt (Pelland 2026); die genaue Grenze ist individuell.${advice.setDelta < 0 ? ' −1 Satz wegen Stagnation/Ermüdung (Modellregel).' : ''}`;
+      : `${sets} Arbeitssätze geplant. Begründung: ${MUSCLE[pm].label} steht bei ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätzen in 7 Tagen, heute kommen insgesamt ~${fmtNum(sSets[pm])} dazu (direkt + ½ indirekt). Pro Einheit plant die App höchstens ~${capTxt} Sätze für diesen Muskel – Modellregel, weil der Zusatznutzen pro Satz abnimmt (Pelland 2026); die genaue Grenze ist individuell.${sets >= 4 && it.why4 ? ` ${it.why4}` : sets <= 3 && it.sets <= 3 ? ' Standard 3 Sätze: ein 4. Satz nur bei Top-Priorität oder wenn dem Muskel sonst Wochensätze fehlen (Modellregel).' : ''}${advice.setDelta < 0 ? ' −1 Satz wegen Stagnation/Ermüdung (Modellregel).' : ''}`;
     const targetRir = it.ex.targetRir + radj.rir + advice.rirDelta;
     const sc = scores[it.ex.primary];
     const parts: string[] = [];
@@ -1000,94 +1022,148 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     3,
   );
 
-  let events = allEvents(data, now);
-  if (activeToday) {
-    const exById0 = new Map(data.exercises.map((e) => [e.id, e]));
-    for (const se of activeToday.exercises) {
-      const open = se.skipped ? 0 : se.sets.filter((x) => !x.done).length;
-      const ex = exById0.get(se.exerciseId);
-      if (!open || !ex) continue;
-      for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][])
-        events = events.concat({ t: now + HOUR, muscle: m, sets: c * open, fatigue: c * open, direct: c >= 0.75, load: 0, virtual: true });
-    }
-  }
-  const exById = new Map(data.exercises.map((e) => [e.id, e]));
-  const sessions: PlannedSession[] = [];
-  const awaySet = new Set(data.awayDays ?? []);
-  const prevPlanned: { id: string; t: number }[] = [];
-  // Letztes echtes Training (≤ 3 Tage) zählt für die Split-Rotation mit, damit nicht dauernd derselbe Split kommt
-  const lastReal = doneSessions[doneSessions.length - 1];
-  const usedTemplates: TemplateId[] =
-    lastReal && lastReal.split in TEMPLATES && diffDays(today, lastReal.date) <= 3 ? [lastReal.split as TemplateId] : [];
-
-  for (let i = 0; i < allDates.length; i++) {
-    const d = allDates[i];
-    const strat = i < dates.length ? strategy : strategy2;
-    const at = d === today ? now : parseKey(d).getTime() + 17 * HOUR;
-    const minutes = d === today ? opts.minutesToday ?? minutesFor(data, d) : minutesFor(data, d);
-    let best: PlannedSession | null = null;
-    let bestScore = -Infinity;
-    // Nur ein fester Termin im Fenster (+ vorläufige)? Dann deckt der feste Tag breit ab –
-    // vorläufige Tage werden für die Grundabdeckung nicht vorausgesetzt.
-    const sureInWindow = dates.filter((x) => !tentativeSet.has(x));
-    const onlySure = i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1 && dates.length > 1;
-    // Seltener Termin: einziger sicherer im Fenster (mit oder ohne vorläufige) → Grundabdeckung zuerst
-    const coverage = !uncertain && i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1;
-    const templates: TemplateId[] = coverage ? ['full'] : strat.templates;
-    for (const tid of templates) {
-      const s = buildSession({
-        date: d,
-        at,
-        minutes,
-        templateId: tid,
-        events,
-        data,
-        sessionsPerWeek: spw,
-        tentative: tentativeSet.has(d),
-        nextDates: allDates.slice(i + 1).filter((x) => !tentativeSet.has(x)),
-        home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
-        prevPlanned,
-        today,
-        coverage,
-      });
-      let sc = s.value;
-      if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
-      else if (usedTemplates.includes(tid)) sc *= 0.85;
-      if (sc > bestScore) (bestScore = sc), (best = s);
-    }
-    if (!best) continue;
-    // Begründung auf Einheitsebene
-    const focus = best.decisions.filter((x) => x.status === 'focus').map((x) => MUSCLE[x.muscle].short);
-    const skippedTired = best.decisions.filter((x) => x.status === 'skipped' && x.reason.startsWith('Noch ermüdet')).map((x) => MUSCLE[x.muscle].short);
-    if (onlySure) best.reasons.unshift('Nur ein fester Termin – die „Vielleicht“-Tage werden nicht fest eingeplant. Darum heute Ganzkörper: erst Grundabdeckung, dann deine Armprioritäten.');
-    else if (strat.templates.length > 1) best.reasons.unshift(`„${best.label}“ gewählt: höchster erwarteter Nutzen unter den Optionen ${strat.templates.map((t) => TEMPLATES[t].label).join(', ')}.`);
-    if (i >= dates.length) best.reasons.unshift(`Woche 2 (${strategy2.label}): wird bei jedem Training neu berechnet.`);
-    if (focus.length) best.reasons.push(`Schwerpunkt: ${focus.join(', ')}.`);
-    if (skippedTired.length) best.reasons.push(`Ausgelassen wegen Ermüdung: ${skippedTired.join(', ')}.`);
-    if (allDates.length === 1 && !uncertain && minutes < 90)
-      best.reasons.push(`Nur 1 Einheit in den nächsten 7 Tagen: Mit ${minutes} min sind pro Muskel nur wenige Sätze möglich. Wenn es geht, plane 90–120 min ein (Profil → Standarddauer oder „Zeit heute“) – das bringt deutlich mehr Wochenvolumen.`);
-    if (best.tentative) best.reasons.push('Vorläufig: Tag ist als „möglich“ markiert. Bestätige ihn im Kalender oder er wird automatisch neu verteilt.');
-    // Name muss zum Inhalt passen: Schwerpunkt-Vorlage ohne den Schwerpunkt (z. B. wegen Beschwerden/Ermüdung) → neutral benennen
-    if (['fbC', 'arms'].includes(best.templateId)) {
-      const armEx = best.exercises.filter((p) => ['biceps', 'triceps'].includes(data.exercises.find((e) => e.id === p.exerciseId)?.primary ?? '')).length;
-      if (armEx === 0) best.label = 'Ganzkörper (angepasst)';
-    }
-    if (best.home && !best.label.startsWith('Unterwegs')) {
-      best.label = `Unterwegs · ${best.label.split(' (')[0]}`;
-      if (awaySet.has(d)) best.reasons.unshift('Ohne Gym: nur Übungen mit Körpergewicht, deiner Hantel und Flaschen. Was du hier trainierst, rechnet der Plan für die folgenden Studio-Tage mit ein.');
-    }
-    sessions.push(best);
-    for (const pe of best.exercises) prevPlanned.push({ id: pe.exerciseId, t: at });
-    usedTemplates.push(best.templateId);
-    // virtuelle Reize für die Simulation der folgenden Tage
-    const vt = at + HOUR;
-    for (const p of best.exercises) {
-      const ex = exById.get(p.exerciseId);
-      if (!ex) continue;
-      for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) {
-        events = events.concat({ t: vt, muscle: m, sets: c * p.sets, fatigue: c * p.sets, direct: c >= 0.75, load: 0, virtual: true });
+  const runPass = (noExtraByDate?: Map<string, Set<MuscleId>>): PlannedSession[] => {
+    let events = allEvents(data, now);
+    if (activeToday) {
+      const exById0 = new Map(data.exercises.map((e) => [e.id, e]));
+      for (const se of activeToday.exercises) {
+        const open = se.skipped ? 0 : se.sets.filter((x) => !x.done).length;
+        const ex = exById0.get(se.exerciseId);
+        if (!open || !ex) continue;
+        for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][])
+          events = events.concat({ t: now + HOUR, muscle: m, sets: c * open, fatigue: c * open, direct: c >= 0.75, load: 0, virtual: true });
       }
     }
+    const exById = new Map(data.exercises.map((e) => [e.id, e]));
+    const sessions: PlannedSession[] = [];
+    const awaySet = new Set(data.awayDays ?? []);
+    const prevPlanned: { id: string; t: number }[] = [];
+    // Letztes echtes Training (≤ 3 Tage) zählt für die Split-Rotation mit, damit nicht dauernd derselbe Split kommt
+    const lastReal = doneSessions[doneSessions.length - 1];
+    const usedTemplates: TemplateId[] =
+      lastReal && lastReal.split in TEMPLATES && diffDays(today, lastReal.date) <= 3 ? [lastReal.split as TemplateId] : [];
+
+    for (let i = 0; i < allDates.length; i++) {
+      const d = allDates[i];
+      const strat = i < dates.length ? strategy : strategy2;
+      const at = d === today ? now : parseKey(d).getTime() + 17 * HOUR;
+      const minutes = d === today ? opts.minutesToday ?? minutesFor(data, d) : minutesFor(data, d);
+      let best: PlannedSession | null = null;
+      let bestScore = -Infinity;
+      // Nur ein fester Termin im Fenster (+ vorläufige)? Dann deckt der feste Tag breit ab –
+      // vorläufige Tage werden für die Grundabdeckung nicht vorausgesetzt.
+      const sureInWindow = dates.filter((x) => !tentativeSet.has(x));
+      const onlySure = i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1 && dates.length > 1;
+      // Seltener Termin: einziger sicherer im Fenster (mit oder ohne vorläufige) → Grundabdeckung zuerst
+      const coverage = !uncertain && i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1;
+      const templates: TemplateId[] = coverage ? ['full'] : strat.templates;
+      for (const tid of templates) {
+        const s = buildSession({
+          date: d,
+          at,
+          minutes,
+          templateId: tid,
+          events,
+          data,
+          sessionsPerWeek: spw,
+          tentative: tentativeSet.has(d),
+          nextDates: allDates.slice(i + 1).filter((x) => !tentativeSet.has(x)),
+          home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
+          prevPlanned,
+          today,
+          coverage,
+          noExtra: noExtraByDate?.get(d),
+        });
+        let sc = s.value;
+        if (usedTemplates[usedTemplates.length - 1] === tid) sc *= 0.7;
+        else if (usedTemplates.includes(tid)) sc *= 0.85;
+        if (sc > bestScore) (bestScore = sc), (best = s);
+      }
+      if (!best) continue;
+      // Begründung auf Einheitsebene
+      const focus = best.decisions.filter((x) => x.status === 'focus').map((x) => MUSCLE[x.muscle].short);
+      const skippedTired = best.decisions.filter((x) => x.status === 'skipped' && x.reason.startsWith('Noch ermüdet')).map((x) => MUSCLE[x.muscle].short);
+      if (onlySure) best.reasons.unshift('Nur ein fester Termin – die „Vielleicht“-Tage werden nicht fest eingeplant. Darum heute Ganzkörper: erst Grundabdeckung, dann deine Armprioritäten.');
+      else if (strat.templates.length > 1) best.reasons.unshift(`„${best.label}“ gewählt: höchster erwarteter Nutzen unter den Optionen ${strat.templates.map((t) => TEMPLATES[t].label).join(', ')}.`);
+      if (i >= dates.length) best.reasons.unshift(`Woche 2 (${strategy2.label}): wird bei jedem Training neu berechnet.`);
+      if (focus.length) best.reasons.push(`Schwerpunkt: ${focus.join(', ')}.`);
+      if (skippedTired.length) best.reasons.push(`Ausgelassen wegen Ermüdung: ${skippedTired.join(', ')}.`);
+      if (allDates.length === 1 && !uncertain && minutes < 90)
+        best.reasons.push(`Nur 1 Einheit in den nächsten 7 Tagen: Mit ${minutes} min sind pro Muskel nur wenige Sätze möglich. Wenn es geht, plane 90–120 min ein (Profil → Standarddauer oder „Zeit heute“) – das bringt deutlich mehr Wochenvolumen.`);
+      if (best.tentative) best.reasons.push('Vorläufig: Tag ist als „möglich“ markiert. Bestätige ihn im Kalender oder er wird automatisch neu verteilt.');
+      // Name muss zum Inhalt passen: Schwerpunkt-Vorlage ohne den Schwerpunkt (z. B. wegen Beschwerden/Ermüdung) → neutral benennen
+      if (['fbC', 'arms'].includes(best.templateId)) {
+        const armEx = best.exercises.filter((p) => ['biceps', 'triceps'].includes(data.exercises.find((e) => e.id === p.exerciseId)?.primary ?? '')).length;
+        if (armEx === 0) best.label = 'Ganzkörper (angepasst)';
+      }
+      if (best.home && !best.label.startsWith('Unterwegs')) {
+        best.label = `Unterwegs · ${best.label.split(' (')[0]}`;
+        if (awaySet.has(d)) best.reasons.unshift('Ohne Gym: nur Übungen mit Körpergewicht, deiner Hantel und Flaschen. Was du hier trainierst, rechnet der Plan für die folgenden Studio-Tage mit ein.');
+      }
+      sessions.push(best);
+      for (const pe of best.exercises) prevPlanned.push({ id: pe.exerciseId, t: at });
+      usedTemplates.push(best.templateId);
+      // virtuelle Reize für die Simulation der folgenden Tage
+      const vt = at + HOUR;
+      for (const p of best.exercises) {
+        const ex = exById.get(p.exerciseId);
+        if (!ex) continue;
+        for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) {
+          events = events.concat({ t: vt, muscle: m, sets: c * p.sets, fatigue: c * p.sets, direct: c >= 0.75, load: 0, virtual: true });
+        }
+      }
+    }
+    return sessions;
+  };
+  // 2. Durchgang: Zusatzsätze (4./5.) nur, wenn der Muskel im rollierenden 7-Tage-Fenster – mit ALLEN dort geplanten
+  // Einheiten – sein Ziel mit 3 Sätzen je Übung noch nicht erreicht (Top-2-Prioritäten: ~110 %). Sonst wird neu geplant und
+  // die freie Zeit geht an Muskeln mit offenem Bedarf oder die Einheit wird kürzer.
+  const extraCaps = (plan: PlannedSession[], actual = false, prev?: Map<string, Set<MuscleId>>) => {
+    const real = allEvents(data, now).filter((e) => !e.virtual);
+    const exM = new Map(data.exercises.map((e) => [e.id, e]));
+    const top2 = (m: MuscleId) => MUSCLE[m].group != null && data.profile.priorities.indexOf(MUSCLE[m].group!) >= 0 && data.profile.priorities.indexOf(MUSCLE[m].group!) < 2;
+    const baseOf = plan.map((ps) => {
+      const out: Partial<Record<MuscleId, number>> = {};
+      for (const pe of ps.exercises) {
+        const ex = exM.get(pe.exerciseId);
+        if (ex) for (const [m, c] of Object.entries(ex.muscles) as [MuscleId, number][]) out[m] = (out[m] ?? 0) + c * (actual ? pe.sets : Math.min(pe.sets, 3));
+      }
+      return out;
+    });
+    const map = new Map<string, Set<MuscleId>>();
+    for (const ps of plan) {
+      const set = new Set<MuscleId>(prev?.get(ps.date) ?? []);
+      for (const m of MUSCLE_IDS) {
+        if (MUSCLE[m].indirectOnly) continue;
+        const lim = personalTarget(data, m, spw) * (top2(m) ? 1.1 : 1);
+        let worst = 0;
+        for (let k = 0; k < 7; k++) {
+          const from = parseKey(addDays(ps.date, -k)).getTime();
+          const to = from + 7 * DAY;
+          let v = real.filter((e) => e.muscle === m && e.t >= from && e.t < to).reduce((a, e) => a + e.sets, 0);
+          plan.forEach((p2, j) => {
+            if (p2.at >= from && p2.at < to) v += baseOf[j][m] ?? 0;
+          });
+          worst = Math.max(worst, v);
+        }
+        // Grundplan: schon mit 3 Sätzen je Übung am Ziel. Prüfung mit allen Sätzen: auch ohne einen Zusatzsatz noch am Ziel.
+        if (actual ? worst - 1 >= lim : worst >= lim) set.add(m);
+      }
+      if (set.size) map.set(ps.date, set);
+    }
+    return map;
+  };
+  const violates = (plan: PlannedSession[], c: Map<string, Set<MuscleId>>) =>
+    plan.some((ps) => ps.exercises.some((pe) => pe.sets > 3 && c.get(ps.date)?.has(data.exercises.find((e) => e.id === pe.exerciseId)?.primary as MuscleId)));
+  let sessions = runPass();
+  let caps = extraCaps(sessions);
+  if (violates(sessions, caps)) sessions = runPass(caps);
+  // Weitere Durchgänge (max. 3): mehrere Zusatzsätze im selben Fenster zusammen zu viel? → dort ebenfalls sperren
+  for (let round = 0; round < 3; round++) {
+    const next = extraCaps(sessions, true, extraCaps(sessions, false, caps));
+    if (!violates(sessions, next)) break;
+    caps = next;
+    sessions = runPass(caps);
   }
 
   if (!dates.length) notes.push(`Keine Trainingstage in den nächsten ${PLAN_DAYS} Tagen. Tippe oben an, wann du Zeit hast.`);
