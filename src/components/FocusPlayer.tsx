@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExerciseVisual } from './ExerciseVisual';
 import { Check, Minus, Pause, Play, Plus, SkipBack, SkipForward, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -8,7 +8,8 @@ import { adviseExercise } from '../engine/progression';
 import { ExerciseAnimation } from './ExerciseAnimation';
 import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
-import { cn, fmtNum, nextWeight, prevWeight } from '../lib/utils';
+import { cn, fmtMin, fmtNum, nextWeight, prevWeight } from '../lib/utils';
+import { timeEstimator } from '../engine/timing';
 import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
 import { WeightFeedback } from './WeightFeedback';
@@ -55,12 +56,23 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
 
   // Satz-Stoppuhr (pausierbar)
   const [now, setNow] = useState(Date.now());
-  const [watch, setWatch] = useState<{ start: number; acc: number; running: boolean }>({ start: Date.now(), acc: 0, running: true });
+  // Satzzeit läuft erst, wenn du „Satz starten“ tippst – eine etwas längere Pause zählt so nicht als Satzzeit
+  const [watch, setWatch] = useState<{ start: number; acc: number; running: boolean }>({ start: Date.now(), acc: 0, running: false });
+  const [restEndedAt, setRestEndedAt] = useState<number | null>(null);
+  const wasResting = useRef(false);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(t);
   }, []);
-  useEffect(() => setWatch({ start: Date.now(), acc: 0, running: true }), [se?.uid, setIndex]);
+  useEffect(() => setWatch({ start: Date.now(), acc: 0, running: false }), [se?.uid, setIndex]);
+  const timerNow = s.timer;
+  const restingNow = !!timerNow && (timerNow.pausedLeft ?? (timerNow.endsAt - now) / 1000) > 0;
+  useEffect(() => {
+    // Ende der Satzpause merken (der Pausen-Timer selbst verschwindet kurz danach)
+    if (wasResting.current && !restingNow) setRestEndedAt(timerNow?.endsAt ?? Date.now());
+    if (restingNow) setRestEndedAt(null);
+    wasResting.current = restingNow;
+  }, [restingNow]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!se || !ex) return null;
   const timer = s.timer;
@@ -68,12 +80,31 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
   const restLeft = timer ? (timer.pausedLeft ?? (timer.endsAt - now) / 1000) : 0;
   const elapsed = (watch.acc + (watch.running ? now - watch.start : 0)) / 1000;
   const shown = resting ? restLeft : elapsed;
+  const awaiting = !resting && !watch.running && watch.acc === 0 && !!cur;
+  const startSet = () => {
+    unlockAudio();
+    setRestEndedAt(null);
+    setWatch({ start: Date.now(), acc: 0, running: true });
+  };
+  const over = restEndedAt ? Math.max(0, (now - restEndedAt) / 1000) : 0;
   const paused = resting ? timer?.pausedLeft != null : !watch.running;
   const mm = String(Math.floor(Math.max(0, shown) / 60)).padStart(2, '0');
   const ss = String(Math.floor(Math.max(0, shown) % 60)).padStart(2, '0');
   const totalSets = list.reduce((a, e) => a + e.sets.length, 0);
   const doneSets = list.reduce((a, e) => a + e.sets.filter((x) => x.done).length, 0);
   const progress = totalSets ? doneSets / totalSets : 0;
+  // Restzeit wie in der Planung (gelernte Satz-/Wechselzeiten), daraus voraussichtliches Ende
+  const TE = timeEstimator(s);
+  const remainingMin = Math.round(
+    list.reduce((a, e) => {
+      const x = s.exercises.find((y) => y.id === e.exerciseId);
+      const open = e.sets.filter((z) => !z.done).length;
+      if (!open || !x) return a;
+      return a + open * TE.perSet(x, { repMin: e.repMin, repMax: e.repMax, restSec: e.restSec }) + (e.sets.some((z) => z.done) ? 0 : TE.setup(x));
+    }, 0),
+  );
+  const endD = new Date(now + remainingMin * 60_000);
+  const endTxt = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`;
 
   const togglePause = () => {
     unlockAudio();
@@ -82,6 +113,7 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
       else s.pauseTimer();
       return;
     }
+    if (awaiting) return startSet();
     setWatch((x) => (x.running ? { ...x, acc: x.acc + (Date.now() - x.start), running: false } : { start: Date.now(), acc: x.acc, running: true }));
   };
   const completeSet = () => {
@@ -123,7 +155,15 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             <X size={18} />
           </button>
           <div className="mx-3 flex-1">
-            <GlowProgress value={progress} height={30} label={<span className="text-[12.5px]">{Math.round(progress * 100)} %</span>} />
+            <GlowProgress
+              value={progress}
+              height={30}
+              label={
+                <span className="text-[12px]">
+                  {fmtMin(Math.max(0, Math.round((now - session.startedAt) / 60_000)))} · noch ~{fmtMin(remainingMin)} · bis {endTxt}
+                </span>
+              }
+            />
           </div>
         </div>
 
@@ -144,14 +184,36 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
         </div>
 
         <div>
-          <div className="flex items-baseline gap-3">
-            <div className="tnum text-[44px] font-bold leading-none tracking-tight">
-              {mm}:{ss}
+          {awaiting ? (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={startSet}
+                className={cn(
+                  'flex h-14 flex-1 items-center justify-center gap-2 rounded-full bg-rec-green text-[17px] font-bold text-black active:scale-[0.98]',
+                  restEndedAt && 'animate-[pulse_1.4s_ease-in-out_infinite] shadow-[0_0_28px_rgba(61,220,151,0.55)]',
+                )}
+              >
+                <Play size={18} fill="currentColor" /> {restEndedAt ? 'Los! Satz starten' : 'Satz starten'}
+              </button>
+              {restEndedAt && (
+                <div className="tnum shrink-0 text-right">
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/45">Pause vorbei</div>
+                  <div className="text-[15px] font-semibold text-white/80">
+                    +{String(Math.floor(over / 60))}:{String(Math.floor(over % 60)).padStart(2, '0')}
+                  </div>
+                </div>
+              )}
             </div>
-            <span className={cn('text-[12px] font-semibold uppercase tracking-[0.12em]', resting ? 'text-accent' : 'text-white/45')}>
-              {resting ? (paused ? 'Pause angehalten' : 'Satzpause') : paused ? 'angehalten' : 'Satzzeit'}
-            </span>
-          </div>
+          ) : (
+            <div className="flex items-baseline gap-3">
+              <div className="tnum text-[44px] font-bold leading-none tracking-tight">
+                {mm}:{ss}
+              </div>
+              <span className={cn('text-[12px] font-semibold uppercase tracking-[0.12em]', resting ? 'text-accent' : 'text-white/45')}>
+                {resting ? (paused ? 'Pause angehalten' : 'Satzpause') : paused ? 'angehalten' : 'Satzzeit'}
+              </span>
+            </div>
+          )}
           <div className="mt-2 text-[22px] font-semibold leading-tight">{ex.name}</div>
           <div className="mt-1 flex items-center justify-between gap-2">
             <span className="text-[12px] font-semibold uppercase tracking-[0.12em] text-white/45">
@@ -261,18 +323,16 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
 
         {/* Steuerung */}
         <div className="sticky bottom-[calc(env(safe-area-inset-bottom,0px)+8px)] mt-auto grid h-[72px] shrink-0 grid-cols-3 overflow-hidden rounded-[26px] bg-[#1c1c1f]/95 backdrop-blur">
-          <div className="pointer-events-none absolute inset-y-0 left-0 border-r-2 border-white/80 bg-white/15 transition-[width] duration-500" style={{ width: `${progress * 100}%` }} />
           <button className="relative grid place-items-center disabled:opacity-30" disabled={idx === 0} onClick={() => setIdx(idx - 1)} aria-label="Vorherige Übung">
             <SkipBack size={26} fill="currentColor" />
           </button>
-          <button className="relative grid place-items-center" onClick={togglePause} aria-label={paused ? 'Fortsetzen' : 'Pausieren'}>
+          <button className="relative grid place-items-center" onClick={togglePause} aria-label={awaiting ? 'Satz starten' : paused ? 'Fortsetzen' : 'Pausieren'}>
             {paused ? <Play size={28} fill="currentColor" /> : <Pause size={28} fill="currentColor" />}
           </button>
           <button className="relative grid place-items-center disabled:opacity-30" disabled={idx >= list.length - 1} onClick={() => setIdx(idx + 1)} aria-label="Nächste Übung">
             <SkipForward size={26} fill="currentColor" />
           </button>
         </div>
-        <p className="text-center text-[11px] text-white/35">Fortschrittsbalken = erledigte Sätze der gesamten Einheit</p>
         {busy && <BusySheet open session={session} se={se} onClose={() => setBusy(false)} />}
       </div>
     </div>,
