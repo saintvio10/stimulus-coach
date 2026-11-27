@@ -9,12 +9,8 @@ import { SessionComplete } from './SessionComplete';
 import { Sheet } from './ui';
 import { MONTHS, fmtMin, relDayLabel } from '../lib/utils';
 
-/**
- * Grobe Kalorienschätzung fürs Krafttraining: MET × Körpergewicht × Stunden.
- * MET 5 liegt zwischen „Krafttraining, moderat“ (3,5) und „intensiv“ (6,0) im Compendium of Physical Activities –
- * nur ein Richtwert, Pausen und Intensität variieren stark.
- */
-export const estimateKcal = (minutes: number, kg: number) => Math.round((5 * kg * minutes) / 60 / 5) * 5;
+import { bodyWeightAt, estimateKcal } from '../engine/sessionStats';
+export { estimateKcal };
 
 function summary(s: Session, exercises: Exercise[]) {
   const exMap = new Map(exercises.map((e) => [e.id, e]));
@@ -32,7 +28,7 @@ function summary(s: Session, exercises: Exercise[]) {
 function WorkoutRow({ s, onOpen }: { s: Session; onOpen: () => void }) {
   const exercises = useStore((st) => st.exercises);
   const body = useStore((st) => st.body);
-  const kg = [...body].reverse().find((b) => b.weight)?.weight ?? 75;
+  const kg = bodyWeightAt(body, s.date).kg;
   const sum = summary(s, exercises);
   return (
     <button onClick={onOpen} className="flex w-full items-center gap-3.5 rounded-3xl bg-raised p-2.5 pr-3.5 text-left transition active:scale-[0.99]">

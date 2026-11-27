@@ -12,6 +12,104 @@ const MAX_GAP = 15 * 60;
 const repsOf = (x: SetLog) => (x.repsL != null && x.repsR != null ? x.repsL + x.repsR : x.reps ?? 0);
 const bestE1 = (sets: SetLog[]) => sets.reduce((b, x) => (x.done && x.weight && x.reps ? Math.max(b, e1rm(x.weight, x.reps, x.rir)) : b), 0);
 
+/**
+ * Grobe Kalorienschätzung fürs Krafttraining: MET × Körpergewicht × Stunden.
+ * MET 5 liegt zwischen „Krafttraining, moderat“ (3,5) und „intensiv“ (6,0) im Compendium of Physical Activities –
+ * nur ein Richtwert, Pausen und Intensität variieren stark.
+ */
+export const KCAL_MET = 5;
+export const estimateKcal = (minutes: number, kg: number) => Math.round((KCAL_MET * kg * minutes) / 60 / 5) * 5;
+
+/** Körpergewicht zum Datum (letzter Eintrag davor, sonst der erste danach, sonst 75 kg) */
+export function bodyWeightAt(body: { date: string; weight?: number }[], date: string): { kg: number; measured: boolean } {
+  const w = body.filter((b) => b.weight).sort((a, b) => a.date.localeCompare(b.date));
+  const before = w.filter((b) => b.date <= date).pop() ?? w[0];
+  return before ? { kg: before.weight!, measured: true } : { kg: 75, measured: false };
+}
+
+const repsMin = (x: SetLog) => (x.repsL != null && x.repsR != null ? Math.min(x.repsL, x.repsR) : x.reps ?? 0);
+
+export interface ExerciseCompare {
+  id: string;
+  name: string;
+  /** mit Zusatzgewicht (sonst Vergleich über Wiederholungen) */
+  weighted: boolean;
+  best: { weight: number; reps: number };
+  prevBest: { weight: number; reps: number; date: string } | null;
+  /** Kennzahl: e1RM (kg) bzw. Wiederholungen gesamt */
+  value: number;
+  prevValue: number | null;
+  pct: number | null;
+  /**
+   * Bewertung: up/down/flat. Mehr Gewicht bei etwas weniger Wdh. ist normale Progression (Epley überschätzt hohe Wdh.) –
+   * bis −5 % e1RM gilt das als Fortschritt („+2,5 kg“).
+   */
+  trend: 'up' | 'down' | 'flat' | 'new';
+  /** Gewichtsplus ggü. letztem Mal (kg), wenn der Fortschritt übers Gewicht kam */
+  weightUp: number | null;
+  /** Verlauf der Kennzahl über die letzten Einheiten (alt → heute) */
+  history: number[];
+  /** seit der ersten Aufzeichnung */
+  first: { date: string; pct: number } | null;
+}
+
+function bestSet(sets: SetLog[]) {
+  let b: { weight: number; reps: number; e: number } | null = null;
+  for (const x of sets) {
+    if (!x.done || !x.weight || !repsMin(x)) continue;
+    const e = e1rm(x.weight, repsMin(x), x.rir);
+    if (!b || e > b.e) b = { weight: x.weight, reps: repsMin(x), e };
+  }
+  return b;
+}
+
+/** Je Übung: heute vs. letztes Mal (bester Satz, e1RM bzw. Wdh.), Verlauf und Fortschritt seit Beginn */
+export function exerciseComparison(session: Session, history: Session[], exercises: Exercise[]): ExerciseCompare[] {
+  const exMap = new Map(exercises.map((e) => [e.id, e]));
+  const before = history.filter((s) => s.status === 'done' && s.id !== session.id && s.startedAt < session.startedAt).sort((a, b) => a.startedAt - b.startedAt);
+  const out: ExerciseCompare[] = [];
+  const seen = new Set<string>();
+  for (const se of session.exercises) {
+    if (seen.has(se.exerciseId)) continue;
+    const doneSets = session.exercises.filter((e) => e.exerciseId === se.exerciseId).flatMap((e) => e.sets.filter((x) => x.done));
+    if (!doneSets.length) continue;
+    seen.add(se.exerciseId);
+    const metric = (sets: SetLog[]) => {
+      const b = bestSet(sets);
+      if (b) return { weighted: true, value: b.e, best: { weight: b.weight, reps: b.reps } };
+      const reps = sets.filter((x) => x.done).map(repsMin);
+      const top = Math.max(0, ...reps);
+      return top ? { weighted: false, value: reps.reduce((a, r) => a + r, 0), best: { weight: 0, reps: top } } : null;
+    };
+    const cur = metric(doneSets);
+    if (!cur) continue;
+    const past = before
+      .map((s) => ({ s, m: metric(s.exercises.filter((e) => e.exerciseId === se.exerciseId).flatMap((e) => e.sets.filter((x) => x.done))) }))
+      .filter((x): x is { s: Session; m: NonNullable<typeof cur> } => !!x.m && x.m.weighted === cur.weighted);
+    const last = past[past.length - 1];
+    const firstP = past[0];
+    const pct = last ? (cur.value / last.m.value - 1) * 100 : null;
+    const dw = last && cur.weighted ? cur.best.weight - last.m.best.weight : 0;
+    const weightUp = dw > 0 && pct != null && pct > -5 ? dw : null;
+    const trend: ExerciseCompare['trend'] = pct == null ? 'new' : weightUp || pct >= 0.5 ? 'up' : pct <= -0.5 ? 'down' : 'flat';
+    out.push({
+      id: se.exerciseId,
+      name: exMap.get(se.exerciseId)?.name ?? se.exerciseId,
+      weighted: cur.weighted,
+      best: cur.best,
+      prevBest: last ? { ...last.m.best, date: last.s.date } : null,
+      value: cur.value,
+      prevValue: last ? last.m.value : null,
+      pct,
+      trend,
+      weightUp,
+      history: [...past.slice(-7).map((x) => x.m.value), cur.value],
+      first: firstP && past.length >= 2 ? { date: firstP.s.date, pct: (cur.value / firstP.m.value - 1) * 100 } : null,
+    });
+  }
+  return out;
+}
+
 export interface SessionStats {
   durationMin: number;
   sets: number;

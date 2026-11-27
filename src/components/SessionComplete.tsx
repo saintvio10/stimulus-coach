@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { BarChart3, Check, Clock, Dumbbell, Flame, Hourglass, Layers, Repeat2, TrendingUp, Trophy, X } from 'lucide-react';
+import { BarChart3, Check, Clock, Dumbbell, Flame, Hourglass, Layers, Minus, Repeat2, TrendingDown, TrendingUp, Trophy, X } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useRouter } from '../lib/hooks';
 import type { MuscleId, Session } from '../lib/types';
 import { MUSCLE } from '../lib/muscles';
-import { cn, fmtMin, fmtNum, relDayLabel } from '../lib/utils';
-import { sessionStats, sessionsThisWeek, fmtMinSec } from '../engine/sessionStats';
+import { cn, fmtDate, fmtMin, fmtNum, fmtShortDay, relDayLabel } from '../lib/utils';
+import { bodyWeightAt, estimateKcal, exerciseComparison, sessionStats, sessionsThisWeek, fmtMinSec, KCAL_MET, type ExerciseCompare } from '../engine/sessionStats';
 import { weekStreak } from '../engine/stats';
 import { MuscleFigure } from './MuscleFigure';
 import { BackupButton } from './Backup';
@@ -45,6 +45,86 @@ function Tile({ icon, label, children, sub, delay }: { icon: ReactNode; label: s
   );
 }
 
+/** kleiner Verlauf (alt → heute), letzter Punkt hervorgehoben */
+function Spark({ values, tone }: { values: number[]; tone: 'up' | 'down' | 'flat' }) {
+  if (values.length < 2) return null;
+  const W = 64,
+    H = 26,
+    P = 3;
+  const lo = Math.min(...values),
+    hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const pts = values.map((v, i) => [P + (i * (W - 2 * P)) / (values.length - 1), H - P - ((v - lo) / span) * (H - 2 * P)] as const);
+  const col = tone === 'up' ? 'rgb(var(--rec-green))' : tone === 'down' ? 'rgb(var(--rec-red))' : 'rgba(255,255,255,0.55)';
+  const [lx, ly] = pts[pts.length - 1];
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="shrink-0" aria-hidden>
+      <polyline points={pts.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke={col} strokeOpacity={0.85} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lx} cy={ly} r={2.8} fill={col} />
+    </svg>
+  );
+}
+
+const setTxt = (c: ExerciseCompare, b: { weight: number; reps: number }) => (c.weighted ? `${fmtNum(b.weight)} kg × ${b.reps}` : `${b.reps} Wdh.`);
+
+function CompareRow({ c, delay }: { c: ExerciseCompare; delay: number }) {
+  const tone = c.trend === 'up' ? 'up' : c.trend === 'down' ? 'down' : 'flat';
+  return (
+    <li className="flex animate-fade-up items-center gap-3 py-2.5" style={{ animationDelay: `${delay}ms` }}>
+      <div className="min-w-0 flex-1">
+        <div className="text-[14px] font-medium leading-tight text-white">{c.name}</div>
+        <div className="tnum mt-1 text-[12px] leading-snug text-white/55">
+          <span className="text-white/85">{setTxt(c, c.best)}</span>
+          {c.prevBest ? (
+            <>
+              {' '}· zuletzt {setTxt(c, c.prevBest)} ({fmtShortDay(c.prevBest.date)})
+            </>
+          ) : (
+            <> · erstes Mal – Startwert gesetzt</>
+          )}
+        </div>
+        {c.first && Math.abs(c.first.pct) >= 1 && (
+          <div className="tnum mt-0.5 text-[11.5px] text-white/40">
+            seit {fmtDate(c.first.date)}: {c.first.pct > 0 ? '+' : ''}
+            {fmtNum(c.first.pct, 0)} %
+          </div>
+        )}
+      </div>
+      <Spark values={c.history} tone={tone} />
+      <div
+        className={cn(
+          'tnum flex w-[76px] shrink-0 flex-col items-end whitespace-nowrap text-[13px] font-semibold leading-tight',
+          tone === 'up' ? 'text-rec-green' : tone === 'down' ? 'text-rec-red' : 'text-white/50',
+        )}
+      >
+        {c.pct == null ? (
+          <span className="text-[11.5px] font-medium text-white/40">neu</span>
+        ) : c.weightUp ? (
+          <>
+            <span className="flex items-center gap-0.5">
+              <TrendingUp size={13} />+{fmtNum(c.weightUp, 2)} kg
+            </span>
+            <span className="text-[10.5px] font-medium text-white/40">mehr Gewicht</span>
+          </>
+        ) : (
+          <span className="flex items-center gap-0.5">
+            {tone === 'up' ? <TrendingUp size={13} /> : tone === 'down' ? <TrendingDown size={13} /> : <Minus size={13} />}
+            {c.pct > 0 ? '+' : ''}
+            {fmtNum(c.pct, Math.abs(c.pct) < 10 ? 1 : 0)} %
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** anschauliche Vergleiche fürs bewegte Gewicht */
+function tonnageFact(kg: number): string | null {
+  if (kg < 300) return null;
+  if (kg >= 2400) return `so viel wie ${fmtNum(kg / 1200, 1)} Kleinwagen (à ~1,2 t)`;
+  return `so viel wie ${fmtNum(kg / 480, 1)} Konzertflügel (à ~480 kg)`;
+}
+
 /** Großer Abschluss-Screen nach dem Training (auch später aus der Übersicht aufrufbar) */
 export function SessionComplete({ session, prs, onClose, review }: { session: Session; prs?: string[]; onClose: () => void; /** Rückblick auf ein vergangenes Training (aus „Letzte Trainings“) */ review?: boolean }) {
   const s = useStore();
@@ -54,6 +134,14 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
   const planned = st.plannedSets && st.plannedSets > 0 ? st.plannedSets : st.sets;
   const ratio = planned ? Math.min(1, st.sets / planned) : 1;
   const ringV = useCountUp(ratio, 1100, 150);
+  const cmp = useMemo(() => exerciseComparison(session, s.sessions, s.exercises), [session, s.sessions, s.exercises]);
+  const withPrev = cmp.filter((c) => c.pct != null);
+  const stronger = withPrev.filter((c) => c.trend === 'up').length;
+  const avgPct = withPrev.length ? withPrev.reduce((a, c) => a + c.pct!, 0) / withPrev.length : null;
+  const bw = bodyWeightAt(s.body, session.date);
+  const kcal = estimateKcal(st.durationMin, bw.kg);
+  const tut = Math.round((st.reps * 3) / 60);
+  const fact = tonnageFact(st.volume);
   const week = sessionsThisWeek(s.sessions, session.date);
   const streak = weekStreak(s.sessions, session.date);
   const fills = useMemo(() => {
@@ -66,7 +154,6 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
   const highlights: { icon: ReactNode; text: ReactNode; tone?: 'gold' | 'green' }[] = [];
   for (const p of records) highlights.push({ icon: <Trophy size={16} />, text: p, tone: 'gold' });
   if (st.bestGain) highlights.push({ icon: <TrendingUp size={16} />, text: <><b>{st.bestGain.name}</b> {fmtNum(st.bestGain.pct, 1)} % stärker als letztes Mal (e1RM)</>, tone: 'green' });
-  if (st.improved >= 2) highlights.push({ icon: <Flame size={16} />, text: <>{st.improved} von {st.exercises} Übungen stärker als beim letzten Mal</> });
   if (st.prev?.volumePct != null && Math.abs(st.prev.volumePct) >= 3)
     highlights.push({
       icon: <BarChart3 size={16} />,
@@ -150,6 +237,9 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
               </>
             )}
           </Tile>
+          <Tile icon={<Flame size={12} />} label="Kalorien" delay={275} sub={`geschätzt · ${fmtNum(bw.kg)} kg${bw.measured ? '' : ' (angen.)'}`}>
+            ~<Count value={kcal} /> <span className="text-[15px] text-white/60">kcal</span>
+          </Tile>
           <Tile icon={<Dumbbell size={12} />} label={st.volume > 0 ? 'Volumen' : 'Wiederholungen'} delay={300} sub={st.volume > 0 ? 'Gewicht × Wdh.' : 'mit Körpergewicht'}>
             {st.volume <= 0 ? (
               <Count value={st.reps} />
@@ -175,6 +265,15 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
               '–'
             )}
           </Tile>
+          <Tile icon={<TrendingUp size={12} />} label="Stärker" delay={450} sub={avgPct != null ? `Ø ${avgPct > 0 ? '+' : ''}${fmtNum(avgPct, 1)} % ggü. letztem Mal` : 'Vergleich ab dem 2. Mal'}>
+            {withPrev.length ? (
+              <>
+                <Count value={stronger} /> <span className="text-[15px] text-white/60">/ {withPrev.length}</span>
+              </>
+            ) : (
+              '–'
+            )}
+          </Tile>
         </div>
 
         {/* Highlights */}
@@ -194,6 +293,41 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
                 <span>{h.text}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Vergleich je Übung */}
+        {cmp.length > 0 && (
+          <div className="animate-fade-up rounded-[24px] bg-white/[0.05] px-4 pb-2 pt-4 ring-1 ring-white/[0.06]" style={{ animationDelay: '600ms' }}>
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-[12px] font-semibold uppercase tracking-wider text-white/45">Vergleich zum letzten Mal</div>
+              <div className="text-[11px] text-white/35">bester Satz</div>
+            </div>
+            <ul className="mt-1 divide-y divide-white/[0.06]">
+              {cmp.map((c, i) => (
+                <CompareRow key={c.id} c={c} delay={650 + i * 60} />
+              ))}
+            </ul>
+            <p className="pb-2 pt-1 text-[11px] leading-snug text-white/35">% = geschätztes 1-Wdh.-Maximum aus Gewicht, Wdh. und RIR – so zählen auch mehr Wdh. bei gleichem Gewicht. Mehr Gewicht mit etwas weniger Wdh. ist normale Steigerung. Linie: letzte Einheiten.</p>
+          </div>
+        )}
+
+        {/* Fakten */}
+        {(fact || st.reps > 0) && (
+          <div className="flex animate-fade-up flex-col gap-1.5 rounded-2xl bg-white/[0.05] px-4 py-3 text-[13px] text-white/75 ring-1 ring-white/[0.06]" style={{ animationDelay: '680ms' }}>
+            {fact && (
+              <div>
+                <b className="text-white">{st.volume >= 1000 ? `${fmtNum(st.volume / 1000, 1)} t` : `${fmtNum(st.volume, 0)} kg`}</b> bewegt – {fact}
+              </div>
+            )}
+            {st.reps > 0 && (
+              <div>
+                <b className="text-white">~{tut} min</b> unter Spannung ({st.reps} Wdh. × ~3 s)
+              </div>
+            )}
+            <div className="text-[11px] text-white/35">
+              Kalorien: MET {KCAL_MET} × {fmtNum(bw.kg)} kg × {fmtMin(st.durationMin)} – grobe Schätzung, keine Messung.
+            </div>
           </div>
         )}
 
