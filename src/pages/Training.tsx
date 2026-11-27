@@ -22,7 +22,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
-import { useCompletion, useFocusRequest, useNow, usePRCelebration, useRouter, useToast } from '../lib/hooks';
+import { useCompletion, useFocusRequest, useNow, usePRCelebration, useRouter, useSetPopup, useToast } from '../lib/hooks';
 import type { AppData, Exercise, Session, SessionExercise } from '../lib/types';
 import { buildPlan, planToday } from '../engine/planner';
 import { adviseExercise, exposures } from '../engine/progression';
@@ -37,7 +37,7 @@ import { ExerciseHistory } from '../components/ExerciseHistory';
 import { TimeLeftButton } from '../components/TimeLeft';
 import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
 import { timeEstimator } from '../engine/timing';
-import { exerciseVerdict } from '../engine/verdict';
+import { exerciseVerdict, setFeedback } from '../engine/verdict';
 import { BusySheet } from '../components/BusySheet';
 import { WeightStepsSheet } from '../components/WeightSteps';
 import { prSetIds, setPR } from '../engine/prs';
@@ -372,6 +372,10 @@ function ExerciseCard({
     const rest = restAfterSet(se, doneReps, doneRir, st.failure);
     const pr = setPR(s.sessions, session, ex, { id: setId, w: weight ?? 0, reps: doneReps, rir: st.failure ? 0 : doneRir });
     if (pr) setTimeout(() => usePRCelebration.getState().show({ title: pr.title, sub: pr.sub, exercise: ex.name }), 150);
+    else {
+      const fb = setFeedback(ex, se, idx, { w: weight ?? 0, reps: doneReps, rir: st.failure ? 0 : doneRir }, prior, advice.repTarget);
+      useSetPopup.getState().show({ ...fb, exercise: ex.name, set: idx + 1 });
+    }
     s.updateSet(session.id, se.uid, setId, {
       done: true,
       weight,

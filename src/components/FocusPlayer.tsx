@@ -10,12 +10,12 @@ import { BodyMap, targetFills } from './BodyMap';
 import { MUSCLE } from '../lib/muscles';
 import { cn, fmtMin, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 import { timeEstimator } from '../engine/timing';
-import { exerciseVerdict } from '../engine/verdict';
+import { exerciseVerdict, setFeedback } from '../engine/verdict';
 import { unlockAudio } from './RestTimer';
 import { restAfterSet, transitionRest } from '../engine/rest';
 import { LiveAdjustBanner } from './LiveAdjustBanner';
 import { setPR } from '../engine/prs';
-import { usePRCelebration } from '../lib/hooks';
+import { usePRCelebration, useSetPopup } from '../lib/hooks';
 import { GlowProgress } from './ui';
 import { FocusProgress } from './FocusProgress';
 import { BusySheet } from './BusySheet';
@@ -134,6 +134,10 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
     unlockAudio();
     const pr = setPR(s.sessions, session, ex, { id: cur.id, w: w ?? 0, reps: effReps, rir });
     if (pr) setTimeout(() => usePRCelebration.getState().show({ title: pr.title, sub: pr.sub, exercise: ex.name }), 150);
+    else {
+      const fb = setFeedback(ex, se, setIndex, { w: w ?? 0, reps: effReps, rir }, prior, advice?.repTarget ?? se.repMin);
+      useSetPopup.getState().show({ ...fb, exercise: ex.name, set: setIndex + 1 });
+    }
     s.setWeightFrom(session.id, se.uid, cur.id, w);
     s.updateSet(session.id, se.uid, cur.id, { done: true, weight: w, reps: effReps, ...(uni ? { repsL: reps, repsR } : {}), rir, failure: rir === 0 ? cur.failure : false });
     const last = setIndex === se.sets.length - 1;

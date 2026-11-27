@@ -56,6 +56,26 @@ export const useToast = create<{ msg: string | null; show: (m: string) => void }
   },
 }));
 
+/** Pop-up nach jedem Satz (blendet nach 3 s aus) */
+export interface SetPopupData {
+  tone: 'great' | 'good' | 'ok' | 'low' | 'light';
+  title: string;
+  line: string;
+  hint?: string;
+  exercise: string;
+  set: number;
+}
+export const useSetPopup = create<{ data: SetPopupData | null; id: number; show: (d: SetPopupData) => void; hide: () => void }>((set, get) => ({
+  data: null,
+  id: 0,
+  show: (d) => {
+    const id = get().id + 1;
+    set({ data: d, id });
+    setTimeout(() => get().id === id && set({ data: null }), 3000);
+  },
+  hide: () => set({ data: null }),
+}));
+
 // ───── Routing über einfachen Hash ─────
 export type Route =
   | 'uebersicht'

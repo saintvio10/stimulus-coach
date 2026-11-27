@@ -97,3 +97,49 @@ export function exerciseVerdict(
           : `Nächstes Mal bei ${fmtNum(adv.weight)} kg bleiben und ${adv.repTarget} Wdh. anpeilen${tone === 'heavy' ? ' – klappt es wieder nicht, eine Stufe leichter' : ''}`;
   return { tone, title, points: points.slice(0, 4), next };
 }
+
+export interface SetFeedback {
+  tone: 'great' | 'good' | 'ok' | 'low' | 'light';
+  title: string;
+  line: string;
+  hint?: string;
+}
+
+/**
+ * Kurzes Feedback direkt nach einem Satz: Wiederholungen vs. Satzziel (gleiches Gewicht wie letztes Mal → 1 Wdh. mehr
+ * als damals im selben Satz, sonst Richtwert der Empfehlung minus ~1 je Folgesatz), Zielbereich, Reserve und Vergleich.
+ */
+export function setFeedback(
+  ex: Exercise,
+  se: SessionExercise,
+  k: number,
+  done: { w: number; reps: number; rir: number | null },
+  prior: Session[],
+  repTarget: number,
+): SetFeedback {
+  const last = exposures(ex.id, prior)[0];
+  const l = last?.sets[k];
+  const lr = l ? repsOf(l) : null;
+  const sameW = !!l && (l.weight ?? 0) === done.w;
+  const goal = sameW && lr != null ? Math.min(Math.max(lr + 1, se.repMin), Math.max(se.repMax, lr)) : Math.max(se.repMin, repTarget - k);
+  const r = done.reps;
+  const parts = [`${r} Wdh.`, `Ziel ${goal}`];
+  if (sameW && lr != null) parts.push(`letztes Mal ${lr}${r !== lr ? ` (${r > lr ? '+' : ''}${r - lr})` : ''}`);
+  else if (l) {
+    const a = e1rm(l.weight ?? 0, lr ?? 0, l.rir);
+    const b = e1rm(done.w, r, done.rir);
+    if (a > 0) parts.push(`Kraft ${b >= a ? '+' : ''}${fmtNum(((b - a) / a) * 100, 1)} %`);
+  }
+  let tone: SetFeedback['tone'];
+  let title: string;
+  if (r > se.repMax) (tone = 'light'), (title = 'Zu leicht – über dem Zielbereich');
+  else if (r >= goal + 1) (tone = 'great'), (title = 'Stark! Ziel übertroffen');
+  else if (r >= goal) (tone = 'good'), (title = 'Ziel erreicht');
+  else if (r >= se.repMin) (tone = 'ok'), (title = 'Im Zielbereich');
+  else (tone = 'low'), (title = 'Unter dem Zielbereich');
+  let hint: string | undefined;
+  if (done.rir != null && done.rir >= 3 && tone !== 'low') hint = `Noch ${done.rir} Wdh. im Tank – nächster Satz näher ans Versagen`;
+  else if (tone === 'low' && k > 0) hint = 'Ermüdung in späteren Sätzen ist normal';
+  else if (tone === 'light') hint = 'Nächster Satz: Gewicht eine Stufe höher';
+  return { tone, title, line: parts.join(' · '), hint };
+}

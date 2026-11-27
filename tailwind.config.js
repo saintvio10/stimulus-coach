@@ -26,11 +26,12 @@ export default {
       borderRadius: { xl2: '1.25rem' },
       keyframes: {
         'fade-up': { from: { opacity: '0.001', transform: 'translateY(6px)' }, to: { opacity: '1', transform: 'none' } },
+        shrink: { from: { transform: 'scaleX(1)' }, to: { transform: 'scaleX(0)' } },
         'sheet-up': { from: { transform: 'translateY(100%)' }, to: { transform: 'none' } },
         'slide-in-r': { from: { opacity: '0', transform: 'translateX(40px)' }, to: { opacity: '1', transform: 'none' } },
         'slide-in-l': { from: { opacity: '0', transform: 'translateX(-40px)' }, to: { opacity: '1', transform: 'none' } },
       },
-      animation: { 'fade-up': 'fade-up .35s cubic-bezier(.2,.8,.2,1) both', 'sheet-up': 'sheet-up .32s cubic-bezier(.2,.8,.2,1) both', 'slide-in-r': 'slide-in-r .3s cubic-bezier(.2,.8,.2,1) both', 'slide-in-l': 'slide-in-l .3s cubic-bezier(.2,.8,.2,1) both' },
+      animation: { shrink: 'shrink 3s linear forwards', 'fade-up': 'fade-up .35s cubic-bezier(.2,.8,.2,1) both', 'sheet-up': 'sheet-up .32s cubic-bezier(.2,.8,.2,1) both', 'slide-in-r': 'slide-in-r .3s cubic-bezier(.2,.8,.2,1) both', 'slide-in-l': 'slide-in-l .3s cubic-bezier(.2,.8,.2,1) both' },
     },
   },
   plugins: [],
