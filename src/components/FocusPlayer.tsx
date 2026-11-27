@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ExerciseVisual } from './ExerciseVisual';
-import { Check, Minus, Pause, Play, Plus, SkipBack, SkipForward, X } from 'lucide-react';
+import { Check, Link2, Minus, Pause, Play, Plus, SkipBack, SkipForward, Unlink2, X } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { useStore } from '../lib/store';
 import type { Session } from '../lib/types';
@@ -155,6 +155,16 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
     setW(dir > 0 ? nextWeight(base, ex, s.settings) : prevWeight(base, ex, s.settings));
   };
   const muscles = Object.entries(ex.muscles).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0));
+  // Einseitig: links/rechts verknüpft (Standard) oder getrennt
+  const linked = ex.linkSides !== false;
+  const setL = (v: number) => {
+    setReps(v);
+    if (linked) setRepsR(v);
+  };
+  const setR = (v: number) => {
+    setRepsR(v);
+    if (linked) setReps(v);
+  };
   const fills = targetFills(ex.muscles);
 
   return createPortal(
@@ -272,11 +282,23 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
             {ex.unilateral ? (
               <>
                 <Stepper label={ex.equipment === 'bodyweight' ? 'Zusatzgewicht' : 'Gewicht'} value={w == null || (ex.equipment === 'bodyweight' && !w) ? (ex.equipment === 'bodyweight' ? 'ohne' : '–') : `${fmtNum(w)} kg`} onMinus={() => stepW(-1)} onPlus={() => stepW(1)} />
-                <div className="grid grid-cols-2 gap-3">
-                  <Stepper label="Links · Wdh." value={String(reps)} onMinus={() => setReps(Math.max(0, reps - 1))} onPlus={() => setReps(reps + 1)} />
-                  <Stepper label="Rechts · Wdh." value={String(repsR)} onMinus={() => setRepsR(Math.max(0, repsR - 1))} onPlus={() => setRepsR(repsR + 1)} />
+                <div className="relative grid grid-cols-2 gap-3">
+                  <Stepper label="Links · Wdh." value={String(reps)} onMinus={() => setL(Math.max(0, reps - 1))} onPlus={() => setL(reps + 1)} />
+                  <Stepper label="Rechts · Wdh." value={String(repsR)} onMinus={() => setR(Math.max(0, repsR - 1))} onPlus={() => setR(repsR + 1)} />
+                  <button
+                    onClick={() => {
+                      s.mutate((d) => void (d.exercises.find((x) => x.id === ex.id)!.linkSides = !linked));
+                      if (!linked) setRepsR(reps);
+                    }}
+                    className={cn('absolute left-1/2 top-1/2 grid h-8 w-8 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full ring-4 ring-black', linked ? 'bg-accent text-white' : 'bg-white/15 text-white/70')}
+                    aria-label={linked ? 'Links/Rechts getrennt eintragen' : 'Links/Rechts verknüpfen'}
+                  >
+                    {linked ? <Link2 size={15} /> : <Unlink2 size={15} />}
+                  </button>
                 </div>
-                <p className="-mt-1 text-center text-[11.5px] text-white/45">Erst der schwächere Arm, dann der andere mit gleich vielen Wdh.</p>
+                <p className="-mt-1 text-center text-[11.5px] text-white/45">
+                  {linked ? 'Verknüpft: beide Seiten gleich – 🔗 tippen, um sie einzeln einzustellen.' : 'Getrennt: Seiten einzeln. Für die Progression zählt der schwächere Arm.'}
+                </p>
               </>
             ) : (
               <div className="grid grid-cols-2 gap-3">

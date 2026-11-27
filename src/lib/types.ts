@@ -50,6 +50,8 @@ export interface Exercise {
   primary: MuscleId;
   /** Arme einzeln erfassen (z. B. Seitheben): Wdh. für links und rechts */
   unilateral?: boolean;
+  /** einseitig: links/rechts verknüpft (eine Änderung gilt für beide Seiten) – Standard: verknüpft */
+  linkSides?: boolean;
   /** 'home' = Übung für Training ohne Gym (wird im Studio-Plan nie eingeplant) */
   location?: 'home';
   /** vorübergehend nicht einplanen (z. B. Beschwerden, Gerät fehlt) – bis einschließlich Datum */

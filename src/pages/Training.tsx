@@ -20,6 +20,8 @@ import {
   History,
   TrendingUp,
   Clock,
+  Link2,
+  Unlink2,
 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, useFocusRequest, useNow, usePRCelebration, useRouter, useSetPopup, useToast } from '../lib/hooks';
@@ -747,14 +749,18 @@ function ExerciseCard({
                       label="Gewicht"
                     />
                     {ex.unilateral ? (
-                      <div className="flex min-w-0 flex-col gap-1.5">
+                      <div className="relative flex min-w-0 flex-col gap-1.5">
                         {(['L', 'R'] as const).map((side) => {
                           const key = side === 'L' ? 'repsL' : 'repsR';
                           const otherKey = side === 'L' ? 'repsR' : 'repsL';
                           const other = st[otherKey] ?? st.reps;
                           const val = st[key] ?? st.reps;
+                          const linked = ex.linkSides !== false;
+                          // verknüpft: beide Seiten gleich; getrennt: nur diese Seite (für die Progression zählt die schwächere)
                           const set = (v: number | null) =>
-                            s.updateSet(session.id, se.uid, st.id, { [key]: v, [otherKey]: other, reps: v == null ? other : other == null ? v : Math.min(v, other) });
+                            linked
+                              ? s.updateSet(session.id, se.uid, st.id, { repsL: v, repsR: v, reps: v })
+                              : s.updateSet(session.id, se.uid, st.id, { [key]: v, [otherKey]: other, reps: v == null ? other : other == null ? v : Math.min(v, other) });
                           return (
                             <div key={side} className="relative min-w-0">
                               <span className="pointer-events-none absolute -left-1 -top-1 z-10 grid h-4 w-4 place-items-center rounded-full bg-accent text-[9px] font-bold text-white">{side}</span>
@@ -770,6 +776,19 @@ function ExerciseCard({
                             </div>
                           );
                         })}
+                        {!st.done && (
+                          <button
+                            onClick={() => s.mutate((d) => void (d.exercises.find((x) => x.id === ex.id)!.linkSides = ex.linkSides === false))}
+                            className={cn(
+                              'absolute right-1/2 top-1/2 z-20 grid h-6 w-6 -translate-y-1/2 translate-x-1/2 place-items-center rounded-full ring-2 ring-raised',
+                              ex.linkSides !== false ? 'bg-accent text-white' : 'bg-bg text-muted',
+                            )}
+                            aria-label={ex.linkSides !== false ? 'Links/Rechts getrennt eintragen' : 'Links/Rechts verknüpfen'}
+                            title={ex.linkSides !== false ? 'Verknüpft: beide Seiten gleich' : 'Getrennt: Seiten einzeln'}
+                          >
+                            {ex.linkSides !== false ? <Link2 size={12} /> : <Unlink2 size={12} />}
+                          </button>
+                        )}
                       </div>
                     ) : (
                     <NumStepper
