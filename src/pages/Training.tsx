@@ -39,6 +39,7 @@ import { TimeLeftButton } from '../components/TimeLeft';
 import { LiveAdjustBanner } from '../components/LiveAdjustBanner';
 import { timeEstimator } from '../engine/timing';
 import { BusySheet } from '../components/BusySheet';
+import { WeightStepsSheet } from '../components/WeightSteps';
 import { prSetIds, setPR } from '../engine/prs';
 import { JOINT_LABEL, painConflict } from '../engine/joints';
 import { HomeWorkoutButton } from '../components/HomeWorkout';
@@ -317,6 +318,7 @@ function ExerciseCard({
 }) {
   const s = useStore();
   const [showCues, setShowCues] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(false);
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [missing, setMissing] = useState<string | null>(null);
   const toast = useToast((t) => t.show);
@@ -888,6 +890,11 @@ function ExerciseCard({
             <Button size="sm" variant="ghost" onClick={() => setShowCues(!showCues)}>
               Ausführung
             </Button>
+            {ex.location !== 'home' && ex.equipment !== 'bodyweight' && (
+              <Button size="sm" variant="ghost" onClick={() => setStepsOpen(true)}>
+                Gewichtsstufen
+              </Button>
+            )}
             <div className="ml-auto flex gap-1">
               <Button size="icon" variant="ghost" onClick={() => s.moveExercise(session.id, se.uid, -1)} aria-label="Nach oben">
                 <ArrowUp size={15} />
@@ -923,6 +930,7 @@ function ExerciseCard({
           />
         </div>
       )}
+      {stepsOpen && <WeightStepsSheet ex={ex} open onClose={() => setStepsOpen(false)} />}
     </Card>
     </SwipeRow>
   );

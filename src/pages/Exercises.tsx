@@ -9,6 +9,7 @@ import { ExerciseAnimation, ExerciseIcon, SPECS } from '../components/ExerciseAn
 import { ExercisePicker } from './Training';
 import { cn, uid, weightSteps, fmtNum, dateKey, fmtShortDay } from '../lib/utils';
 import { DEFAULT_EXERCISES } from '../data/exercises';
+import { StackGenerator } from '../components/WeightSteps';
 
 const EQUIP: Record<Equipment, string> = {
   dumbbell: 'Kurzhantel',
@@ -378,7 +379,16 @@ function EditSheet({ ex, onClose }: { ex: Exercise; onClose: () => void }) {
             </div>
           </Field>
         </div>
-        <Field label="Eigene Gewichtsstufen (optional, kommagetrennt)" hint="z. B. 5, 7.5, 10, 12.5 – überschreibt die Steigerung">
+        {e.location !== 'home' && e.equipment !== 'bodyweight' && (
+          <StackGenerator
+            initial={ex.weights}
+            onGenerate={(l) => {
+              setWeightsText(l.join(', '));
+              toast(`${l.length} Stufen eingetragen – mit „Speichern“ übernehmen`);
+            }}
+          />
+        )}
+        <Field label="Eigene Gewichtsstufen (optional, kommagetrennt)" hint="z. B. 5, 7.5, 10, 12.5 – überschreibt die Steigerung; oben aus dem Gewichtsblock erzeugen">
           <Input id="ed-weights" value={weightsText} onChange={(x) => setWeightsText(x.target.value)} placeholder="leer = Gerätestandard" />
         </Field>
         <Field label="Ausführungshinweise (eine Zeile pro Hinweis)">
