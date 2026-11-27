@@ -30,6 +30,25 @@ if (!existsSync(file)) {
     for (const s of plan.sessions) console.log(`   ${s.date} ${s.label} · ${s.estMinutes}/${s.minutes} min · ${s.exercises.reduce((a, e) => a + e.sets, 0)} Sätze`);
     for (const r of plan.restDays) console.log(`   ${r.date} ${r.reason.slice(0, 110)}`);
     const done = [...new Set(d.sessions.filter((s) => s.status === 'done').map((s) => s.date))];
+    // Plausibilitätshinweis (keine Regel, Schwelle anpassbar): derselbe Muskel an Folgetagen je ≥ 3 Sätze – inkl. absolvierter Einheiten
+    const CONSEC_WARN_SETS = 3;
+    const exMap = new Map(d.exercises.map((e) => [e.id, e]));
+    const perDay = new Map<string, Record<string, number>>();
+    for (const s of d.sessions.filter((x) => x.status === 'done')) {
+      const r = perDay.get(s.date) ?? {};
+      for (const se of s.exercises) for (const [m, c] of Object.entries(exMap.get(se.exerciseId)?.muscles ?? {})) if ((c ?? 0) >= 0.75) r[m] = (r[m] ?? 0) + (c ?? 0) * se.sets.filter((x) => x.done).length;
+      perDay.set(s.date, r);
+    }
+    for (const s of plan.sessions) {
+      const r: Record<string, number> = {};
+      for (const x of s.decisions) r[x.muscle] = x.sets;
+      perDay.set(s.date, r);
+    }
+    for (const [day, r] of perDay) {
+      const prevDay = perDay.get(addDays(day, -1));
+      if (!prevDay) continue;
+      for (const [m, v] of Object.entries(r)) if (v >= CONSEC_WARN_SETS && (prevDay[m] ?? 0) >= CONSEC_WARN_SETS) console.log(`   ⚠ Hinweis: ${m} ${addDays(day, -1)} ${prevDay[m]} Sätze, ${day} ${v} Sätze (Plausibilitätshinweis, keine Regel)`);
+    }
     const all = [...new Set([...done, ...plan.sessions.map((s) => s.date)])].sort();
     for (const p of plan.sessions) {
       for (let k = 0; k < 7; k++) {
@@ -48,6 +67,8 @@ if (!existsSync(file)) {
       }
     }
   };
+  const raw = JSON.parse(readFileSync(file, 'utf8'));
+  if (raw.exportedAt) check(`Zeitpunkt des Exports (${raw.exportedAt})`, Date.parse(raw.exportedAt));
   check('Tag nach dem letzten Training, 8 Uhr', parseKey(base).getTime() + 8 * HOUR);
   check('… 18 Uhr', parseKey(base).getTime() + 18 * HOUR);
   const prev = d.availability[base];

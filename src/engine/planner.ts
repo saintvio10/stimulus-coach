@@ -790,8 +790,16 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       // Sicherer Termin heute hat Vorrang vor späteren (unsichereren) Terminen; ausdrücklich bevorzugte Tage noch mehr
       const todaySure = pick.includes(today) && data.availability[today] === 'yes';
       const preferred = pick.filter((d) => preferSet.has(d)).length;
+      // Eine eigens eingestellte Trainingszeit für einen Tag ist ein Zeichen, dass dort ernsthaft trainiert werden soll
+      const customTime = pick.filter((d) => d !== today && data.planOptions.dayMinutes?.[d] != null).length;
       const score =
-        pick.length * 100 + preferred * 150 + (todaySure ? 40 : pick.includes(today) ? 2 : 0) + minGap * 8 - consecutive * 3 - pick.filter((d) => fixedTentative.has(d)).length * 5;
+        pick.length * 100 +
+        preferred * 150 +
+        (todaySure ? 40 : pick.includes(today) ? 2 : 0) +
+        customTime * 20 +
+        minGap * 8 -
+        consecutive * 3 -
+        pick.filter((d) => fixedTentative.has(d)).length * 5;
       if (score > bestScore) (bestScore = score), (best = pick);
     }
     for (const d of dates) {
@@ -802,13 +810,15 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       for (let k = 1; set.has(addDays(d, k)); k++) run++;
       const ww = worstWindow([...best, d]);
       const prefHit = best.filter((x) => preferSet.has(x));
-      const todayWins = ww.n > cap && best.includes(today) && data.availability[today] === 'yes' && d > today;
+      // „Heute hat Vorrang“ nur, wenn dieser Tag statt heute wirklich ins Limit gepasst hätte
+      const todayWins = ww.n > cap && best.includes(today) && data.availability[today] === 'yes' && d > today && worstWindow([...best.filter((x) => x !== today), d]).n <= cap;
+      const chosen = best.map((x) => relDayLabel(x, today).split(',')[0]).join(', ');
       restDays.push({
         date: d,
         kind: ww.n > cap ? 'cap' : run > maxCons ? 'consecutive' : 'spacing',
         reason:
           ww.n > cap
-            ? `${prefHit.length && !preferSet.has(d) ? `Verschoben: Du hast ${prefHit.map((x) => relDayLabel(x, today).split(',')[0]).join(', ')} bevorzugt${todayWins ? ' und heute hast du sicher Zeit' : ''}. ` : todayWins ? 'Verschoben: Heute hast du sicher Zeit – das hat Vorrang vor einem späteren Termin. ' : 'Ruhetag: '}Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Das Wochenvolumen wird auf die übrigen Tage verteilt.`
+            ? `${prefHit.length && !preferSet.has(d) ? `Verschoben: Du hast ${prefHit.map((x) => relDayLabel(x, today).split(',')[0]).join(', ')} bevorzugt${todayWins ? ' und heute hast du sicher Zeit' : ''}. ` : todayWins ? 'Verschoben: Heute hast du sicher Zeit – das hat Vorrang vor einem späteren Termin. ' : 'Ruhetag: '}Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Eingeplant: ${chosen}${!todayWins && !prefHit.length ? ' – gewählt nach gleichmäßigen Abständen und Tagen mit eigener Trainingszeit' : ''}. Das Wochenvolumen wird darauf verteilt.`
             : run > maxCons
               ? `Ruhetag: Sonst wären es ${run} Trainingstage am Stück (absolvierte mitgezählt, Limit ${maxCons} im Profil). Die Wochenarbeit wird auf die übrigen Tage verteilt.`
               : 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – mehr Abstand zwischen Belastungen derselben Muskeln.',
