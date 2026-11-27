@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { ChevronRight, Trash2 } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useCompletion, usePlan, useToast } from '../lib/hooks';
 import { Badge, Button, Card, Confirm, PageHeader, SectionTitle, Sheet, Switch } from '../components/ui';
-import { DayDuration, QuickAvailability, SessionPreview } from '../components/Coach';
+import { DayDuration, SessionPreview } from '../components/Coach';
 import type { Availability, Session } from '../lib/types';
 import { MONTHS, WEEKDAYS_LONG, addDays, cn, dateKey, fmtNum, parseKey, relDayLabel, weekdayOf } from '../lib/utils';
 import { sessionSets, sessionVolume } from '../engine/stats';
@@ -15,42 +15,28 @@ export default function CalendarPage() {
   const s = useStore();
   const plan = usePlan();
   const today = dateKey();
-  const [month, setMonth] = useState(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
+  // Monate untereinander statt Blättern: aktueller + 2 folgende, „Früher“ zeigt vergangene
+  const [past, setPast] = useState(0);
+  const [ahead, setAhead] = useState(2);
   const [day, setDay] = useState<string | null>(null);
-
-  const first = dateKey(month);
-  const offset = (weekdayOf(first) + 6) % 7; // Montag zuerst
-  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const cells = Array.from({ length: Math.ceil((offset + daysInMonth) / 7) * 7 }, (_, i) => {
-    const n = i - offset;
-    return n >= 0 && n < daysInMonth ? addDays(first, n) : null;
-  });
+  const base = new Date();
+  const months = Array.from({ length: past + 1 + ahead }, (_, i) => new Date(base.getFullYear(), base.getMonth() - past + i, 1));
   const availOf = (d: string): Availability => s.availability[d] ?? (s.settings.preferredDays.includes(weekdayOf(d)) ? 'maybe' : 'no');
 
-  return (
-    <div className="flex flex-col gap-4">
-      <PageHeader title="Kalender" sub="Verfügbarkeit & Plan" />
-      <Card>
-        <div className="mb-4 flex items-center justify-between">
-          <Button size="icon" variant="ghost" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))} aria-label="Vorheriger Monat">
-            <ChevronLeft size={18} />
-          </Button>
-          <div className="text-[15px] font-semibold">
-            {MONTHS[month.getMonth()]} {month.getFullYear()}
-          </div>
-          <Button size="icon" variant="ghost" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))} aria-label="Nächster Monat">
-            <ChevronRight size={18} />
-          </Button>
+  const monthGrid = (month: Date) => {
+    const first = dateKey(month);
+    const offset = (weekdayOf(first) + 6) % 7; // Montag zuerst
+    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    const cells = Array.from({ length: Math.ceil((offset + daysInMonth) / 7) * 7 }, (_, i) => {
+      const n = i - offset;
+      return n >= 0 && n < daysInMonth ? addDays(first, n) : null;
+    });
+    return (
+      <div key={first} className="flex flex-col gap-2">
+        <div className="sticky top-0 z-10 -mx-1 bg-surface/90 px-1 py-1.5 text-[15px] font-semibold backdrop-blur">
+          {MONTHS[month.getMonth()]} {month.getFullYear()}
         </div>
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted">
-          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((w) => (
-            <div key={w} className="pb-1">
-              {w}
-            </div>
-          ))}
           {cells.map((d, i) => {
             if (!d) return <div key={i} />;
             const a = availOf(d);
@@ -77,18 +63,33 @@ export default function CalendarPage() {
             );
           })}
         </div>
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-muted">
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <PageHeader title="Kalender" sub="Verfügbarkeit & Plan" />
+      <Card className="flex flex-col gap-4">
+        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted">
+          {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((w) => (
+            <div key={w}>{w}</div>
+          ))}
+        </div>
+        <button onClick={() => setPast(past + 1)} className="-mt-1 self-center rounded-full bg-raised px-3.5 py-1.5 text-[12.5px] font-medium text-muted hover:text-fg">
+          ↑ Früher
+        </button>
+        {months.map(monthGrid)}
+        <button onClick={() => setAhead(ahead + 2)} className="self-center rounded-full bg-raised px-3.5 py-1.5 text-[12.5px] font-medium text-muted hover:text-fg">
+          Weitere Monate ↓
+        </button>
+        <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-muted">
           <Legend className="bg-accent/40">Verfügbar</Legend>
           <Legend className="bg-raised">Möglich (Standardtag)</Legend>
           <Legend className="bg-rec-green">Trainiert</Legend>
           <Legend className="bg-accent">Geplant</Legend>
           <Legend className="border border-accent">Vorläufig</Legend>
         </div>
-      </Card>
-
-      <Card>
-        <SectionTitle>Schnellauswahl</SectionTitle>
-        <QuickAvailability />
       </Card>
 
       <Card>
