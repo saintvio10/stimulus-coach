@@ -15,55 +15,61 @@ export default function CalendarPage() {
   const s = useStore();
   const plan = usePlan();
   const today = dateKey();
-  // Monate untereinander statt Blättern: aktueller + 2 folgende, „Früher“ zeigt vergangene
+  // Wochen untereinander statt Monaten: ab der aktuellen Woche 5 Wochen (über den Monatswechsel hinweg),
+  // „Frühere Wochen“ / „Weitere Wochen“ erweitern
   const [past, setPast] = useState(0);
-  const [ahead, setAhead] = useState(2);
+  const [ahead, setAhead] = useState(4);
   const [day, setDay] = useState<string | null>(null);
-  const base = new Date();
-  const months = Array.from({ length: past + 1 + ahead }, (_, i) => new Date(base.getFullYear(), base.getMonth() - past + i, 1));
-  const availOf = (d: string): Availability => s.availability[d] ?? (s.settings.preferredDays.includes(weekdayOf(d)) ? 'maybe' : 'no');
+  const monday = addDays(today, -((weekdayOf(today) + 6) % 7));
+  const weeks = Array.from({ length: past + 1 + ahead }, (_, i) => addDays(monday, (i - past) * 7));
+  const away = new Set(s.awayDays ?? []);
 
-  const monthGrid = (month: Date) => {
-    const first = dateKey(month);
-    const offset = (weekdayOf(first) + 6) % 7; // Montag zuerst
-    const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    const cells = Array.from({ length: Math.ceil((offset + daysInMonth) / 7) * 7 }, (_, i) => {
-      const n = i - offset;
-      return n >= 0 && n < daysInMonth ? addDays(first, n) : null;
-    });
+  const cell = (d: string) => {
+    const explicit = s.availability[d];
+    const done = s.sessions.some((x) => x.date === d && x.status === 'done');
+    const planned = plan.sessions.find((x) => x.date === d && !x.rest);
+    const rest = plan.restDays?.find((r) => r.date === d);
+    const past = d < today;
+    // gleiche Farben wie die Wochenleiste auf der Startseite
+    const look = done ? 'done' : past ? 'past' : rest && explicit !== 'no' ? 'rest' : explicit === 'yes' ? (away.has(d) ? 'away' : 'yes') : explicit === 'maybe' ? 'maybe' : explicit === 'no' ? 'no' : 'open';
+    const firstOfMonth = d.slice(8) === '01';
     return (
-      <div key={first} className="flex flex-col gap-2">
-        <div className="sticky top-0 z-10 -mx-1 bg-surface/90 px-1 py-1.5 text-[15px] font-semibold backdrop-blur">
-          {MONTHS[month.getMonth()]} {month.getFullYear()}
-        </div>
-        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-muted">
-          {cells.map((d, i) => {
-            if (!d) return <div key={i} />;
-            const a = availOf(d);
-            const done = s.sessions.some((x) => x.date === d && x.status === 'done');
-            const planned = plan.sessions.find((x) => x.date === d);
-            const explicit = s.availability[d];
-            return (
-              <button
-                key={d}
-                onClick={() => setDay(d)}
-                className={cn(
-                  'relative flex aspect-square flex-col items-center justify-center gap-1 rounded-xl text-[14px] font-medium transition',
-                  d === today && 'ring-1 ring-fg/40',
-                  explicit === 'yes' ? 'bg-accent/15 text-fg' : explicit === 'no' ? 'text-muted/50 line-through' : a === 'maybe' ? 'bg-raised/60 text-fg' : 'text-muted',
-                  d < today && !done && 'opacity-50',
-                )}
-              >
-                <span className="tnum">{Number(d.slice(8))}</span>
-                <span className="flex h-1.5 gap-0.5">
-                  {done && <span className="h-1.5 w-1.5 rounded-full bg-rec-green" />}
-                  {planned && !done && <span className={cn('h-1.5 w-1.5 rounded-full', planned.tentative ? 'border border-accent' : 'bg-accent')} />}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      <button
+        key={d}
+        onClick={() => setDay(d)}
+        aria-label={`${relDayLabel(d)}: ${LOOK_LABEL[look]}${planned ? ' · Training geplant' : ''}`}
+        className={cn(
+          'relative flex aspect-square flex-col items-center justify-center gap-0.5 rounded-xl border text-[14px] font-medium transition active:scale-95',
+          look === 'done'
+            ? 'border-rec-green/50 bg-rec-green/[0.16] text-fg'
+            : look === 'yes'
+              ? 'border-rec-green/40 bg-rec-green/[0.08] text-fg'
+              : look === 'away'
+                ? 'border-sky-400/45 bg-sky-400/[0.09] text-fg'
+                : look === 'maybe'
+                  ? 'border-rec-yellow/40 bg-rec-yellow/[0.07] text-fg'
+                  : look === 'no'
+                    ? 'border-rec-red/35 bg-rec-red/[0.07] text-muted'
+                    : look === 'rest'
+                      ? 'border-[#8b7cf6]/45 bg-[linear-gradient(180deg,rgba(139,124,246,0.18),rgba(139,124,246,0.04))] text-fg'
+                      : look === 'past'
+                        ? 'border-transparent text-muted/45'
+                        : 'border-line/[0.06] bg-surface text-muted',
+          d === today && 'ring-2 ring-fg/30',
+        )}
+      >
+        {firstOfMonth && <span className="absolute left-1 top-0.5 text-[8.5px] font-semibold uppercase text-accent">{MONTHS[parseKey(d).getMonth()].slice(0, 3)}</span>}
+        <span className="tnum">{Number(d.slice(8))}</span>
+        <span className="flex h-1.5 items-center gap-0.5">
+          {done ? (
+            <span className="h-1.5 w-1.5 rounded-full bg-rec-green" />
+          ) : planned ? (
+            <span className={cn('h-1.5 w-1.5 rounded-full', planned.tentative ? 'border border-accent' : 'bg-accent')} />
+          ) : look === 'rest' ? (
+            <span className="text-[8px] leading-none text-[#c4b9ff]">☾</span>
+          ) : null}
+        </span>
+      </button>
     );
   };
 
@@ -76,18 +82,36 @@ export default function CalendarPage() {
             <div key={w}>{w}</div>
           ))}
         </div>
-        <button onClick={() => setPast(past + 1)} className="-mt-1 self-center rounded-full bg-raised px-3.5 py-1.5 text-[12.5px] font-medium text-muted hover:text-fg">
-          ↑ Früher
+        <button onClick={() => setPast(past + 4)} className="-mt-1 self-center rounded-full bg-raised px-3.5 py-1.5 text-[12.5px] font-medium text-muted hover:text-fg">
+          ↑ Frühere Wochen
         </button>
-        {months.map(monthGrid)}
-        <button onClick={() => setAhead(ahead + 2)} className="self-center rounded-full bg-raised px-3.5 py-1.5 text-[12.5px] font-medium text-muted hover:text-fg">
-          Weitere Monate ↓
+        <div className="flex flex-col gap-1">
+          {weeks.map((w) => {
+            const days = Array.from({ length: 7 }, (_, i) => addDays(w, i));
+            const monthStart = days.find((x) => x.slice(8) === '01');
+            return (
+              <div key={w} className="flex flex-col gap-1">
+                {(w === weeks[0] || monthStart) && (
+                  <div className="px-0.5 pt-1 text-[13px] font-semibold">
+                    {MONTHS[parseKey(monthStart ?? w).getMonth()]} {parseKey(monthStart ?? w).getFullYear()}
+                  </div>
+                )}
+                <div className="grid grid-cols-7 gap-1">{days.map(cell)}</div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={() => setAhead(ahead + 4)} className="self-center rounded-full bg-raised px-3.5 py-1.5 text-[12.5px] font-medium text-muted hover:text-fg">
+          Weitere Wochen ↓
         </button>
         <div className="flex flex-wrap gap-x-4 gap-y-2 text-[11px] text-muted">
-          <Legend className="bg-accent/40">Verfügbar</Legend>
-          <Legend className="bg-raised">Möglich (Standardtag)</Legend>
+          <Legend className="border border-rec-green/60 bg-rec-green/20">Zeit</Legend>
+          <Legend className="border border-sky-400/60 bg-sky-400/20">Ohne Gym</Legend>
+          <Legend className="border border-rec-yellow/60 bg-rec-yellow/20">Vielleicht</Legend>
+          <Legend className="border border-rec-red/50 bg-rec-red/15">Keine Zeit</Legend>
+          <Legend className="border border-[#8b7cf6]/60 bg-[#8b7cf6]/25">Ruhetag</Legend>
           <Legend className="bg-rec-green">Trainiert</Legend>
-          <Legend className="bg-accent">Geplant</Legend>
+          <Legend className="bg-accent">Training geplant</Legend>
           <Legend className="border border-accent">Vorläufig</Legend>
         </div>
       </Card>
@@ -126,6 +150,8 @@ export default function CalendarPage() {
     </div>
   );
 }
+
+const LOOK_LABEL: Record<string, string> = { done: 'trainiert', yes: 'Zeit', away: 'Zeit ohne Gym', maybe: 'vielleicht', no: 'keine Zeit', rest: 'Ruhetag', past: 'vergangen', open: 'offen' };
 
 function Legend({ className, children }: { className: string; children: React.ReactNode }) {
   return (

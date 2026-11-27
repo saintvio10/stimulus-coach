@@ -7,7 +7,7 @@ import { MUSCLE } from '../lib/muscles';
 import { cn, fmtDate, fmtMin, fmtNum, fmtShortDay, relDayLabel } from '../lib/utils';
 import { bodyWeightAt, estimateKcal, exerciseComparison, sessionStats, sessionsThisWeek, fmtMinSec, KCAL_MET, type ExerciseCompare } from '../engine/sessionStats';
 import { weekStreak } from '../engine/stats';
-import { MuscleFigure } from './MuscleFigure';
+import { FigureFrame, MuscleFigure } from './MuscleFigure';
 import { BackupButton } from './Backup';
 
 /** Zahl hochzählen lassen (kurz, ~0,9 s) */
@@ -335,9 +335,9 @@ export function SessionComplete({ session, prs, onClose, review }: { session: Se
         {st.muscles.length > 0 && (
           <div className="animate-fade-up rounded-[24px] bg-white/[0.05] p-4 ring-1 ring-white/[0.06]" style={{ animationDelay: '700ms' }}>
             <div className="text-[12px] font-semibold uppercase tracking-wider text-white/45">Trainiert</div>
-            <div className="mt-3 overflow-hidden rounded-2xl" style={{ background: '#262628' }}>
+            <FigureFrame className="mt-3">
               <MuscleFigure fills={fills} className="w-full" />
-            </div>
+            </FigureFrame>
             <div className="mt-3">
               <ul className="flex min-w-0 flex-col gap-1.5">
                 {st.muscles.slice(0, 7).map((m) => (

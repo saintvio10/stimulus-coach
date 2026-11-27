@@ -4,7 +4,8 @@ import { Bar as RBar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAx
 import { useStore } from '../lib/store';
 import { useMuscleStates, usePlan } from '../lib/hooks';
 import { Badge, Bar, Card, PageHeader, SectionTitle, Segmented } from '../components/ui';
-import { MuscleFigure } from '../components/MuscleFigure';
+import { FigureFrame, MuscleFigure } from '../components/MuscleFigure';
+import { RecoveryBars } from '../components/RecoveryBars';
 import { MUSCLE, MUSCLES, RECOVERY_COLORS, RECOVERY_LABEL, minDose14, priorityWeight, weeklyTarget, type RecoveryColor } from '../lib/muscles';
 import type { AppData, MuscleId } from '../lib/types';
 import { personalTarget } from '../engine/planner';
@@ -36,7 +37,7 @@ export default function MusclesPage() {
       <PageHeader title="Muskelanalyse" sub="Regeneration & Volumen" action={<Segmented value={side} onChange={setSide} options={[{ value: 'both', label: 'Beide' }, { value: 'front', label: 'Vorne' }, { value: 'back', label: 'Hinten' }]} />} />
       <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
         <Card className="flex flex-col gap-3">
-          <div className="overflow-hidden rounded-2xl" style={{ background: '#262628' }}>
+          <FigureFrame>
             <MuscleFigure
               view={side}
               fills={Object.fromEntries(MUSCLES.filter((m) => states[m.id].color !== 'gray').map((m) => [m.id, RECOVERY_COLORS[states[m.id].color]]))}
@@ -44,7 +45,7 @@ export default function MusclesPage() {
               onSelect={setSel}
               className={cn('mx-auto w-full', side === 'both' ? 'max-w-[640px]' : 'max-w-[340px]')}
             />
-          </div>
+          </FigureFrame>
           <p className="-mt-1 text-center text-[12px] text-muted">
             Muskel antippen · ausgewählt: <span className="font-medium text-fg">{meta.label}</span>
           </p>
@@ -136,6 +137,12 @@ export default function MusclesPage() {
           </p>
         </Card>
       </div>
+
+      <Card>
+        <SectionTitle>Muskelregeneration</SectionTitle>
+        <p className="-mt-1 mb-3 text-[12px] text-muted">Muskeln, die noch Erholung brauchen, stehen oben.</p>
+        <RecoveryBars states={states} sortByNeed />
+      </Card>
 
       <Card>
         <SectionTitle>Alle Muskelgruppen</SectionTitle>

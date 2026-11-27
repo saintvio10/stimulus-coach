@@ -1,7 +1,7 @@
 import { JOINT_LABEL, painConflict } from './joints';
 import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL, frequencyFactor } from '../lib/muscles';
-import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
+import type { AppData, Exercise, HomeFocus, MuscleId, ProgressionAdvice } from '../lib/types';
 import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor, fmtMin } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent, recoveryInfo } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
@@ -236,7 +236,17 @@ interface BuildOpts {
   coverage?: boolean;
   /** Muskeln, die im 7-Tage-Fenster (inkl. später geplanter Einheiten) ihr Ziel schon mit 3 Sätzen je Übung erreichen → kein 4./5. Satz */
   noExtra?: Set<MuscleId>;
+  /** nur Übungen für diese Zielmuskeln (Schwerpunkt beim Training ohne Gym) */
+  focusMuscles?: MuscleId[];
 }
+
+/** Schwerpunkte für Training ohne Gym */
+export const HOME_FOCUS: Record<HomeFocus, { label: string; short: string; muscles: MuscleId[] | null }> = {
+  all: { label: 'Ganzkörper', short: 'Ganzkörper', muscles: null },
+  upper: { label: 'Oberkörper (Brust, Rücken, Arme, Schultern)', short: 'Oberkörper', muscles: ['chest', 'lats', 'upperBack', 'biceps', 'triceps', 'sideDelts', 'rearDelts', 'frontDelts', 'forearms'] },
+  arms: { label: 'Arme & Schultern', short: 'Arme & Schultern', muscles: ['biceps', 'triceps', 'sideDelts', 'rearDelts', 'frontDelts', 'forearms'] },
+  lower: { label: 'Beine & Bauch', short: 'Beine & Bauch', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
+};
 
 export type HomeMode = 'bw' | 'weights';
 
@@ -266,6 +276,7 @@ export function buildSession(o: BuildOpts): PlannedSession {
     !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home');
   const candidates = data.exercises.filter((e) => {
     if (!usable(e)) return false;
+    if (o.focusMuscles && !o.focusMuscles.includes(e.primary)) return false;
     if (painConflict(e, pain).length) return void painSkipped.push(e.name), false;
     // Feste Last ausgereizt (z. B. 2 Flaschen am oberen Ende) → schwerere Variante statt dieser Übung
     if (e.upgradeTo && maxedOut(e, data.sessions, data.settings)) {
@@ -678,6 +689,8 @@ export function buildSession(o: BuildOpts): PlannedSession {
       const bits = [`${fmtNum(sets)} Sätze geplant`, `7 Tage: ${fmtNum(st.vol7)}/${fmtNum(sc.target)}`, `${recoveryInfo(st, at).short} (${recoveryInfo(st, at).basis})`];
       if (sc.neglect > 0.2) bits.push('Ausgleich: länger kein direkter Reiz');
       reason = bits.join(' · ');
+    } else if (o.focusMuscles && !o.focusMuscles.includes(m)) {
+      reason = 'Heute nicht gewählt (Schwerpunkt beim Training ohne Gym) – wird an den nächsten Tagen eingeplant.';
     } else if (sc.rec < 0.35) {
       const act = (data.activities ?? []).filter((a) => at - parseKey(a.date).getTime() < 48 * HOUR && at >= parseKey(a.date).getTime() && (activityMuscles(a)[m] ?? 0) >= 0.5);
       reason = `Noch ermüdet (${recoveryInfo(st, at).label}, Modellschätzung${act.length ? `, u. a. durch ${act.map((a) => ACTIVITY_TYPES[a.type as keyof typeof ACTIVITY_TYPES]?.label ?? a.type).join(', ')}` : st.lastAny ? `, letzter Reiz vor ${Math.round((at - st.lastAny) / HOUR)} h` : ''}) – voraussichtlich bereit ${relDayLabel(dateKey(st.readyAt))}.`;
@@ -1133,6 +1146,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     const usedTemplates: TemplateId[] =
       lastReal && lastReal.split in TEMPLATES && diffDays(today, lastReal.date) <= 3 ? [lastReal.split as TemplateId] : [];
 
+    const homeOf = (d: string): HomeMode | undefined => (d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined);
     for (let i = 0; i < allDates.length; i++) {
       const d = allDates[i];
       const strat = i < dates.length ? strategy : strategy2;
@@ -1158,7 +1172,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
           sessionsPerWeek: spw,
           tentative: tentativeSet.has(d),
           nextDates: allDates.slice(i + 1).filter((x) => !tentativeSet.has(x)),
-          home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
+          home: homeOf(d),
+          focusMuscles: homeOf(d) ? HOME_FOCUS[data.planOptions.homeFocus?.[d] ?? 'all'].muscles ?? undefined : undefined,
           prevPlanned,
           today,
           coverage,
@@ -1188,6 +1203,12 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       if (['fbC', 'arms'].includes(best.templateId)) {
         const armEx = best.exercises.filter((p) => ['biceps', 'triceps'].includes(data.exercises.find((e) => e.id === p.exerciseId)?.primary ?? '')).length;
         if (armEx === 0) best.label = 'Ganzkörper (angepasst)';
+      }
+      const hf = best.home ? data.planOptions.homeFocus?.[d] ?? 'all' : 'all';
+      if (best.home && hf !== 'all') {
+        best.label = `Unterwegs · ${HOME_FOCUS[hf].short}`;
+        best.focus = undefined;
+        best.reasons.unshift(`Schwerpunkt heute: ${HOME_FOCUS[hf].label} – andere Muskeln holt der Plan an den nächsten Tagen nach.`);
       }
       if (best.home && !best.label.startsWith('Unterwegs')) {
         best.label = `Unterwegs · ${best.label.split(' (')[0]}`;
@@ -1283,9 +1304,13 @@ export function planToday(data: AppData, minutes?: number, now = Date.now()): Pl
 }
 
 /** Heutiges Training ohne Gym (unterwegs/zu Hause) – gleicher Coach, nur mit Körpergewicht- bzw. Hantel-/Flaschen-ack-Übungen */
-export function planHome(data: AppData, minutes: number, mode: HomeMode, now = Date.now()): PlannedSession | null {
+export function planHome(data: AppData, minutes: number, mode: HomeMode, now = Date.now(), focus?: HomeFocus): PlannedSession | null {
   const today = dateKey(now);
-  const withToday: AppData = { ...data, availability: { ...data.availability, [today]: 'yes' } };
+  const withToday: AppData = {
+    ...data,
+    availability: { ...data.availability, [today]: 'yes' },
+    planOptions: focus ? { ...data.planOptions, homeFocus: { ...(data.planOptions.homeFocus ?? {}), [today]: focus } } : data.planOptions,
+  };
   const p = buildPlan(withToday, now, { forceToday: true, minutesToday: minutes, home: mode });
   const s = p.sessions.find((x) => x.date === today && !x.rest) ?? null;
   if (!s) return null;

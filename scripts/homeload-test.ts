@@ -16,12 +16,23 @@ d.settings.homeDumbbell = 10;
 const ex = (id: string) => d.exercises.find((e) => e.id === id)!;
 const steps = (id: string) => JSON.stringify(weightSteps(ex(id), d.settings).list);
 ok(steps('home-lateral') === '[1]' && steps('home-reverse-fly') === '[1]', `2-Flaschen-Übungen: nur 1 kg pro Hand (${steps('home-lateral')})`);
-ok(steps('home-oh-ext') === '[10]' && steps('home-goblet') === '[10]', 'beidhändig an der einen Hantel: nur 10 kg');
+ok(steps('home-goblet') === '[10]', 'Goblet Squat (beidhändig an der einen Hantel): nur die Hantel');
+ok(!!ex('home-oh-ext').unilateral && steps('home-oh-ext') === '[1,2,10]' && /einarmig/.test(ex('home-oh-ext').name), 'Trizeps über Kopf zu Hause: einarmig, Hantel oder Flaschen in einer Hand');
 ok(steps('home-lateral-db') === '[1,2,10]', 'einarmig: Flasche(n) oder Hantel in einer Hand');
 ok(steps('bench-dip') === '[0,10]' && steps('pullup') === '[0,10]', 'Körpergewicht: ohne oder mit Hantel als Zusatzlast – keine 1-kg-Flaschen');
 ok(steps('pike-pushup') === '[0]' && steps('nordic-curl') === '[0]' && steps('leg-raise') === '[0]', 'Pike, Nordic Curls, Beinheben: keine Zusatzlast');
 ok(nextWeight(1, ex('home-lateral'), d.settings) === 1, 'keine Steigerung über 1 kg pro Hand hinaus');
 ok(loadHint(ex('home-lateral')) === 'pro Hand (Flasche)' && loadHint(ex('db-lateral')) === 'pro Hand' && loadHint(ex('home-goblet')) === 'eine Hantel, beidhändig' && loadHint(ex('preacher-curl')) === '', 'Anzeige: „pro Hand“ bei Kurzhanteln/Flaschen');
+// Hantel 7,5 kg: alter Standard 10 kg wird einmalig korrigiert, eigene Werte bleiben
+{
+  const a = defaultData(); (a.settings as any).homeDumbbell = 10; delete (a.settings as any).homeDumbbellSet;
+  const b = defaultData(); (b.settings as any).homeDumbbell = 12; delete (b.settings as any).homeDumbbellSet;
+  const c = defaultData(); (c.settings as any).homeDumbbell = 10; (c.settings as any).homeDumbbellSet = true;
+  ok(migrate(JSON.parse(JSON.stringify(a))).settings.homeDumbbell === 7.5, 'Migration: Heim-Hantel 10 → 7,5 kg');
+  ok(migrate(JSON.parse(JSON.stringify(b))).settings.homeDumbbell === 12, 'Migration: selbst eingestelltes Hantelgewicht bleibt');
+  ok(migrate(JSON.parse(JSON.stringify(c))).settings.homeDumbbell === 10, 'Migration: nach Bestätigung keine erneute Korrektur');
+  ok(defaultData().settings.homeDumbbell === 7.5, 'Standard: 7,5 kg');
+}
 // Migration: gespeicherte Heimübungen bekommen die neuen Felder
 const old = defaultData();
 old.exercises = old.exercises.map((e) => (e.id === 'home-lateral' ? { ...e, homeLoad: undefined, upgradeTo: undefined } : e));
@@ -62,6 +73,32 @@ ok(!ids.includes('home-lateral'), 'Heimplan danach ohne „Seitheben (2 Flaschen
 ok(ids.includes('home-lateral-db') && !!hp?.reasons.some((r) => /ausgereizt/.test(r)), 'Seitheben kommt dran → einarmige Hantel-Variante, mit Begründung im Plan');
 ok(!maxedOut(ex('home-reverse-fly'), d.sessions, d.settings) || !ex('home-reverse-fly').upgradeTo, 'Reverse Flys: keine Hantel-Variante → bleibt mit Tipps zum Schwerer-Machen');
 
+// Schwerpunkt beim Training ohne Gym
+{
+  const h = defaultData();
+  const t = at('2026-12-02', 17);
+  const prim = (p: ReturnType<typeof planHome>) => (p?.exercises ?? []).map((e) => h.exercises.find((x) => x.id === e.exerciseId)!.primary);
+  const up = planHome(h, 45, 'weights', t, 'upper');
+  const lo = planHome(h, 45, 'weights', t, 'lower');
+  const arms = planHome(h, 45, 'weights', t, 'arms');
+  const all = planHome(h, 45, 'weights', t, 'all');
+  console.log('  Oberkörper:', up?.label, '|', prim(up).join(','));
+  console.log('  Beine & Bauch:', lo?.label, '|', prim(lo).join(','));
+  ok(!!up && prim(up).length > 0 && prim(up).every((m) => !['quads', 'hamstrings', 'glutes', 'calves', 'abs'].includes(m)), 'Schwerpunkt Oberkörper: keine Bein-/Bauchübungen');
+  ok(!!up && ['chest', 'biceps', 'triceps'].every((m) => prim(up).includes(m as any)) && prim(up).some((m) => m === 'lats' || m === 'upperBack'), 'Oberkörper: Brust, Rücken, Bizeps und Trizeps dabei');
+  ok(!!lo && prim(lo).every((m) => ['quads', 'hamstrings', 'glutes', 'calves', 'abs'].includes(m)), 'Schwerpunkt Beine & Bauch: nur Beine/Bauch');
+  ok(!!arms && prim(arms).every((m) => ['biceps', 'triceps', 'sideDelts', 'rearDelts', 'frontDelts', 'forearms'].includes(m)), 'Schwerpunkt Arme & Schultern');
+  ok(up?.label === 'Unterwegs · Oberkörper' && lo?.label === 'Unterwegs · Beine & Bauch', 'Name zeigt den Schwerpunkt');
+  ok(!!up?.decisions.find((x) => x.muscle === 'quads' && /nicht gewählt/.test(x.reason)), 'nicht gewählte Muskeln mit Begründung');
+  ok(!!all && prim(all).some((m) => ['quads', 'hamstrings', 'glutes'].includes(m)), 'Ganzkörper: Beine weiter möglich');
+  // vorab markierter Tag ohne Gym mit gespeichertem Schwerpunkt
+  const h2 = defaultData();
+  h2.availability = { '2026-12-03': 'yes' };
+  h2.awayDays = ['2026-12-03'];
+  h2.planOptions.homeFocus = { '2026-12-03': 'upper' };
+  const pd = buildPlan(h2, at('2026-12-03', 10)).sessions.find((x) => x.date === '2026-12-03');
+  ok(!!pd && pd.label === 'Unterwegs · Oberkörper' && prim(pd as any).every((m) => !['quads', 'hamstrings', 'glutes', 'calves', 'abs'].includes(m)), 'gespeicherter Schwerpunkt gilt auch im Tagesplan');
+}
 // Schwerpunkt-Zusatz
 const all = d.exercises;
 ok(sessionFocus('Ganzkörper A', [{ exerciseId: 'leg-press', sets: 6 }, { exerciseId: 'seated-leg-curl', sets: 4 }, { exerciseId: 'calf-raise', sets: 3 }, { exerciseId: 'cable-crunch', sets: 6 }], all) === 'Beine & Bauch', 'nur Beine/Waden/Bauch → „Schwerpunkt Beine & Bauch“');
@@ -71,4 +108,3 @@ ok(sessionFocus('Ganzkörper C (Arme & Schultern)', [{ exerciseId: 'preacher-cur
 // im echten Plan: Oberkörper gestern schwer → Ganzkörper mit Fokus
 console.log(fails ? `${fails} FEHLER` : 'Alle Prüfungen bestanden');
 if (fails) (globalThis as { process?: { exit: (n: number) => void } }).process?.exit(1);
-void buildPlan;

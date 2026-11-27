@@ -4,12 +4,13 @@ import { quick, useStore } from '../lib/store';
 import { useToast } from '../lib/hooks';
 import { addDays, cn, dateKey, endOfWeek, fmtNum, relDayLabel, weekdayOf, WEEKDAYS_SHORT, fmtMin, minutesFor } from '../lib/utils';
 import { Badge, Button, Chip, Sheet } from './ui';
-import type { Plan, PlannedSession } from '../engine/planner';
+import type { Plan, PlannedExercise, PlannedSession } from '../engine/planner';
 import { MUSCLE, MUSCLE_IDS } from '../lib/muscles';
 import type { CheckIn, Joint, MuscleId } from '../lib/types';
 import { JOINT_LABEL } from '../engine/joints';
 import { readinessScore } from '../engine/readiness';
 import { ExerciseIcon } from './ExerciseAnimation';
+import { ExerciseInfoSheet } from './ExerciseInfo';
 
 export function QuickAvailability({ compact }: { compact?: boolean }) {
   const toast = useToast((s) => s.show);
@@ -136,6 +137,7 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
   const exMap = new Map(exercises.map((e) => [e.id, e]));
   const [open, setOpen] = useState(false);
   const [whyOpen, setWhyOpen] = useState<string | null>(null);
+  const [info, setInfo] = useState<PlannedExercise | null>(null);
   const focus = s.decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets);
   return (
     <div className="flex flex-col gap-4">
@@ -150,12 +152,16 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
         <div className="rounded-xl bg-raised px-3 py-2 text-[12px]">
           <div className="mb-0.5 font-medium">Heute nicht dabei</div>
           <ul className="flex flex-col gap-0.5 text-muted">
-            {s.decisions
-              .filter((d) => d.status === 'skipped' && d.reason)
+            {/* gleiche Begründungen zusammenfassen („Quads, Beinbeuger, Bauch: …“) */}
+            {Object.entries(
+              s.decisions
+                .filter((d) => d.status === 'skipped' && d.reason)
+                .reduce<Record<string, string[]>>((acc, d) => ((acc[d.reason] ??= []).push(MUSCLE[d.muscle].short), acc), {}),
+            )
               .slice(0, 5)
-              .map((d) => (
-                <li key={d.muscle}>
-                  <span className="text-fg/80">{MUSCLE[d.muscle].short}:</span> {d.reason}
+              .map(([reason, ms]) => (
+                <li key={reason}>
+                  <span className="text-fg/80">{ms.join(', ')}:</span> {reason}
                 </li>
               ))}
           </ul>
@@ -167,11 +173,12 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
           if (!ex) return null;
           return (
             <li key={p.exerciseId} className="py-1">
-              <button className="flex w-full items-center gap-3 py-1.5 text-left" onClick={() => setWhyOpen(whyOpen === p.exerciseId ? null : p.exerciseId)} aria-expanded={whyOpen === p.exerciseId}>
-              <div className="relative">
+              <div className="flex w-full items-center gap-3 py-1.5">
+              <button className="relative shrink-0 rounded-xl transition active:scale-95" onClick={() => setInfo(p)} aria-label={`${ex.name}: Erklärung und Ziel`}>
                 <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={44} />
                 <span className="tnum absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-bg text-[10px] font-semibold text-muted ring-1 ring-line/10">{i + 1}</span>
-              </div>
+              </button>
+              <button className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setWhyOpen(whyOpen === p.exerciseId ? null : p.exerciseId)} aria-expanded={whyOpen === p.exerciseId}>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 truncate text-[14px] font-medium">
                   {ex.name}
@@ -187,6 +194,7 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
               <span className="tnum shrink-0 text-[12px] text-muted" title="Geschätzte Dauer inkl. Pausen und Gerät einstellen">~{fmtMin(Math.max(1, Math.round(p.minutes)))}</span>
               <Info size={15} className={cn('shrink-0', whyOpen === p.exerciseId ? 'text-accent' : 'text-muted/60')} />
               </button>
+              </div>
               {whyOpen === p.exerciseId && (
                 <div className="mb-1 ml-[56px] rounded-xl bg-raised px-3 py-2 text-[12.5px] leading-relaxed">
                   <span className="font-semibold">Warum? </span>
@@ -197,6 +205,7 @@ export function SessionPreview({ s, onStart, startLabel = 'Training starten', sh
           );
         })}
       </ol>
+      {info && exMap.get(info.exerciseId) && <ExerciseInfoSheet ex={exMap.get(info.exerciseId)!} plan={info} onClose={() => setInfo(null)} />}
       {showReasons && (
         <div>
           <button className="flex items-center gap-1.5 text-[13px] font-medium text-muted hover:text-fg" onClick={() => setOpen(!open)}>

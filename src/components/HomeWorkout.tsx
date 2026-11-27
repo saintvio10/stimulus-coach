@@ -2,12 +2,25 @@ import { useMemo, useState } from 'react';
 import { House } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useRouter } from '../lib/hooks';
-import type { AppData } from '../lib/types';
-import { planHome, type HomeMode } from '../engine/planner';
+import type { AppData, HomeFocus } from '../lib/types';
+import { HOME_FOCUS, planHome, type HomeMode } from '../engine/planner';
 import { Button, Chip, Sheet } from './ui';
 import { SessionPreview } from './Coach';
 import { unlockAudio } from './RestTimer';
-import { cn, fmtMin } from '../lib/utils';
+import { cn, dateKey, fmtMin, fmtNum } from '../lib/utils';
+
+/** Schwerpunkt beim Training ohne Gym wählen (gilt für den Tag) */
+export function HomeFocusChips({ value, onChange }: { value: HomeFocus; onChange: (f: HomeFocus) => void }) {
+  return (
+    <div data-noswipe className="flex flex-wrap gap-1.5">
+      {(Object.keys(HOME_FOCUS) as HomeFocus[]).map((f) => (
+        <Chip key={f} active={value === f} onClick={() => onChange(f)} className="h-8">
+          {HOME_FOCUS[f].short}
+        </Chip>
+      ))}
+    </div>
+  );
+}
 
 /** Training ohne Gym: der Coach plant mit Körpergewicht (optional deine Hantel und Flaschen) passend zu Erholung und Wochenvolumen */
 export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -15,9 +28,12 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
   const go = useRouter((r) => r.go);
   const [minutes, setMinutes] = useState(45);
   const [mode, setMode] = useState<HomeMode>('weights');
+  const today = dateKey();
+  const focus: HomeFocus = s.planOptions.homeFocus?.[today] ?? 'all';
+  const setFocus = (f: HomeFocus) => s.mutate((d) => void (d.planOptions.homeFocus = { ...(d.planOptions.homeFocus ?? {}), [today]: f }));
   const plan = useMemo(
-    () => (open ? planHome(s as unknown as AppData, minutes, mode) : null),
-    [open, minutes, mode, s.sessions, s.exercises, s.settings, s.checkIns, s.activities], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (open ? planHome(s as unknown as AppData, minutes, mode, Date.now(), focus) : null),
+    [open, minutes, mode, focus, s.sessions, s.exercises, s.settings, s.checkIns, s.activities], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const active = s.sessions.some((x) => x.status === 'active');
   return (
@@ -54,7 +70,7 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
             {(
               [
                 ['bw', 'Nur Körpergewicht', 'Liegestütze, Dips, Split Squats …'],
-                ['weights', 'Hantel & Flaschen', `Hantel ${s.settings.homeDumbbell ?? 10} kg · Flaschen à ${s.settings.homeBottle ?? 1} kg`],
+                ['weights', 'Hantel & Flaschen', `Hantel ${fmtNum(s.settings.homeDumbbell ?? 10)} kg · Flaschen à ${fmtNum(s.settings.homeBottle ?? 1)} kg`],
               ] as const
             ).map(([v, t, sub]) => (
               <button
@@ -68,15 +84,19 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
             ))}
           </div>
         </div>
+        <div>
+          <div className="label mb-2">Schwerpunkt heute</div>
+          <HomeFocusChips value={focus} onChange={setFocus} />
+        </div>
         {mode === 'weights' && (
           <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2">
             <span className="text-[13px]">Gewicht deiner Hantel</span>
             <div className="flex items-center gap-2">
-              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel leichter" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = Math.max(1, (d.settings.homeDumbbell ?? 10) - 1)))}>
+              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel leichter" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = Math.max(1, (d.settings.homeDumbbell ?? 10) - 0.5)))}>
                 −
               </button>
-              <span className="tnum w-14 text-center text-[15px] font-semibold">{s.settings.homeDumbbell ?? 10} kg</span>
-              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel schwerer" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = (d.settings.homeDumbbell ?? 10) + 1))}>
+              <span className="tnum w-14 text-center text-[15px] font-semibold">{fmtNum(s.settings.homeDumbbell ?? 10)} kg</span>
+              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel schwerer" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = (d.settings.homeDumbbell ?? 10) + 0.5))}>
                 +
               </button>
             </div>

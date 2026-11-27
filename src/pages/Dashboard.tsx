@@ -15,6 +15,7 @@ import { planToday, personalTarget } from '../engine/planner';
 import { WeightCard } from '../components/Extras';
 import { BackupReminder } from '../components/Backup';
 import { RecentWorkouts } from '../components/RecentWorkouts';
+import { RecoveryBars } from '../components/RecoveryBars';
 import { WeekReviewCard } from './WeekReview';
 
 export default function Dashboard() {
@@ -113,27 +114,7 @@ export default function Dashboard() {
           <SectionTitle action={<button className="text-[13px] text-muted hover:text-fg" onClick={() => go('muskeln')}>Muskelkarte</button>}>
             Muskelregeneration
           </SectionTitle>
-          <ul className="flex flex-col gap-2.5">
-            {MUSCLES.filter((m) => !m.indirectOnly).map((m) => {
-              const st = states[m.id];
-              return (
-                <li key={m.id} className="flex flex-col gap-1">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-[13px]">{m.label}</span>
-                    <span className="tnum shrink-0 text-[12px] text-muted">{recoveryInfo(st).short}</span>
-                  </div>
-                  {/* Balken: Erholung 0–100 % (Schätzung), rot = frisch belastet → grün = erholt */}
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-raised">
-                    <div
-                      className="h-full rounded-full transition-[width] duration-700"
-                      style={{ width: `${Math.max(4, recPct(st))}%`, background: recoveryBarColor(recPct(st)) }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-          <p className="mt-3 text-[11px] text-muted">Balken = geschätzte Erholung (rot frisch belastet → grün erholt) aus Satzvolumen, Abstand zum Versagen, Zeit und Muskelkater – keine Messung.</p>
+          <RecoveryBars states={states} />
         </Card>
 
         {/* Volumen */}
@@ -278,16 +259,4 @@ export function Spark({ data, color = 'rgb(var(--accent))' }: { data: { v: numbe
 
 export { TrendingUp };
 
-/** Balkenwert passend zum Text: „erholt“ = 100 %, sonst höchstens 89 % */
-function recPct(st: Parameters<typeof recoveryInfo>[0]): number {
-  const lv = recoveryInfo(st).level;
-  return lv === 'recovered' || lv === 'idle' ? 100 : Math.min(89, st.recovery);
-}
 
-/** Farbverlauf der Erholung: rot (frisch belastet) → orange → gelb → grün (erholt) */
-function recoveryBarColor(pct: number): string {
-  if (pct >= 90) return 'rgb(var(--rec-green))';
-  if (pct >= 65) return 'linear-gradient(90deg, rgb(var(--rec-yellow)), rgb(var(--rec-green)))';
-  if (pct >= 40) return 'linear-gradient(90deg, rgb(var(--rec-orange)), rgb(var(--rec-yellow)))';
-  return 'linear-gradient(90deg, rgb(var(--rec-red)), rgb(var(--rec-orange)))';
-}

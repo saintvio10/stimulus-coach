@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent } from 'react';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 import type { MuscleId } from '../lib/types';
 import { MUSCLE } from '../lib/muscles';
 import { cn } from '../lib/utils';
@@ -13,6 +13,21 @@ import hit from '../assets/body/hit.json';
 const maskFiles = import.meta.glob('../assets/body/*.png', { eager: true, import: 'default' }) as Record<string, string>;
 const MASK: Partial<Record<MuscleId, string>> = {};
 for (const [p, url] of Object.entries(maskFiles)) MASK[p.split('/').pop()!.replace('.png', '') as MuscleId] = url;
+
+/** Hintergrundton des Körperbilds (Bildrand) – Rahmen exakt gleich, damit an den Ecken nichts durchschimmert */
+export const FIGURE_BG = '#232325';
+
+/**
+ * Rahmen für die Körperfigur: abgerundet, exakt im Bildton, mit eigener Ebene (isolation + translateZ),
+ * damit Safari die eingefärbten Muskel-Ebenen an den runden Ecken sauber abschneidet.
+ */
+export function FigureFrame({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('overflow-hidden rounded-2xl', className)} style={{ background: FIGURE_BG, isolation: 'isolate', transform: 'translateZ(0)', WebkitMaskImage: '-webkit-radial-gradient(white, black)' }}>
+      {children}
+    </div>
+  );
+}
 
 const W = 1024;
 const H = 688;
@@ -36,6 +51,7 @@ export function MuscleFigure({
   onSelect,
   view = 'both',
   className,
+  glow = true,
 }: {
   /** Farbe je Muskel (CSS-Farbe, z. B. rgb(var(--rec-green))); fehlende Muskeln bleiben grau */
   fills: Partial<Record<MuscleId, string>>;
@@ -43,6 +59,8 @@ export function MuscleFigure({
   onSelect?: (m: MuscleId) => void;
   view?: 'both' | 'front' | 'back';
   className?: string;
+  /** eingefärbte Muskeln leuchten und pulsieren dezent (bei „Bewegung reduzieren“ ohne Pulsieren) */
+  glow?: boolean;
 }) {
   const half = view !== 'both';
   // Ausschnitt: bei „vorne“/„hinten“ nur die jeweilige Bildhälfte zeigen
@@ -55,13 +73,13 @@ export function MuscleFigure({
     const m = muscleAt(fx, fy);
     if (m) onSelect(m);
   };
-  const layer = (m: MuscleId, color: string, extra?: CSSProperties) => {
+  const layer = (m: MuscleId, color: string, extra?: CSSProperties, cls?: string) => {
     const url = MASK[m];
     if (!url) return null;
     return (
       <div
-        key={m + (extra ? '-sel' : '')}
-        className="pointer-events-none absolute inset-0"
+        key={m + (cls ? '-t' : '') + (extra?.mixBlendMode ? `-${extra.mixBlendMode}` : '')}
+        className={cn('pointer-events-none absolute inset-0', cls)}
         style={{
           WebkitMaskImage: `url(${url})`,
           maskImage: `url(${url})`,
@@ -79,7 +97,13 @@ export function MuscleFigure({
     <div className={cn('relative overflow-hidden', className)} style={{ aspectRatio: half ? `${W / 2} / ${H}` : `${W} / ${H}` }}>
       <div className="relative" style={{ ...inner, aspectRatio: `${W} / ${H}`, isolation: 'isolate' }} onClick={click} role={onSelect ? 'button' : 'img'} aria-label="Körperfigur – Muskel antippen">
         <img src={bodyImg} alt="" className="absolute inset-0 h-full w-full select-none" draggable={false} />
-        {(Object.entries(fills) as [MuscleId, string][]).map(([m, c]) => layer(m, c))}
+        {(Object.entries(fills) as [MuscleId, string][]).map(([m, c]) => layer(m, c, glow ? { opacity: undefined } : undefined, glow ? 'animate-muscle-tint motion-reduce:animate-none motion-reduce:opacity-70' : undefined))}
+        {/* Glow: dieselben Muskeln weichgezeichnet und aufgehellt darüber – pulsiert langsam */}
+        {glow && Object.keys(fills).length > 0 && (
+          <div className="pointer-events-none absolute inset-0 animate-muscle-glow motion-reduce:animate-none motion-reduce:opacity-30" style={{ filter: 'blur(7px)', mixBlendMode: 'screen' }}>
+            {(Object.entries(fills) as [MuscleId, string][]).map(([m, c]) => layer(m, c, { mixBlendMode: 'normal', opacity: 1 }))}
+          </div>
+        )}
         {/* ausgewählter Muskel: zusätzlich aufhellen */}
         {selected && layer(selected, 'rgb(255 255 255 / 0.7)', { mixBlendMode: 'overlay', opacity: 1 })}
       </div>

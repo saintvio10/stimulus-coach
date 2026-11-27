@@ -4,10 +4,10 @@ import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Info, 
 import { quick, useStore } from '../lib/store';
 import { useCompletion, useNow, useRouter, useSearch, useToast } from '../lib/hooks';
 import type { AppData, AnimPattern, Availability, Session } from '../lib/types';
-import type { Plan, PlannedSession, TemplateId } from '../engine/planner';
+import type { Plan, PlannedExercise, PlannedSession, TemplateId } from '../engine/planner';
 import { planTemplate, planToday, PLAN_DAYS, personalTarget, TEMPLATE_SHORT, TEMPLATES } from '../engine/planner';
 import { MUSCLES } from '../lib/muscles';
-import { MuscleFigure } from './MuscleFigure';
+import { FigureFrame, MuscleFigure } from './MuscleFigure';
 import type { MuscleId } from '../lib/types';
 import { useMuscleStates } from '../lib/hooks';
 import { MUSCLE } from '../lib/muscles';
@@ -19,6 +19,8 @@ import { sessionStats, sessionsThisWeek } from '../engine/sessionStats';
 import { AddMenu } from './Extras';
 import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
 import { SwipeToStart } from './SwipeToStart';
+import { ExerciseInfoSheet } from './ExerciseInfo';
+import { HomeFocusChips } from './HomeWorkout';
 import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability, DayDuration } from './Coach';
 import { useStartScreen } from './StartScreen';
 import { unlockAudio } from './RestTimer';
@@ -280,6 +282,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   const [why, setWhy] = useState(false);
   const [all, setAll] = useState(false);
   const [whyOpen, setWhyOpen] = useState<string | null>(null);
+  const [info, setInfo] = useState<PlannedExercise | null>(null);
   const today = dateKey();
   const isToday = day === today;
   const active = s.sessions.find((x) => x.status === 'active');
@@ -407,6 +410,12 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
               <h2 className="mt-0.5 text-[28px] font-semibold leading-[1.1] tracking-tight">{planned.label}</h2>
               {planned.focus && <div className="mt-1 text-[14px] font-medium text-accent">{isToday ? 'Heute' : 'Diesmal'} Schwerpunkt {planned.focus}</div>}
             </div>
+            {planned.home && (
+              <div className="-mt-2 flex flex-col gap-1.5">
+                <div className="text-[12px] text-muted">Ohne Gym – Schwerpunkt wählen:</div>
+                <HomeFocusChips value={s.planOptions.homeFocus?.[day] ?? 'all'} onChange={(f) => s.mutate((d) => void (d.planOptions.homeFocus = { ...(d.planOptions.homeFocus ?? {}), [day]: f }))} />
+              </div>
+            )}
             <DayDuration date={planned.date} plan={planned} />
             {isToday &&
               plan.restDays
@@ -451,11 +460,12 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                 if (!ex) return null;
                 return (
                   <li key={p.exerciseId}>
-                    <button className="flex w-full items-center gap-3 rounded-2xl px-1 py-1.5 text-left" onClick={() => setWhyOpen(whyOpen === p.exerciseId ? null : p.exerciseId)} aria-expanded={whyOpen === p.exerciseId}>
-                    <div className="relative">
+                    <div className="flex w-full items-center gap-3 rounded-2xl px-1 py-1.5">
+                    <button data-noswipe className="relative shrink-0 rounded-xl transition active:scale-95" onClick={() => setInfo(p)} aria-label={`${ex.name}: Erklärung und Ziel`}>
                       <ExerciseIcon id={ex.id} pattern={ex.pattern} muscles={ex.muscles} size={46} />
                       <span className="tnum absolute -left-1 -top-1 grid h-5 w-5 place-items-center rounded-full bg-bg text-[10px] font-semibold text-muted ring-1 ring-line/10">{i + 1}</span>
-                    </div>
+                    </button>
+                    <button className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setWhyOpen(whyOpen === p.exerciseId ? null : p.exerciseId)} aria-expanded={whyOpen === p.exerciseId}>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 truncate text-[14px] font-medium">
                         {ex.name}
@@ -471,6 +481,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                     <span className="tnum shrink-0 text-[12px] text-muted" title="Geschätzte Dauer inkl. Pausen und Gerät einstellen">~{fmtMin(Math.max(1, Math.round(p.minutes)))}</span>
                     <Info size={15} className={cn('shrink-0 transition', whyOpen === p.exerciseId ? 'text-accent' : 'text-muted/60')} />
                     </button>
+                    </div>
                     {whyOpen === p.exerciseId && (
                       <div className="mb-1 ml-[58px] mr-1 animate-fade-up rounded-xl bg-fg/[0.06] px-3 py-2 text-[12.5px] leading-relaxed text-fg/85">
                         <span className="font-semibold">Warum? </span>
@@ -550,6 +561,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
           </div>
         )}
       </div>
+      {info && exMap.get(info.exerciseId) && <ExerciseInfoSheet ex={exMap.get(info.exerciseId)!} plan={info} onClose={() => setInfo(null)} />}
     </section>
   );
 }
@@ -876,9 +888,9 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
       </div>
       <p className="mb-4 text-[12px] text-muted">Sätze pro Muskel in den letzten 7 Tagen plus die geplanten Einheiten – gemessen an deinem Wochenziel.</p>
       <div className="card mb-3 flex flex-col gap-3 p-3">
-        <div className="overflow-hidden rounded-2xl" style={{ background: '#262628' }}>
+        <FigureFrame>
           <MuscleFigure fills={fills} selected={open ?? undefined} onSelect={(m) => setOpen(open === m ? null : m)} className="w-full" />
-        </div>
+        </FigureFrame>
         <div className="flex items-end justify-between gap-3 px-1">
           <div className="flex gap-5">
             <div>
@@ -1030,10 +1042,18 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
           setDx(0);
           if (Math.abs(ddx) > 60 && Math.abs(ddx) > Math.abs(ddy) * 1.3) go(idx + (ddx < 0 ? 1 : -1));
         }}
-        style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? 'none' : 'transform .25s ease-out' }}
       >
-        <div key={day} className={dir > 0 ? 'animate-slide-in-r' : 'animate-slide-in-l'}>
-          <DayHero plan={plan} day={day} onNext={onDay} />
+        <div className="relative">
+          {/* Nächste Karte schaut rechts hinter der aktuellen hervor → zeigt, dass man wischen kann */}
+          {idx < days.length - 1 && <NextPeek plan={plan} day={days[idx + 1]} onClick={() => go(idx + 1)} shift={dx} />}
+          <div
+            className="relative mr-[22px]"
+            style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? 'none' : 'transform .25s ease-out' }}
+          >
+            <div key={day} className={dir > 0 ? 'animate-slide-in-r' : 'animate-slide-in-l'}>
+              <DayHero plan={plan} day={day} onNext={onDay} />
+            </div>
+          </div>
         </div>
       </div>
       <div className="flex items-center justify-center gap-1.5">
@@ -1057,6 +1077,31 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
       </div>
       <p className="-mt-2 text-center text-[11px] text-muted">Wischen für die nächsten Tage</p>
     </div>
+  );
+}
+
+/** Rand der nächsten Tageskarte rechts hinter der aktuellen (gleiche Optik, leicht kleiner und gedimmt) */
+function NextPeek({ plan, day, onClick, shift }: { plan: Plan; day: string; onClick: () => void; shift: number }) {
+  const s = useStore();
+  const p = plan.sessions.find((x) => x.date === day && !x.rest);
+  const rest = plan.restDays?.find((r) => r.date === day);
+  const lead = p ? s.exercises.find((e) => e.id === p.exercises[0]?.exerciseId) : undefined;
+  const img = lead ? exerciseImage(lead.id) : undefined;
+  // beim Wischen nach links rückt die nächste Karte etwas nach vorn
+  const pull = shift < 0 ? Math.min(1, -shift / 90) : 0;
+  return (
+    <button
+      aria-label={`Nächster Tag: ${relDayLabel(day)}`}
+      onClick={onClick}
+      className={cn(
+        'absolute bottom-6 right-0 top-6 w-[70%] overflow-hidden rounded-[26px] border',
+        p ? 'border-line/[0.1] bg-[linear-gradient(160deg,rgb(var(--raised)),rgb(var(--surface)))]' : rest ? 'border-[#8b7cf6]/40 bg-[linear-gradient(160deg,#241d3d,rgb(var(--surface)))]' : 'border-line/[0.07] bg-surface',
+      )}
+      style={{ opacity: 0.7 + 0.25 * pull, transform: `translateX(${-pull * 10}px)`, transition: shift ? 'none' : 'all .25s ease-out' }}
+    >
+      {img && <img src={img} alt="" className="absolute -right-4 top-1/2 h-40 w-40 -translate-y-1/2 object-cover opacity-70" />}
+      <span className="absolute inset-y-0 right-0 w-[18px] bg-gradient-to-l from-black/10 to-transparent" />
+    </button>
   );
 }
 

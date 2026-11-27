@@ -37,7 +37,8 @@ export function defaultData(): AppData {
       defaultMinutes: 90,
       orderMode: 'priority',
       autoSuperset: true,
-      homeDumbbell: 10,
+      homeDumbbell: 7.5,
+      homeDumbbellSet: true,
       homeBottle: 1,
       dumbbellWeights: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42.5, 45, 47.5, 50],
       cableStep: 2.5,
@@ -148,6 +149,11 @@ export function migrate(raw: Partial<AppData>): AppData {
       const untouched = (fromVersion < 2 && REST_V1[x.id] === x.restSec) || REST_V2[x.id] === x.restSec;
       return untouched ? { ...x, restSec: def.restSec } : x;
     });
+  }
+  // Heim-Hantel: deine Hantel wiegt 7,5 kg (Angabe vom 27.11.) – alter Standard 10 kg einmalig korrigiert, eigene Werte bleiben
+  if (!raw.settings?.homeDumbbellSet) {
+    if ((raw.settings?.homeDumbbell ?? 10) === 10) d.settings.homeDumbbell = 7.5;
+    d.settings.homeDumbbellSet = true;
   }
   // Bestehende Nutzer nicht erneut durch das Onboarding schicken
   if (raw.settings && raw.settings.onboarded === undefined && (raw.sessions?.length ?? 0) > 0) d.settings.onboarded = true;
