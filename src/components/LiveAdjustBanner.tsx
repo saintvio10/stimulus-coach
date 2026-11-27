@@ -19,6 +19,10 @@ export function LiveAdjustBanner({ sessionId, se, ex, dark, compact, onApplied }
     toast(`Restliche Sätze: ${fmtNum(adj.to)} kg`);
   };
   const dismiss = () => s.patchExercise(sessionId, se.uid, { liveDismissed: adj.afterSetId });
+  const endHere = () => {
+    for (const x of se.sets.filter((y) => !y.done)) s.removeSet(sessionId, se.uid, x.id);
+    toast('Übung beendet – die erledigten Sätze zählen');
+  };
   return (
     <div
       className={cn(
@@ -37,10 +41,17 @@ export function LiveAdjustBanner({ sessionId, se, ex, dark, compact, onApplied }
           {!compact && <div className={cn('mt-0.5 text-[12.5px] leading-snug', dark ? 'text-white/60' : 'text-muted')}>{adj.reason}</div>}
         </div>
       </div>
-      <div className="flex gap-2 pl-8">
-        <button onClick={apply} className={cn('h-9 rounded-full px-4 text-[13px] font-semibold', down ? 'bg-rec-orange text-black' : 'bg-accent text-white')}>
-          {fmtNum(adj.to)} kg übernehmen
-        </button>
+      <div className="flex flex-wrap gap-2 pl-8">
+        {adj.to !== adj.from && (
+          <button onClick={apply} className={cn('h-9 rounded-full px-4 text-[13px] font-semibold', down ? 'bg-rec-orange text-black' : 'bg-accent text-white')}>
+            {fmtNum(adj.to)} kg übernehmen
+          </button>
+        )}
+        {adj.endOption && (
+          <button onClick={endHere} className={cn('h-9 rounded-full px-4 text-[13px] font-semibold', dark ? 'bg-white/10 text-white' : 'bg-fg/[0.08]')}>
+            Übung beenden
+          </button>
+        )}
         <button onClick={dismiss} className={cn('h-9 rounded-full px-3 text-[13px] font-medium', dark ? 'text-white/60' : 'text-muted')}>
           Bei {fmtNum(adj.from)} kg bleiben
         </button>

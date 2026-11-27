@@ -11,6 +11,8 @@ export interface LiveAdjust {
   to: number;
   title: string;
   reason: string;
+  /** Satz mit ≤ 4 Wdh.: zusätzlich „Übung beenden“ anbieten */
+  endOption?: boolean;
 }
 
 const repsOf = (x: SetLog) => (x.repsL != null && x.repsR != null ? Math.min(x.repsL, x.repsR) : x.reps);
@@ -51,6 +53,28 @@ export function liveAdjust(se: SessionExercise, ex: Exercise, settings: Settings
   const prevDir = w > firstW ? 1 : w < firstW ? -1 : 0;
   const allowed = (dir: 1 | -1) => prevDir === 0 || prevDir === dir;
   const bw = ex.equipment === 'bodyweight';
+
+  // ── viel zu schwer: ≤ 4 Wdh. bei einem Hypertrophie-Bereich ab 6 Wdh.
+  // Unter ~5 Wdh. liefert ein Satz pro Satz deutlich weniger Wachstumsreiz (schwere 3er-Sätze brauchen für gleiches
+  // Wachstum viel mehr Sätze), die Gelenkbelastung bleibt hoch. Gilt immer – auch wenn heute schon angepasst wurde.
+  if (!(bw && w <= 0) && reps <= 4 && se.repMin >= 6) {
+    let to = w;
+    for (let i = 0; i < 4; i++) {
+      const n = step(1, -1);
+      const cand = i === 0 ? n : prevWeight(to, ex, settings);
+      if (!(cand < to) || cand <= 0) break;
+      to = cand;
+      if (!est || predicted(to) >= se.repMin) break;
+    }
+    return {
+      ...base,
+      dir: 'down',
+      to,
+      endOption: true,
+      title: to < w ? `Nur ${reps} Wdh. – ${fmtNum(to)} kg oder Übung beenden?` : `Nur ${reps} Wdh. – Übung beenden?`,
+      reason: `Unter ~5 Wdh. bringt ein Satz für Muskelaufbau deutlich weniger, die Gelenke werden aber voll belastet. ${to < w ? `Mit ${fmtNum(to)} kg landest du voraussichtlich wieder in deinem Bereich (${se.repMin}–${se.repMax}). ` : ''}Oder beende die Übung hier – die erledigten Sätze zählen, und der Plan rechnet mit der tatsächlichen Arbeit.`,
+    };
+  }
 
   // ── zu schwer
   if (!(bw && w <= 0)) {
