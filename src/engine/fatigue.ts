@@ -222,3 +222,27 @@ export function weeklySeries(events: StimulusEvent[], m: MuscleId, weeks: number
   }
   return out;
 }
+
+/**
+ * Verständliche Erholungs-Kategorie statt Scheingenauigkeit in Prozent.
+ * Das Modell (exponentieller Abbau je Muskel + gemeldeter Muskelkater) ist eine Annahme der App –
+ * Studien validieren keine konkrete Prozentberechnung. Daher: Kategorie + Begründung + Hinweis auf Unsicherheit.
+ */
+export function recoveryInfo(st: MuscleState, at = Date.now()): { label: string; short: string; advice: string; basis: string } {
+  const h = st.lastAny == null ? null : (at - st.lastAny) / HOUR;
+  const when = h == null ? null : h < 48 ? `vor ${Math.max(1, Math.round(h))} h` : `vor ${Math.round(h / 24)} Tagen`;
+  const parts: string[] = [];
+  if (when) parts.push(`letzte Belastung ${when}`);
+  if (st.lastSets > 0) parts.push(`${Math.round(st.lastSets * 10) / 10} Sätze`);
+  if (st.soreness > 0) parts.push(`Muskelkater gemeldet (${st.soreness}/3)`);
+  const basis = parts.length ? parts.join(' · ') : 'keine Belastung in den letzten Wochen';
+  if (st.color === 'gray') return { label: 'Länger nicht belastet', short: 'frei', advice: 'Normal trainierbar.', basis };
+  if (st.fatigueEff >= F_RED)
+    return { label: 'Frisch belastet', short: 'frisch belastet', advice: 'Heute eher pausieren oder nur wenig Volumen.', basis };
+  if (st.fatigueEff >= 3) return { label: 'Noch belastet', short: 'noch belastet', advice: 'Belastung heute reduzieren (weniger Sätze).', basis };
+  if (st.color === 'yellow') return { label: 'Teilweise erholt', short: 'teilweise erholt', advice: 'Normal trainierbar – auf Tagesform achten.', basis };
+  return { label: 'Wahrscheinlich erholt', short: 'wahrscheinlich erholt', advice: 'Normal trainierbar.', basis };
+}
+
+export const RECOVERY_MODEL_NOTE =
+  'Schätzung der App: Ermüdung klingt pro Muskel exponentiell ab, gemeldeter Muskelkater und Bereitschaft verschieben sie. Die genauen Werte sind nicht durch Studien validiert – dein Gefühl und die ersten Sätze haben Vorrang.';

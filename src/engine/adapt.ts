@@ -66,10 +66,10 @@ export function computeVolumeAdjust(data: AppData, now = Date.now()): { map: Par
     let reason: string;
     if (trend <= -2 || avgSore >= 2) {
       factor = clamp(+(prev.factor * 0.85).toFixed(2), 0.7, 1.3);
-      reason = trend <= -2 ? `Leistung ${fmtNum(trend)} % in 4 Wochen → Volumen −15 % für bessere Erholung` : 'Häufig starker Muskelkater → Volumen −15 %';
+      reason = trend <= -2 ? `Leistung ${fmtNum(trend)} % in 4 Wochen → Volumen −15 % für bessere Erholung (Modellregel, Schwelle anpassbar)` : 'Häufig starker Muskelkater → Volumen −15 % (Modellregel)';
     } else if (trend < 1.5 && avgSore < 1.5 && (avgReady == null || avgReady >= 55)) {
       factor = clamp(+(prev.factor + 0.1).toFixed(2), 0.7, 1.3);
-      reason = `Stagnation (${trend >= 0 ? '+' : ''}${fmtNum(trend)} % in 4 Wochen) bei guter Erholung → +10 % Volumen`;
+      reason = `Stagnation (${trend >= 0 ? '+' : ''}${fmtNum(trend)} % in 4 Wochen) bei guter Erholung → +10 % Volumen (Modellregel, Schwelle anpassbar)`;
     } else if (trend >= 1.5) {
       reason = `Fortschritt +${fmtNum(trend)} % in 4 Wochen → Volumen bleibt`;
     } else {

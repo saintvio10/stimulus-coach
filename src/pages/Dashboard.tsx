@@ -1,3 +1,4 @@
+import { recoveryInfo } from '../engine/fatigue';
 import { useEffect, useMemo, useState } from 'react';
 import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts';
 import { ArrowRight, BarChart3, Flame, Play, Trophy, TrendingUp, AlertTriangle, Moon } from 'lucide-react';
@@ -32,7 +33,7 @@ export default function Dashboard() {
   const first = plan.sessions[0];
   const todayPlan = first?.date === today ? first : null;
   const next = todayPlan ? plan.sessions[1] : first;
-  const spw = s.settings.sessionsPerWeek;
+  const spw = plan.spw; // gemeinsames Wochenziel (siehe useGoals)
 
   const startToday = () => {
     const p = todayPlan ?? planToday(data);
@@ -116,8 +117,7 @@ export default function Dashboard() {
                 <li key={m.id} className="flex items-center gap-3">
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: RECOVERY_COLORS[st.color] }} />
                   <span className="w-28 shrink-0 truncate text-[13px]">{m.label}</span>
-                  <Bar value={st.lastAny ? st.recovery / 100 : 0} color={RECOVERY_COLORS[st.color]} />
-                  <span className="tnum w-10 shrink-0 text-right text-[12px] text-muted">{st.lastAny ? `${st.recovery}%` : '–'}</span>
+                  <span className="min-w-0 flex-1 truncate text-right text-[12px] text-muted">{recoveryInfo(st).short}</span>
                 </li>
               );
             })}

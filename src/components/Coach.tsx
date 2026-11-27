@@ -416,9 +416,9 @@ export function DayDuration({ date, plan, dark }: { date: string; plan?: Planned
             {cur < def
               ? 'Kürzer: heute weniger Sätze, priorisiert nach dem, was am meisten bringt. Fehlendes Wochenvolumen holen die nächsten Einheiten automatisch nach.'
               : cur > def
-                ? 'Länger: mehr Übungen und Sätze – aber nur, solange sie noch echten Zusatznutzen bringen (max. ~6–10 Sätze pro Muskel und Einheit). Die Folgetage werden entsprechend entlastet.'
+                ? 'Länger: mehr Übungen und Sätze, solange das Modell noch Nutzen sieht (Obergrenze pro Muskel und Einheit ist eine Modellregel). Übrige Zeit wird für längere Pausen genutzt. Die Folgetage werden entsprechend entlastet.'
                 : 'Standarddauer aus deinem Profil.'}
-            {unused >= 15 && ` Mehr als ~${fmtMin(plan!.estMinutes)} bringt an diesem Tag kaum etwas – die eingeplanten Muskeln sind ausgelastet bzw. noch in Erholung.`}
+            {unused >= 15 && ` Der Plan ist nach ~${fmtMin(plan!.estMinutes)} fertig: Die passenden Muskeln haben ihr geplantes Pensum für heute, andere sind laut Schätzung noch in Erholung.`}
           </p>
         </div>
       )}

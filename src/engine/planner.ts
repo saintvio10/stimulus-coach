@@ -1,10 +1,10 @@
 import { REGION_LABEL } from '../data/exercises';
-import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL } from '../lib/muscles';
+import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL, frequencyFactor } from '../lib/muscles';
 import type { AppData, Exercise, MuscleId, ProgressionAdvice } from '../lib/types';
 import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor } from '../lib/utils';
-import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent } from './fatigue';
+import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent, recoveryInfo } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
-import { adviseExercise } from './progression';
+import { adviseExercise, exposures, bestE1rm } from './progression';
 import { readinessAdjust, readinessScore } from './readiness';
 
 // ───────────────────────── Vorlagen (Masken) ─────────────────────────
@@ -136,6 +136,10 @@ export interface Plan {
   horizonDays: string[];
   /** Tage mit Zeit, an denen bewusst pausiert wird */
   restDays: { date: string; reason: string }[];
+  /** Einheiten pro 7 Tage, auf die die Wochenziele ausgelegt sind (gilt für alle Ansichten) */
+  spw: number;
+  /** Erklärung des Wochenziels */
+  goalNote: string;
 }
 
 // ───────────────────────── Konstanten der Heuristik ─────────────────────────
@@ -293,14 +297,21 @@ export function buildSession(o: BuildOpts): PlannedSession {
     const l = regionLast.get(`${m}:${r}`);
     return l == null ? 99 : (at - l) / DAY;
   };
+  // Übungen mit aktuellem Fortschritt (e1RM zuletzt gestiegen) werden durch die Rotation nicht verdrängt
+  const progressing = new Set<string>();
+  for (const e of candidates) {
+    const h = exposures(e.id, data.sessions);
+    if (h.length >= 2 && bestE1rm(h[0].sets) > bestE1rm(h[1].sets) * 1.005) progressing.add(e.id);
+  }
+  /** Modellregel (Schwellen anpassbar): nur sanfter Ausgleich, wenn ein Bereich deutlich länger nicht dran war */
   const regionFactor = (ex: Exercise) => {
     const regs = ex.region ? regionsOf.get(ex.primary) : undefined;
     if (!ex.region || !regs || regs.size < 2) return 1;
     const mine = regionDays(ex.primary, ex.region);
     const others = [...regs].filter((r) => r !== ex.region).map((r) => regionDays(ex.primary, r));
     const stalestOther = Math.max(...others);
-    if (mine >= 6 && mine >= stalestOther) return 1.22; // am längsten nicht trainierter Bereich
-    if (mine < 4 && stalestOther >= 7) return 0.86; // gerade erst dran, ein anderer Bereich wartet
+    if (mine >= 8 && mine >= stalestOther) return 1.1; // am längsten nicht trainierter Bereich
+    if (mine < 3 && stalestOther >= 10 && !progressing.has(ex.id)) return 0.93; // gerade dran, anderer Bereich wartet lange
     return 1;
   };
 
@@ -411,13 +422,13 @@ export function buildSession(o: BuildOpts): PlannedSession {
     const capTxt = MUSCLE[pm].sessionCap;
     const setsReason = MUSCLE[pm].indirectOnly
       ? `${sets} Arbeitssätze: Mehrgelenksübung, deckt ${Object.keys(it.ex.muscles).length} Muskeln ab.`
-      : `${sets} Arbeitssätze optimal: ${MUSCLE[pm].label} steht bei ${fmtNum(st.vol7)}/${fmtNum(tgt)} Wochensätzen, heute insgesamt ${fmtNum(sSets[pm])} Sätze (sinnvolle Obergrenze pro Einheit ~${capTxt}). Mehr Sätze brächten heute kaum Zusatznutzen.${advice.setDelta < 0 ? ' −1 Satz wegen Stagnation/Ermüdung.' : ''}`;
+      : `${sets} Arbeitssätze geplant. Begründung: ${MUSCLE[pm].label} steht bei ${fmtNum(st.vol7)}/${fmtNum(tgt)} Sätzen in 7 Tagen, heute kommen insgesamt ~${fmtNum(sSets[pm])} dazu (direkt + ½ indirekt). Pro Einheit plant die App höchstens ~${capTxt} Sätze für diesen Muskel – Modellregel, weil der Zusatznutzen pro Satz abnimmt (Pelland 2026); die genaue Grenze ist individuell.${advice.setDelta < 0 ? ' −1 Satz wegen Stagnation/Ermüdung (Modellregel).' : ''}`;
     const targetRir = it.ex.targetRir + radj.rir + advice.rirDelta;
     const sc = scores[it.ex.primary];
     const parts: string[] = [];
     if (!MUSCLE[it.ex.primary].indirectOnly) {
       const rank = data.profile.priorities.indexOf(MUSCLE[it.ex.primary].group!) + 1;
-      parts.push(`${MUSCLE[it.ex.primary].label}: Priorität ${rank}, 7 Tage ${fmtNum(st.vol7)}/${fmtNum(sc.target)} Sätze, Erholung ~${st.recovery} %`);
+      parts.push(`${MUSCLE[it.ex.primary].label}: Priorität ${rank}, 7 Tage ${fmtNum(st.vol7)}/${fmtNum(sc.target)} Sätze, ${recoveryInfo(st, at).short} (Schätzung)`);
     } else {
       parts.push(`Mehrgelenkig: trainiert ${Object.keys(it.ex.muscles).map((m) => MUSCLE[m as MuscleId].short).join(', ')}`);
     }
@@ -447,12 +458,14 @@ export function buildSession(o: BuildOpts): PlannedSession {
     if (mi) whyParts.push(`Nachholen: am ${fmtDate(mi.date)} im Training entfernt (${mi.sets} Sätze nicht gemacht).`);
     if (sc.neglect > 0.2) whyParts.push(`Seit ${sc.daysSince == null ? 'langem' : Math.round(sc.daysSince) + ' Tagen'} kein direkter Reiz – wird nachgeholt.`);
     else if (history.has(it.ex.id)) whyParts.push('Bekannte Übung – dein Fortschritt bleibt direkt vergleichbar.');
+    if (advice.rangeNote) whyParts.push(advice.rangeNote);
     return {
       why: whyParts.join(' '),
       exerciseId: it.ex.id,
       sets,
       repMin: it.ex.repMin,
-      repMax: it.ex.repMax,
+      // gleicher Zielbereich wie in der Steigerungsregel (bei großem Gewichtssprung erweitert und begründet)
+      repMax: advice.repMax ?? it.ex.repMax,
       targetRir,
       restSec: it.ex.restSec,
       recWeight: advice.weight,
@@ -507,12 +520,12 @@ export function buildSession(o: BuildOpts): PlannedSession {
     let reason = '';
     if (sets >= 1) {
       status = sets >= 4 ? 'focus' : 'included';
-      const bits = [`${fmtNum(sets)} Sätze geplant`, `7 Tage: ${fmtNum(st.vol7)}/${fmtNum(sc.target)}`, `Erholung ~${st.recovery} %`];
+      const bits = [`${fmtNum(sets)} Sätze geplant`, `7 Tage: ${fmtNum(st.vol7)}/${fmtNum(sc.target)}`, `${recoveryInfo(st, at).short} (${recoveryInfo(st, at).basis})`];
       if (sc.neglect > 0.2) bits.push('Ausgleich: länger kein direkter Reiz');
       reason = bits.join(' · ');
     } else if (sc.rec < 0.35) {
       const act = (data.activities ?? []).filter((a) => at - parseKey(a.date).getTime() < 48 * HOUR && at >= parseKey(a.date).getTime() && (activityMuscles(a)[m] ?? 0) >= 0.5);
-      reason = `Noch ermüdet (Erholung ~${st.recovery} %${act.length ? `, u. a. durch ${act.map((a) => ACTIVITY_TYPES[a.type as keyof typeof ACTIVITY_TYPES]?.label ?? a.type).join(', ')}` : st.lastAny ? `, letzter Reiz vor ${Math.round((at - st.lastAny) / HOUR)} h` : ''}) – voraussichtlich bereit ${relDayLabel(dateKey(st.readyAt))}.`;
+      reason = `Noch ermüdet (${recoveryInfo(st, at).label}, Modellschätzung${act.length ? `, u. a. durch ${act.map((a) => ACTIVITY_TYPES[a.type as keyof typeof ACTIVITY_TYPES]?.label ?? a.type).join(', ')}` : st.lastAny ? `, letzter Reiz vor ${Math.round((at - st.lastAny) / HOUR)} h` : ''}) – voraussichtlich bereit ${relDayLabel(dateKey(st.readyAt))}.`;
     } else if ((tpl.mask[m] ?? 0) === 0) {
       reason = `Nicht Teil von „${tpl.label}“${nextLabel ? ` – nächste Gelegenheit: ${nextLabel}` : ''}.`;
     } else if (st.vol7 >= sc.target) {
@@ -523,8 +536,26 @@ export function buildSession(o: BuildOpts): PlannedSession {
     decisions.push({ muscle: m, status, sets, score: sc.score, recovery: st.recovery, vol7: st.vol7, target: sc.target, reason });
   }
 
-  const estMinutes = Math.round(WARMUP_MIN + planned.reduce((a, p) => a + p.minutes, 0));
+  // Mehr Zeit als sinnvolle Sätze: Pausen verlängern statt Sätze zu stapeln (bessere Wdh.-Leistung, Schoenfeld 2016)
   const reasons: string[] = [];
+  let slack = budget - planned.reduce((a, p) => a + p.minutes, 0);
+  if (slack >= 6 && planned.length) {
+    let added = 0;
+    for (const p of [...planned].sort((a, b) => b.sets - a.sets)) {
+      const ex = data.exercises.find((e) => e.id === p.exerciseId);
+      if (!ex) continue;
+      const capRest = ex.compound ? 240 : 180;
+      const extra = Math.min(30, capRest - p.restSec);
+      const cost = (p.sets * extra) / 60;
+      if (extra <= 0 || cost > slack) continue;
+      p.restSec += extra;
+      p.minutes += cost;
+      slack -= cost;
+      added++;
+    }
+    if (added) reasons.push(`Mehr Zeit als zusätzliche Sätze sinnvoll nutzen: Pausen bei ${added} Übung${added === 1 ? '' : 'en'} um 30 s verlängert – erhält die Wiederholungsleistung. Die Einheit ist trotzdem vor Ablauf der Zeit fertig.`);
+  }
+  const estMinutes = Math.round(WARMUP_MIN + planned.reduce((a, p) => a + p.minutes, 0));
   if (radj.note) reasons.push(radj.note);
   if (short) reasons.push('Zeitmodus: Arm- und Schulterisolation als Supersätze (Agonist/Antagonist), um Zeit zu sparen.');
   const value = Object.entries(sSets).reduce((a, [m, s]) => a + scores[m as MuscleId].score * Math.log1p(s / 2), 0);
@@ -700,19 +731,35 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
   // Regeln: max. maxConsecutive Trainingstage am Stück (inkl. bereits absolvierter Tage davor),
   // max. maxSessionsPerWeek Einheiten in den 7 Tagen (inkl. Trainings der letzten Tage im rollierenden Fenster).
   const restDays: { date: string; reason: string }[] = [];
-  if (!opts.forceToday && !uncertain && dates.length > 1) {
+  if (!opts.forceToday && !uncertain && dates.length >= 1) {
     const maxCons = Math.max(2, data.settings.maxConsecutive || 3);
+    // Trainingstage (inkl. schwerer Aktivitäten) für die Regel „max. Tage am Stück“
     const doneDates = new Set([...doneSessions.map((s) => s.date), ...(data.activities ?? []).filter((a) => activityLoad(a) >= 4).map((a) => a.date)]);
-    // bereits trainierte Tage im rollierenden Fenster (letzte 6 Tage vor start)
+    // Für das Wochenlimit zählen absolvierte Einheiten (Studio + unterwegs)
+    const sessionDates = [...new Set(doneSessions.map((s) => s.date))];
     const recentDone = Array.from({ length: 6 }, (_, i) => addDays(start, -(i + 1))).filter((d) => doneDates.has(d));
-    const cap = Math.max(1, (data.settings.maxSessionsPerWeek || 4) - Math.max(0, recentDone.length - 2));
+    const cap = Math.max(1, data.settings.maxSessionsPerWeek || 4);
+    /** größte Zahl an Einheiten (absolviert + geplant) in irgendeinem 7-Tage-Fenster, das einen geplanten Tag enthält */
+    const worstWindow = (pick: string[]) => {
+      const all = [...new Set([...sessionDates, ...pick])];
+      let worst = { n: 0, from: '', to: '' };
+      for (const d of pick)
+        for (let k = 0; k < 7; k++) {
+          const from = addDays(d, -k);
+          const to = addDays(from, 6);
+          const n = all.filter((x) => x >= from && x <= to).length;
+          if (n > worst.n) worst = { n, from, to };
+        }
+      return worst;
+    };
     const fixedTentative = new Set(dates.filter((d) => tentativeSet.has(d)));
     const n = dates.length;
     let best: string[] = dates;
     let bestScore = -Infinity;
     for (let mask = 1; mask < 1 << n; mask++) {
       const pick = dates.filter((_, i) => mask & (1 << i));
-      if (pick.length > cap) continue;
+      // rollierendes 7-Tage-Fenster: absolvierte + geplante Einheiten zusammen
+      if (worstWindow(pick).n > cap) continue;
       // längste Kette prüfen (inkl. Historie)
       const all = new Set([...pick, ...doneDates]);
       let ok = true;
@@ -738,14 +785,15 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
       let run = 1;
       for (let k = 1; set.has(addDays(d, -k)); k++) run++;
       for (let k = 1; set.has(addDays(d, k)); k++) run++;
+      const ww = worstWindow([...best, d]);
       restDays.push({
         date: d,
         reason:
-          run > maxCons
-            ? `Ruhetag: Sonst wären es ${run} Trainingstage am Stück. Eine Pause dazwischen gibt Muskeln, Sehnen und Nervensystem Zeit – die folgenden Einheiten werden dadurch leistungsfähiger.`
-            : best.length >= cap
-              ? `Ruhetag: Mit ${best.length} Einheiten in 7 Tagen ist dein Volumen gut verteilt (Obergrenze ${cap}×). Eine weitere Einheit brächte kaum Zusatznutzen, verkürzt aber die Erholung.`
-              : 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – jeder Muskel ist beim nächsten Reiz besser erholt.',
+          ww.n > cap
+            ? `Ruhetag: Mit diesem Tag wären es ${ww.n} Einheiten zwischen ${relDayLabel(ww.from, today).split(',')[0]} und ${relDayLabel(ww.to, today).split(',')[0]} (absolvierte mitgezählt) – dein Limit ist ${cap} pro 7 Tage (Profil). Das Wochenvolumen wird auf die übrigen Tage verteilt.`
+            : run > maxCons
+              ? `Ruhetag: Sonst wären es ${run} Trainingstage am Stück (absolvierte mitgezählt, Limit ${maxCons} im Profil). Die Wochenarbeit wird auf die übrigen Tage verteilt.`
+              : 'Ruhetag: Mit Pause dazwischen verteilen sich die Einheiten gleichmäßiger – mehr Abstand zwischen Belastungen derselben Muskeln.',
       });
     }
     dates = best;
@@ -796,7 +844,12 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     const minutes = d === today ? opts.minutesToday ?? minutesFor(data, d) : minutesFor(data, d);
     let best: PlannedSession | null = null;
     let bestScore = -Infinity;
-    for (const tid of strat.templates) {
+    // Nur ein fester Termin im Fenster (+ vorläufige)? Dann deckt der feste Tag breit ab –
+    // vorläufige Tage werden für die Grundabdeckung nicht vorausgesetzt.
+    const sureInWindow = dates.filter((x) => !tentativeSet.has(x));
+    const onlySure = i < dates.length && !tentativeSet.has(d) && sureInWindow.length === 1 && dates.length > 1;
+    const templates: TemplateId[] = onlySure ? ['full', 'fbA', 'fbB'] : strat.templates;
+    for (const tid of templates) {
       const s = buildSession({
         date: d,
         at,
@@ -806,7 +859,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         data,
         sessionsPerWeek: spw,
         tentative: tentativeSet.has(d),
-        nextDates: allDates.slice(i + 1),
+        nextDates: allDates.slice(i + 1).filter((x) => !tentativeSet.has(x)),
         home: d === today && opts.home ? opts.home : awaySet.has(d) ? 'weights' : undefined,
         prevPlanned,
       });
@@ -819,7 +872,8 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
     // Begründung auf Einheitsebene
     const focus = best.decisions.filter((x) => x.status === 'focus').map((x) => MUSCLE[x.muscle].short);
     const skippedTired = best.decisions.filter((x) => x.status === 'skipped' && x.reason.startsWith('Noch ermüdet')).map((x) => MUSCLE[x.muscle].short);
-    if (strat.templates.length > 1) best.reasons.unshift(`„${best.label}“ gewählt: höchster erwarteter Nutzen unter den Optionen ${strat.templates.map((t) => TEMPLATES[t].label).join(', ')}.`);
+    if (onlySure) best.reasons.unshift('Nur ein fester Termin – die „Vielleicht“-Tage werden nicht fest eingeplant. Darum heute breite Abdeckung (Ganzkörper) mit deinen Armprioritäten.');
+    else if (strat.templates.length > 1) best.reasons.unshift(`„${best.label}“ gewählt: höchster erwarteter Nutzen unter den Optionen ${strat.templates.map((t) => TEMPLATES[t].label).join(', ')}.`);
     if (i >= dates.length) best.reasons.unshift(`Woche 2 (${strategy2.label}): wird bei jedem Training neu berechnet.`);
     if (focus.length) best.reasons.push(`Schwerpunkt: ${focus.join(', ')}.`);
     if (skippedTired.length) best.reasons.push(`Ausgelassen wegen Ermüdung: ${skippedTired.join(', ')}.`);
@@ -846,7 +900,12 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
 
   if (!dates.length) notes.push(`Keine Trainingstage in den nächsten ${PLAN_DAYS} Tagen. Tippe oben an, wann du Zeit hast.`);
 
-  return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays };
+  const sure = dates.filter((d) => !tentativeSet.has(d)).length;
+  const goalNote =
+    `Wochenziele ausgelegt auf ${spw} Einheit${spw === 1 ? '' : 'en'} pro 7 Tage (${dates.length ? `${sure} feste${dates.length > sure ? ` + ${dates.length - sure} vorläufige` : ''} im Plan` : 'Profil-Standard'}). ` +
+    (spw < 3 ? `Bei ${spw === 1 ? 'einer Einheit' : 'zwei Einheiten'} ist das Ziel niedriger (×${fmtNum(frequencyFactor(spw), 2)}), weil pro Einheit nur begrenzt sinnvolles Volumen möglich ist – Modellannahme. ` : '') +
+    'Gezählt: direkte Sätze voll, indirekte mit 0,5 (Pelland 2026). Geplante Sätze sind eine Prognose.';
+  return { strategy, sessions, trainedToday, notes, horizonDays: [...horizon, ...horizon2], restDays, spw, goalNote };
 }
 
 /** Plan für ein spontanes Training heute (auch wenn nicht eingeplant) */

@@ -162,8 +162,15 @@ export function FocusPlayer({ session, startUid, onClose }: { session: Session; 
         {/* Letztes Mal & Steigerung */}
         {lastW != null && (
           <div className="tnum -mt-2 text-[13px] text-white/60">
-            Letztes Mal: <span className="font-semibold text-white/85">{fmtNum(lastW)} kg</span>
-            {advice?.lastReps?.length ? ` × ${advice.lastReps.join(' / ')}` : ''}
+            Letztes Mal:{' '}
+            {advice?.lastDetail ? (
+              <span className="font-semibold text-white/85">{advice.lastDetail} kg</span>
+            ) : (
+              <>
+                <span className="font-semibold text-white/85">{fmtNum(lastW)} kg</span>
+                {advice?.lastReps?.length ? ` × ${advice.lastReps.join(' / ')}` : ''}
+              </>
+            )}
           </div>
         )}
         {(se.adviceType ?? advice?.type) === 'increase' && lastW != null && rec != null && rec > lastW && !se.decision && setIndex === 0 && (

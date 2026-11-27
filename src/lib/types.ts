@@ -108,6 +108,14 @@ export interface ProgressionAdvice {
   lastReps: number[];
   lastDate: string | null;
   stalled: boolean;
+  /** Obergrenze des Wiederholungsziels, die für die nächste Steigerung gilt (kann bei großen Gewichtssprüngen über ex.repMax liegen) */
+  repMax?: number;
+  /** Erklärung, warum der Zielbereich vom Standard abweicht */
+  rangeNote?: string;
+  /** vorsichtige Empfehlung (einzelne schwache Einheit) – Nutzer kann ablehnen */
+  cautious?: boolean;
+  /** letzte Einheit bei gemischten Gewichten, z. B. „10 × 9 · 12,5 × 5“ */
+  lastDetail?: string;
 }
 
 export interface SessionExercise {

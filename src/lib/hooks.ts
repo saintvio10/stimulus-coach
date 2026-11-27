@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import { useStore } from './store';
-import type { AppData } from './types';
-import { buildPlan } from '../engine/planner';
+import type { AppData, MuscleId } from './types';
+import { buildPlan, personalTarget } from '../engine/planner';
 import { computeAllStates } from '../engine/fatigue';
 import { allEvents } from '../engine/activities';
 
@@ -122,3 +122,14 @@ export const usePRCelebration = create<{ pr: { title: string; sub: string; exerc
   show: (p) => set({ pr: { ...p, key: Date.now() } }),
   hide: () => set({ pr: null }),
 }));
+
+/** Gemeinsames Wochenziel für alle Ansichten (Übersicht, Muskelanalyse, Wochenbilanz, Rückblick, Planbegründung) */
+export function useGoals() {
+  const plan = usePlan();
+  const s = useStore();
+  return useMemo(
+    () => ({ spw: plan.spw, note: plan.goalNote, target: (m: MuscleId) => personalTarget(s as unknown as AppData, m, plan.spw) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [plan.spw, plan.goalNote, s.volumeAdjust, s.profile],
+  );
+}

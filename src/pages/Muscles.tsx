@@ -1,3 +1,4 @@
+import { recoveryInfo, RECOVERY_MODEL_NOTE } from '../engine/fatigue';
 import { useMemo, useState } from 'react';
 import { Bar as RBar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useStore } from '../lib/store';
@@ -20,7 +21,7 @@ export default function MusclesPage() {
   const colors = Object.fromEntries(MUSCLES.map((m) => [m.id, states[m.id].color])) as Record<MuscleId, RecoveryColor>;
   const st = states[sel];
   const meta = MUSCLE[sel];
-  const spw = s.settings.sessionsPerWeek;
+  const spw = plan.spw; // gemeinsames Wochenziel für alle Ansichten
   const target = personalTarget(s as unknown as AppData, sel, spw);
   const adj = s.volumeAdjust?.[sel];
   const hist = useMemo(() => weeklySeries(events, sel, 8), [events, sel]);
@@ -69,11 +70,16 @@ export default function MusclesPage() {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <Tile label="Letztes Training" value={lastTxt} />
-            <Tile label="Geschätzte Regeneration" value={st.lastAny ? `~${st.recovery} %` : '–'} />
+            <Tile label="Erholung (Schätzung)" value={recoveryInfo(st).label} />
             <Tile label="Direkte Sätze 7 / 14 T" value={`${fmtNum(st.direct7)} / ${fmtNum(st.direct14)}`} />
             <Tile label="Indirekte Sätze (geschätzt)" value={`${fmtNum(st.indirect7)} / ${fmtNum(st.indirect14)}`} />
             <Tile label="Volumenlast 7 T" value={`${fmtNum(st.load7 / 1000, 1)} t`} />
             <Tile label="Wieder bereit (Schätzung)" value={readyTxt} />
+          </div>
+          <div className="rounded-xl bg-raised p-3 text-[12.5px]">
+            <div className="font-medium">{recoveryInfo(st).advice}</div>
+            <div className="mt-0.5 text-muted">Grundlage: {recoveryInfo(st).basis}.</div>
+            <div className="mt-1.5 text-[11.5px] text-muted">{RECOVERY_MODEL_NOTE} Muskelkater & Bereitschaft trägst du oben rechts im Check-in ein – die Empfehlung vor dem Training passt sich daran an.</div>
           </div>
           {!meta.indirectOnly && (
             <div className="rounded-xl bg-raised p-3 text-[13px]">
@@ -150,7 +156,7 @@ export default function MusclesPage() {
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: RECOVERY_COLORS[x.color] }} />
                 <span className="w-32 shrink-0 truncate text-[13px]">{m.label}</span>
                 <span className="tnum flex-1 text-[12px] text-muted">
-                  {fmtNum(x.vol7)} Sätze · {x.lastAny ? `${x.recovery} %` : '–'}
+                  {fmtNum(x.vol7)} Sätze · {recoveryInfo(x).short}
                 </span>
                 <span className="tnum text-[11px] text-muted">P {fmtNum(priorityWeight(m.id, s.profile.priorities), 2)}</span>
               </button>

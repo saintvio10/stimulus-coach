@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronLeft, ChevronRight, Clock, Dumbbell, Flame, Layers, Scale, Target, TrendingUp, Trophy, Footprints } from 'lucide-react';
 import { useStore } from '../lib/store';
+import { usePlan } from '../lib/hooks';
 import type { AppData } from '../lib/types';
 import { MUSCLE } from '../lib/muscles';
 import { addDays, cn, dateKey, fmtMin, fmtNum, parseKey, startOfWeek, MONTHS } from '../lib/utils';
@@ -57,8 +58,9 @@ export default function WeekReviewPage() {
   const thisWeek = startOfWeek(today);
   // Standard: letzte abgeschlossene Woche
   const [start, setStart] = useState(addDays(thisWeek, -7));
+  const plan = usePlan();
   const r = useMemo(
-    () => weekReview(data, start, (m) => personalTarget(data, m, s.settings.sessionsPerWeek)),
+    () => weekReview(data, start, (m) => personalTarget(data, m, plan.spw)),
     [start, s.sessions, s.exercises, s.body, s.activities, s.settings, s.profile], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const ring = 2 * Math.PI * 44;
@@ -225,7 +227,8 @@ export function WeekReviewCard({ onOpen }: { onOpen: () => void }) {
   const s = useStore();
   const data = s as unknown as AppData;
   const start = addDays(startOfWeek(dateKey()), -7);
-  const r = useMemo(() => weekReview(data, start, (m) => personalTarget(data, m, s.settings.sessionsPerWeek)), [s.sessions, s.exercises, s.body, s.settings]); // eslint-disable-line react-hooks/exhaustive-deps
+  const plan = usePlan();
+  const r = useMemo(() => weekReview(data, start, (m) => personalTarget(data, m, plan.spw)), [s.sessions, s.exercises, s.body, s.settings, plan.spw]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!r.sessions && !r.prevSessions) return null;
   const ring = 2 * Math.PI * 20;
   return (
@@ -241,7 +244,7 @@ export function WeekReviewCard({ onOpen }: { onOpen: () => void }) {
         <div className="label">Wochenrückblick · KW {isoWeek(start)}</div>
         <div className="text-[16px] font-semibold">{r.headline}</div>
         <div className="truncate text-[12.5px] text-muted">
-          {r.sessions} Einheiten · {r.sets} Sätze · {r.muscles.filter((m) => m.sets >= m.target * 0.9).length}/{r.muscles.length} Muskeln im Ziel
+          {r.sessions} {r.sessions === 1 ? "Einheit" : "Einheiten"} · {r.sets} Sätze · {r.muscles.filter((m) => m.sets >= m.target * 0.9).length}/{r.muscles.length} Muskeln im Ziel
         </div>
       </div>
       <ChevronRight size={18} className="shrink-0 text-muted" />

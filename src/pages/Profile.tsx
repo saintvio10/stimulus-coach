@@ -680,7 +680,7 @@ function LearningCard() {
           </button>
           <p className="mt-2 text-[11.5px] text-muted">
             Wöchentliche Prüfung je Muskel anhand der Kraftentwicklung (e1RM) der letzten 4 Wochen, Muskelkater und Bereitschaft: Fortschritt → gleich lassen, Stagnation bei guter
-            Erholung → +10 %, Leistungsabfall oder viel Muskelkater → −15 % (Grenzen −30 % bis +30 %).
+            Erholung → +10 %, Leistungsabfall oder viel Muskelkater → −15 % (Grenzen −30 % bis +30 %). Diese Prozentwerte sind Modellregeln der App, keine Studienwerte – sie werden anhand deiner Ergebnisse überprüft und können angepasst werden.
           </p>
         </div>
       </div>

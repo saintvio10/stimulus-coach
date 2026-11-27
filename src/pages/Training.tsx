@@ -292,6 +292,7 @@ function ExerciseCard({
   const rec = se.recWeight ?? advice.weight;
   const prIds = useMemo(() => prSetIds(s.sessions, session, ex), [s.sessions, session, ex]);
   const incAdvice = (se.adviceType ?? advice.type) === 'increase';
+  const decAdvice = (se.adviceType ?? advice.type) === 'decrease' && !!advice.cautious;
   const lastW = se.lastWeight ?? advice.lastWeight;
   const doneN = se.sets.filter((x) => x.done).length;
   const complete = doneN === se.sets.length && se.sets.length > 0;
@@ -464,11 +465,14 @@ function ExerciseCard({
             {se.setsReason && <span>{se.setsReason}</span>}
           </div>
 
-          {!(incAdvice && lastW != null && rec != null && rec > lastW && !se.decision && doneN === 0) && (
+          {!(((incAdvice && lastW != null && rec != null && rec > lastW) || (decAdvice && lastW != null && rec != null && rec < lastW)) && !se.decision && doneN === 0) && (
           <div className={cn('rounded-xl px-3 py-2.5 text-[13px]', advice.type === 'increase' ? 'bg-rec-green/10 text-rec-green' : advice.type === 'deload' || advice.type === 'decrease' ? 'bg-rec-orange/10 text-rec-orange' : 'bg-raised text-fg/85')}>
             <span className="flex gap-2">
               <Zap size={14} className="mt-0.5 shrink-0" />
-              <span>{se.adviceText ?? advice.text}</span>
+              <span>
+                {se.adviceText ?? advice.text}
+                {advice.rangeNote && !(se.adviceText ?? advice.text).includes('Zielbereich') && <span className="mt-1 block text-[12px] opacity-80">{advice.rangeNote}</span>}
+              </span>
             </span>
           </div>
           )}
@@ -480,7 +484,13 @@ function ExerciseCard({
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wider text-muted">Letztes Mal · {fmtShortDay(last.date)}</div>
                 <div className="tnum mt-0.5 text-[15px] font-semibold">
-                  {fmtNum(last.sets[0].weight)} kg <span className="font-normal text-muted">× {last.sets.map((x) => x.reps).join(' / ')} Wdh.</span>
+                  {new Set(last.sets.map((x) => x.weight)).size > 1 ? (
+                    <span className="text-[14px]">{last.sets.map((x) => `${fmtNum(x.weight)} × ${x.reps}`).join(' · ')}</span>
+                  ) : (
+                    <>
+                      {fmtNum(last.sets[0].weight)} kg <span className="font-normal text-muted">× {last.sets.map((x) => x.reps).join(' / ')} Wdh.</span>
+                    </>
+                  )}
                 </div>
               </div>
               {last.feedback && (
@@ -490,13 +500,13 @@ function ExerciseCard({
               )}
             </div>
           )}
-          {incAdvice && lastW != null && rec != null && rec > lastW && !se.decision && doneN === 0 && (
-            <div className="flex flex-col gap-3 rounded-2xl border border-rec-green/30 bg-rec-green/[0.08] p-3.5">
+          {((incAdvice && lastW != null && rec != null && rec > lastW) || (decAdvice && lastW != null && rec != null && rec < lastW)) && !se.decision && doneN === 0 && (
+            <div className={cn('flex flex-col gap-3 rounded-2xl border p-3.5', rec! > lastW! ? 'border-rec-green/30 bg-rec-green/[0.08]' : 'border-rec-orange/30 bg-rec-orange/[0.08]')}>
               <div className="flex items-start gap-2.5">
-                <TrendingUp size={18} className="mt-0.5 shrink-0 text-rec-green" />
+                <TrendingUp size={18} className={cn('mt-0.5 shrink-0', rec! > lastW! ? 'text-rec-green' : 'rotate-180 text-rec-orange')} />
                 <div>
                   <div className="tnum text-[15px] font-semibold">
-                    Zeit für mehr Gewicht: {fmtNum(lastW)} → {fmtNum(rec)} kg
+                    {rec! > lastW! ? 'Zeit für mehr Gewicht' : 'Vorschlag: etwas leichter'}: {fmtNum(lastW)} → {fmtNum(rec)} kg
                   </div>
                   <div className="mt-0.5 text-[12.5px] text-muted">{se.adviceText ?? advice.text}</div>
                 </div>
@@ -521,7 +531,11 @@ function ExerciseCard({
           )}
           {se.decision && (
             <div className="text-[12.5px] text-muted">
-              {se.decision === 'accepted' ? `✓ Steigerung auf ${fmtNum(rec)} kg übernommen.` : `Steigerung abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Lehnst du öfter ab, wartet die App künftig eine Wiederholung länger.`}{' '}
+              {se.decision === 'accepted'
+                ? `✓ ${rec != null && lastW != null && rec < lastW ? 'Reduktion' : 'Steigerung'} auf ${fmtNum(rec)} kg übernommen.`
+                : rec != null && lastW != null && rec < lastW
+                  ? `Abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Die nächste Einheit entscheidet: liegen die Wdh. wieder klar unter dem Ziel, wird die Reduktion verbindlich.`
+                  : `Steigerung abgelehnt – du bleibst bei ${fmtNum(lastW)} kg. Lehnst du öfter ab, wartet die App künftig eine Wiederholung länger.`}{' '}
               <button className="text-accent" onClick={() => s.patchExercise(session.id, se.uid, { decision: undefined })}>
                 ändern
               </button>

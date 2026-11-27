@@ -788,7 +788,7 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
   const data = s as unknown as AppData;
   const { states } = useMuscleStates();
   const [open, setOpen] = useState<MuscleId | null>(null);
-  const spw = Math.max(1, Math.min(3, plan.sessions.length || s.settings.sessionsPerWeek));
+  const spw = plan.spw; // gemeinsames Wochenziel für alle Ansichten
   const today = dateKey();
   const rows = s.profile.priorities
     .flatMap((g) => MUSCLES.filter((m) => m.group === g))
@@ -814,7 +814,8 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
           {reached} erreicht · {covered} geplant · {rows.length - reached - covered} offen
         </span>
       </div>
-      <p className="mb-4 text-[12px] text-muted">Sätze pro Muskel in den letzten 7 Tagen plus Plan der nächsten Tage – gemessen an deinem Wochenziel.</p>
+      <p className="mb-1 text-[12px] text-muted">Sätze pro Muskel in den letzten 7 Tagen (grün) plus Prognose aus dem Plan (schraffiert) – gemessen am Wochenziel (Strich).</p>
+      <p className="mb-4 text-[11px] text-muted/80">{plan.goalNote}</p>
       <div className="card flex flex-col gap-0.5 p-2">
         {rows.map((r) => {
           const max = Math.max(r.target, r.done + r.planned) || 1;
@@ -853,10 +854,13 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
                     <div>
                       <div className="text-[15px] font-semibold text-rec-green">{fmtNum(r.done)}</div>
                       <div className="text-muted">erledigt</div>
+                      <div className="text-[10.5px] text-muted/80">
+                        {fmtNum(states[r.m.id].direct7)} direkt + {fmtNum(states[r.m.id].indirect7 * 2)} × ½
+                      </div>
                     </div>
                     <div>
                       <div className="text-[15px] font-semibold text-accent">{fmtNum(r.planned)}</div>
-                      <div className="text-muted">geplant</div>
+                      <div className="text-muted">Prognose</div>
                     </div>
                     <div>
                       <div className="text-[15px] font-semibold">{fmtNum(r.target)}</div>
@@ -874,7 +878,7 @@ export function WeeklyNeed({ plan }: { plan: Plan }) {
                   )}
                   <p className="mt-2 text-muted">
                     {r.status === 'reached'
-                      ? 'Genug Reiz diese Woche – weitere Sätze bringen kaum Zusatznutzen, der Plan setzt andere Schwerpunkte.'
+                      ? 'Wochenziel erreicht – der Plan setzt jetzt andere Schwerpunkte (der Zusatznutzen weiterer Sätze nimmt laut Studien ab; die genaue Grenze ist individuell).'
                       : r.status === 'covered'
                         ? 'Die geplanten Einheiten bringen den Muskel ins Ziel.'
                         : r.days.length

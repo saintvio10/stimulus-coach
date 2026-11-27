@@ -479,8 +479,8 @@ const BENEFIT: Record<string, string> = {
  "lat-pulldown": "Latissimus in voller Dehnung oben, Bizeps arbeitet mit.",
  "chest-supported-row": "Oberer Rücken ohne Belastung des unteren Rückens – sauber bis ans Limit.",
  "cable-row": "Rücken mit konstanter Kabelspannung und guter Dehnung vorne.",
- "cable-lateral": "Kabel hält die Spannung auch unten in der Dehnung, wo Kurzhanteln kaum Last geben (biomechanisch plausibel, direkt kaum untersucht).",
- "db-lateral": "Seitliche Schulter mit Spannung vor allem oben – einfach und überall machbar.",
+ "cable-lateral": "Gleichmäßige Spannung über die ganze Bewegung. Larsen et al. 2025 (24 Trainierte, 8 Wochen): bei gleicher Bewegungsamplitude ähnliches Wachstum wie mit Kurzhanteln – nimm die Variante, die sich besser anfühlt.",
+ "db-lateral": "Einfach und überall machbar. Laut Larsen et al. 2025 bei gleicher Bewegungsamplitude ähnlich wirksam wie Kabel-Seitheben.",
  "reverse-cable-fly": "Hintere Schulter isoliert – runde, „3D“-Schultern und bessere Haltung.",
  "shoulder-press": "Vordere Schulter und Trizeps; die vordere Schulter bekommt über Brustdrücken aber schon viel ab.",
  "leg-press": "Viel Quadrizeps-Volumen bei wenig Belastung für den Rücken.",
@@ -521,7 +521,7 @@ export const REGION: Record<string, string> = {
   'preacher-curl': 'distal', 'bayesian-curl': 'long', 'db-curl': 'mid', 'hammer-curl': 'brachialis', 'home-curl': 'mid', 'home-hammer': 'brachialis',
   'overhead-ext': 'long', 'home-oh-ext': 'long', pushdown: 'lateral', 'pushup-diamond': 'lateral', 'dip-machine': 'press', 'bench-dip': 'press',
   'incline-press': 'upper', 'pushup-decline': 'upper', 'chest-press': 'mid', pushup: 'mid', butterfly: 'stretch', 'pushup-wide': 'stretch',
-  'cable-lateral': 'lengthened', 'home-lateral-db': 'lengthened', 'db-lateral': 'shortened', 'home-lateral': 'shortened',
+  // Seitheben: keine Bereichs-Rotation – Kabel und Kurzhantel wirkten bei gleicher Amplitude ähnlich (Larsen 2025)
   'leg-press': 'vasti', 'split-squat': 'vasti', lunge: 'vasti', 'home-goblet': 'vasti', 'leg-extension': 'rectus',
   'seated-leg-curl': 'knee', 'nordic-curl': 'knee', rdl: 'hip', 'home-sl-rdl': 'hip',
 };
@@ -538,8 +538,6 @@ export const REGION_LABEL: Record<string, string> = {
   'chest:upper': 'obere Brust',
   'chest:mid': 'mittlere/untere Brust mit schwerer Last',
   'chest:stretch': 'Brust in voller Dehnung',
-  'sideDelts:lengthened': 'seitliche Schulter mit Spannung unten in der Dehnung',
-  'sideDelts:shortened': 'seitliche Schulter mit Spannung oben',
   'quads:vasti': 'die drei Vastus-Köpfe (Beinpresse/Kniebeuge)',
   'quads:rectus': 'Rectus femoris – wächst kaum durch Beinpresse',
   'hamstrings:knee': 'Beinbeuger über Kniebeugung',

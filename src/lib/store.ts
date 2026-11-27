@@ -161,7 +161,7 @@ export function migrate(raw: Partial<AppData>): AppData {
   d.exercises = d.exercises.map((x) => {
     const def = DEFAULT_EXERCISES.find((e) => e.id === x.id);
     let y = def?.unilateral && x.unilateral === undefined ? { ...x, unilateral: true } : x;
-    if (def?.region && !y.region) y = { ...y, region: def.region };
+    if (def && !x.custom && y.region !== def.region) y = { ...y, region: def.region };
     // Übungen ohne Gym immer auf aktuellen Stand bringen (z. B. Rucksack → Hantel/Flaschen), Favorit/Sperre bleiben
     if (def?.location === 'home' && !x.custom) y = { ...def, favorite: x.favorite, locked: x.locked };
     return y;

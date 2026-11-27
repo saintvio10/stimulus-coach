@@ -106,9 +106,9 @@ export const RECOVERY_COLORS = {
 export type RecoveryColor = keyof typeof RECOVERY_COLORS;
 
 export const RECOVERY_LABEL: Record<RecoveryColor, string> = {
-  gray: 'Länger nicht trainiert',
-  green: 'Wahrscheinlich regeneriert',
-  yellow: 'Kürzlich trainiert',
-  orange: 'Möglicherweise noch ermüdet',
-  red: 'Hohe Belastung',
+  gray: 'Länger nicht belastet',
+  green: 'Wahrscheinlich erholt',
+  yellow: 'Teilweise erholt',
+  orange: 'Noch belastet – Belastung reduzieren',
+  red: 'Frisch belastet – eher pausieren',
 };

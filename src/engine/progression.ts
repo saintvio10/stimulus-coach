@@ -1,3 +1,4 @@
+import { readinessScore } from './readiness';
 import type { CheckIn, Exercise, ProgressionAdvice, Session, SetLog, Settings } from '../lib/types';
 import { e1rm, fmtNum, nextWeight, prevWeight } from '../lib/utils';
 
@@ -54,10 +55,16 @@ export function adviseExercise(
   ex: Exercise,
   sessions: Session[],
   ctx: AdviceCtx,
-  repMin = ex.repMin,
-  repMax = ex.repMax,
+  _repMin = ex.repMin,
+  _repMax = ex.repMax,
   targetRir = ex.targetRir,
 ): ProgressionAdvice {
+  // Grundlage ist immer der Wiederholungsbereich der Übung – ein in der Einheit bereits erweiterter Bereich
+  // darf die Schwelle nicht erneut verschieben (sonst 8–12 → 14 → 16 …).
+  const repMin = ex.repMin;
+  const repMax = ex.repMax;
+  void _repMin;
+  void _repMax;
   const hist = exposures(ex.id, sessions);
   const base: ProgressionAdvice = {
     type: 'new',
@@ -74,6 +81,7 @@ export function adviseExercise(
     lastReps: [],
     lastDate: null,
     stalled: false,
+    repMax,
   };
   if (!hist.length) return base;
 
@@ -127,6 +135,30 @@ export function adviseExercise(
   const rirOk = avgRir == null || avgRir <= targetRir + 1 || fb === 'easy';
   const tooEasy = fb !== 'hard' && ((avgRir != null && avgRir >= targetRir + 3) || (fb === 'easy' && reps.every((r) => r >= repMin)));
   const learnTxt = learn.length ? ` (Angepasst, weil ${learn.join(' und ')}.)` : '';
+  if (new Set(last.sets.map((s) => s.weight)).size > 1) res.lastDetail = last.sets.map((s) => `${fmtNum(s.weight ?? 0)} × ${s.reps}`).join(' · ');
+  // Der angezeigte Zielbereich muss zur Steigerungsregel passen
+  res.repMax = Math.max(repMax, topReps);
+  if (topReps > repMax) {
+    const why: string[] = [];
+    if (bigJump) why.push(`die nächste Gewichtsstufe (${fmtNum(next)} kg) wäre +${Math.round(jump * 100)} % – erst mehr Wdh. aufbauen`);
+    if (learn.length) why.push(learn.join(' und '));
+    res.rangeNote = `Zielbereich ${repMin}–${res.repMax} statt ${repMin}–${repMax}: ${why.join('; ')}.`;
+  }
+  // Gemischte Gewichte: schwerere Sätze getrennt bewerten
+  const heavier = last.sets.filter((s) => (s.weight ?? 0) > w);
+  const heavyMax = heavier.length ? Math.max(...heavier.map((s) => s.weight ?? 0)) : 0;
+  const heavyReps = heavier.filter((s) => s.weight === heavyMax).map((s) => s.reps ?? 0);
+  const heavyNote = heavier.length && heavyReps.some((r) => r < repMin) ? ` ${fmtNum(heavyMax)} kg war mit ${heavyReps.join('/')} Wdh. für ${repMin}–${res.repMax} zu schwer.` : '';
+  // Kontext für Unterschreitungen: Anstrengung, Pausen, Tagesform
+  const lowEffort = avgRir != null && avgRir >= targetRir + 2;
+  const times = last.sets.map((s) => s.doneAt).filter((x): x is number => x != null).sort((a, b) => a - b);
+  const gaps = times.slice(1).map((x, i) => (x - times[i]) / 1000).filter((g) => g > 5 && g < 900);
+  const medGap = gaps.length ? [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)] : null;
+  const shortRest = medGap != null && medGap < ex.restSec * 0.6;
+  const rd = readinessScore(ctx.checkIns[last.date]);
+  const badDay = rd != null && rd < 45;
+  const lighterOk = last.sets.filter((s) => (s.weight ?? 0) < w && (s.reps ?? 0) >= repMin).map((s) => s.weight ?? 0);
+  const lighter = lighterOk.length ? Math.max(...lighterOk) : null;
 
   if (fb === 'hard' && reps.some((r) => r < repMin) && w > 0) {
     const lower = prevWeight(w, ex, ctx.settings);
@@ -150,16 +182,30 @@ export function adviseExercise(
     res.text = fb === 'easy' ? `Du hast ${fmtNum(w)} kg zuletzt als zu leicht bewertet → heute ${fmtNum(next)} kg.` : `Letztes Mal Ø ${fmtNum(avgRir!)} RIR – deutlich leichter als Ziel-RIR ${targetRir}. Gewicht auf ${fmtNum(next)} kg erhöhen.`;
   } else if (reps.some((r) => r < repMin)) {
     const prevBelow = hist[1] && workingWeight(hist[1].sets) === w && hist[1].sets.some((s) => (s.reps ?? 0) < repMin);
-    if (prevBelow) {
-      const lower = prevWeight(w, ex, ctx.settings);
+    const avg = reps.reduce((x, y) => x + y, 0) / reps.length;
+    const deficit = repMin - avg;
+    const lower = lighter ?? prevWeight(w, ex, ctx.settings);
+    const ctxNotes: string[] = [];
+    if (shortRest) ctxNotes.push(`Pausen waren kurz (Ø ${Math.round(medGap! / 60 * 10) / 10} min statt ${Math.round(ex.restSec / 6) / 10} min)`);
+    if (badDay) ctxNotes.push('Tagesform war schwach (Check-in)');
+    if (lowEffort) ctxNotes.push(`Sätze endeten weit vor dem Versagen (Ø ${fmtNum(avgRir!)} RIR)`);
+    if (prevBelow && lower < w) {
+      // wiederholte Unterschreitung → klare Anpassung
       res.type = 'decrease';
       res.weight = lower;
-      res.repTarget = repMin + 2;
-      res.text = `Zweimal in Folge unter ${repMin} Wdh. bei ${fmtNum(w)} kg → auf ${fmtNum(lower)} kg reduzieren und wieder sauber im Bereich aufbauen.`;
+      res.repTarget = repMin + 1;
+      res.text = `Zweimal in Folge unter ${repMin} Wdh. bei ${fmtNum(w)} kg → ${fmtNum(lower)} kg und sauber im Bereich ${repMin}–${res.repMax} aufbauen.${heavyNote}`;
+    } else if (deficit >= 3 && !lowEffort && !badDay && lower < w) {
+      // einzelne deutlich schwache Einheit → vorsichtige Empfehlung, ablehnbar
+      res.type = 'decrease';
+      res.cautious = true;
+      res.weight = lower;
+      res.repTarget = repMin;
+      res.text = `Vorsichtige Empfehlung: ${fmtNum(lower)} kg. Bei ${fmtNum(w)} kg zuletzt ${reps.join('/')} Wdh. – deutlich unter ${repMin}.${heavyNote}${ctxNotes.length ? ` Mögliche Ursache: ${ctxNotes.join(', ')}.` : ''} War es nur ein schwacher Tag, kannst du auch bei ${fmtNum(w)} kg bleiben.`;
     } else {
       res.type = 'hold';
       res.repTarget = repMin;
-      res.text = `Gewicht halten (${fmtNum(w)} kg). Ziel: in jedem Satz mindestens ${repMin} Wdh.`;
+      res.text = `Gewicht halten (${fmtNum(w)} kg), Ziel mindestens ${repMin} Wdh. pro Satz (zuletzt ${reps.join('/')}).${heavyNote}${ctxNotes.length ? ` Hinweis: ${ctxNotes.join(', ')} – darum noch keine Gewichtsreduktion.` : ''}`;
     }
   } else {
     res.type = 'hold';
