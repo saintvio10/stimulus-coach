@@ -1,7 +1,8 @@
 import { JOINT_LABEL, painConflict } from './joints';
 import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL, frequencyFactor } from '../lib/muscles';
-import type { AppData, Exercise, HomeFocus, MuscleId, ProgressionAdvice } from '../lib/types';
+import type { AppData, Exercise, HomeFocusValue, MuscleId, ProgressionAdvice, Session } from '../lib/types';
+import { focusLabel, focusMuscles } from './homeFocus';
 import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor, fmtMin } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent, recoveryInfo } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
@@ -240,13 +241,6 @@ interface BuildOpts {
   focusMuscles?: MuscleId[];
 }
 
-/** Schwerpunkte für Training ohne Gym */
-export const HOME_FOCUS: Record<HomeFocus, { label: string; short: string; muscles: MuscleId[] | null }> = {
-  all: { label: 'Ganzkörper', short: 'Ganzkörper', muscles: null },
-  upper: { label: 'Oberkörper (Brust, Rücken, Arme, Schultern)', short: 'Oberkörper', muscles: ['chest', 'lats', 'upperBack', 'biceps', 'triceps', 'sideDelts', 'rearDelts', 'frontDelts', 'forearms'] },
-  arms: { label: 'Arme & Schultern', short: 'Arme & Schultern', muscles: ['biceps', 'triceps', 'sideDelts', 'rearDelts', 'frontDelts', 'forearms'] },
-  lower: { label: 'Beine & Bauch', short: 'Beine & Bauch', muscles: ['quads', 'hamstrings', 'glutes', 'calves', 'abs'] },
-};
 
 export type HomeMode = 'bw' | 'weights';
 
@@ -319,6 +313,9 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const muscleValue = (m: MuscleId, s: number, sd: number) => {
     const sc = scores[m];
     if (s >= MUSCLE[m].sessionCap) return 0;
+    // Ausdrücklich gewählter Schwerpunkt (ohne Gym): kein Auffüllen über das Wochenziel hinaus – die Zeit wird
+    // nicht mit einem schon ausreichend trainierten Muskel gefüllt, nur weil er gewählt ist
+    if (o.focusMuscles && Math.max(carry[m] ?? 0, states[m].vol7) + s >= sc.target) return 0;
     const overWeek = (carry[m] ?? 0) + s >= sc.target * 1.3 ? 0.3 : 1;
     // Breiten-Bonus: der erste DIREKTE Satz eines Muskels ist am wertvollsten (v. a. im Ganzkörpertraining).
     // Indirekte Sätze (z. B. Bizeps beim Rudern) verbrauchen den Bonus nicht – sonst bekäme Priorität 1 evtl. gar keine eigene Übung.
@@ -506,8 +503,16 @@ export function buildSession(o: BuildOpts): PlannedSession {
         // keine fast identische Variante (z. B. Seitheben Kabel + Kurzhantel, zwei Ruder-Varianten)
         if (samePrimary.some((i) => familyOf(i.ex) === familyOf(ex))) continue;
         // nur so viele Startsätze, wie unter der Obergrenze pro Muskel noch Platz ist (mind. 2, sonst lohnt die Übung nicht)
-        const nNew = Math.min(startSets, capRoom(ex));
-        if (nNew < 2) continue;
+        // Schwerpunkt-Modus: keine Übung, deren Zielmuskel sein Wochenziel schon erreicht hat (z. B. enge Liegestütze bei zu viel Trizeps)
+        if (o.focusMuscles && Math.max(carry[ex.primary] ?? 0, states[ex.primary].vol7) >= scores[ex.primary].target) continue;
+        let nNew = Math.min(startSets, capRoom(ex));
+        // Ausdrücklich gewählter Schwerpunkt (ohne Gym): fehlen dem Muskel nur noch 1–2 Sätze zum Wochenziel,
+        // plant die App genau so viele – statt gar nichts oder zu viel
+        if (o.focusMuscles) {
+          const rem = scores[ex.primary].target - Math.max(carry[ex.primary] ?? 0, states[ex.primary].vol7) - sSets[ex.primary];
+          if (rem >= 0.5 && rem < nNew) nNew = Math.max(1, Math.round(rem));
+        }
+        if (nNew < (o.focusMuscles ? 1 : 2)) continue;
         const t = nNew * TE.perSet(ex, { short }) + TE.setup(ex);
         if (used + t > budget) continue;
         const v = valueOfSets(ex, nNew);
@@ -1173,7 +1178,7 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
           tentative: tentativeSet.has(d),
           nextDates: allDates.slice(i + 1).filter((x) => !tentativeSet.has(x)),
           home: homeOf(d),
-          focusMuscles: homeOf(d) ? HOME_FOCUS[data.planOptions.homeFocus?.[d] ?? 'all'].muscles ?? undefined : undefined,
+          focusMuscles: homeOf(d) ? focusMuscles(data.planOptions.homeFocus?.[d]) : undefined,
           prevPlanned,
           today,
           coverage,
@@ -1204,11 +1209,12 @@ export function buildPlan(data: AppData, now = Date.now(), opts: PlanOpts = {}):
         const armEx = best.exercises.filter((p) => ['biceps', 'triceps'].includes(data.exercises.find((e) => e.id === p.exerciseId)?.primary ?? '')).length;
         if (armEx === 0) best.label = 'Ganzkörper (angepasst)';
       }
-      const hf = best.home ? data.planOptions.homeFocus?.[d] ?? 'all' : 'all';
-      if (best.home && hf !== 'all') {
-        best.label = `Unterwegs · ${HOME_FOCUS[hf].short}`;
+      const hfm = best.home ? focusMuscles(data.planOptions.homeFocus?.[d]) : undefined;
+      if (best.home && hfm) {
+        const fl = focusLabel(data.planOptions.homeFocus?.[d]);
+        best.label = `Unterwegs · ${fl}`;
         best.focus = undefined;
-        best.reasons.unshift(`Schwerpunkt heute: ${HOME_FOCUS[hf].label} – andere Muskeln holt der Plan an den nächsten Tagen nach.`);
+        best.reasons.unshift(`Schwerpunkt heute: ${fl} – andere Muskeln holt der Plan an den nächsten Tagen nach.`);
       }
       if (best.home && !best.label.startsWith('Unterwegs')) {
         best.label = `Unterwegs · ${best.label.split(' (')[0]}`;
@@ -1304,7 +1310,12 @@ export function planToday(data: AppData, minutes?: number, now = Date.now()): Pl
 }
 
 /** Heutiges Training ohne Gym (unterwegs/zu Hause) – gleicher Coach, nur mit Körpergewicht- bzw. Hantel-/Flaschen-ack-Übungen */
-export function planHome(data: AppData, minutes: number, mode: HomeMode, now = Date.now(), focus?: HomeFocus): PlannedSession | null {
+export function planHome(data: AppData, minutes: number, mode: HomeMode, now = Date.now(), focus?: HomeFocusValue): PlannedSession | null {
+  return planHomeWithNext(data, minutes, mode, now, focus).session;
+}
+
+/** Wie planHome, plus die nächste Einheit danach (rechnet schon mit diesem Training) */
+export function planHomeWithNext(data: AppData, minutes: number, mode: HomeMode, now = Date.now(), focus?: HomeFocusValue): { session: PlannedSession | null; next: PlannedSession | null } {
   const today = dateKey(now);
   const withToday: AppData = {
     ...data,
@@ -1313,8 +1324,22 @@ export function planHome(data: AppData, minutes: number, mode: HomeMode, now = D
   };
   const p = buildPlan(withToday, now, { forceToday: true, minutesToday: minutes, home: mode });
   const s = p.sessions.find((x) => x.date === today && !x.rest) ?? null;
-  if (!s) return null;
-  return s.label.startsWith('Unterwegs') ? s : { ...s, label: `Unterwegs · ${s.label.split(' (')[0]}` };
+  // Nächste Einheit: so planen, als wäre das heutige Training schon gemacht (gleiche Rechnung wie danach in der App)
+  let next: PlannedSession | null = null;
+  if (s) {
+    const t = now + HOUR;
+    const done: Session = {
+      id: '__home_preview__', date: today, startedAt: now, endedAt: t, status: 'done', title: s.label, split: s.templateId, plannedMinutes: minutes, location: 'home',
+      exercises: s.exercises.map((pe, k) => ({
+        uid: `hp${k}`, exerciseId: pe.exerciseId, repMin: pe.repMin, repMax: pe.repMax, targetRir: pe.targetRir, restSec: pe.restSec, recWeight: pe.recWeight, skipped: false, note: '',
+        sets: Array.from({ length: pe.sets }, (_, j) => ({ id: `hp${k}-${j}`, weight: pe.recWeight, reps: pe.advice.repTarget, rir: pe.targetRir, failure: false, done: true, doneAt: now + j * 60_000, note: '' })),
+      })),
+    };
+    const after = buildPlan({ ...data, sessions: [...data.sessions, done] }, t);
+    next = after.sessions.find((x) => x.date > today && !x.rest) ?? null;
+  }
+  if (!s) return { session: null, next };
+  return { session: s.label.startsWith('Unterwegs') ? s : { ...s, label: `Unterwegs · ${s.label.split(' (')[0]}` }, next };
 }
 
 export function muscleLabelList(ms: MuscleId[]): string {

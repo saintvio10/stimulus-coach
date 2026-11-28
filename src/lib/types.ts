@@ -205,12 +205,14 @@ export interface PlanOptions {
   preferDates?: string[];
   /** Datum, an dem zuletzt nach der Verfügbarkeit gefragt wurde */
   askedOn?: string;
-  /** Schwerpunkt für Training ohne Gym je Tag (z. B. heute nur Oberkörper) */
-  homeFocus?: Record<string, HomeFocus>;
+  /** Schwerpunkt für Training ohne Gym je Tag: gewählte Muskelgruppen (fehlt/leer = Ganzkörper) */
+  homeFocus?: Record<string, HomeFocusValue>;
 }
 
-/** Schwerpunkt beim Training ohne Gym */
-export type HomeFocus = 'all' | 'upper' | 'arms' | 'lower';
+/** Muskelgruppen, die beim Training ohne Gym einzeln wählbar sind */
+export type HomeGroup = 'chest' | 'back' | 'biceps' | 'triceps' | 'shoulders' | 'abs' | 'legs';
+/** gespeicherter Schwerpunkt: Liste der Gruppen (ältere Versionen: 'all' | 'upper' | 'arms' | 'lower') */
+export type HomeFocusValue = HomeGroup[] | 'all' | 'upper' | 'arms' | 'lower';
 
 export interface CheckIn {
   sleepHours: number;

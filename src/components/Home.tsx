@@ -20,7 +20,8 @@ import { AddMenu } from './Extras';
 import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
 import { SwipeToStart } from './SwipeToStart';
 import { ExerciseInfoSheet } from './ExerciseInfo';
-import { HomeFocusChips } from './HomeWorkout';
+import { FocusStatusList, HomeFocusPicker } from './HomeWorkout';
+import { focusGroups, isAllGroups } from '../engine/homeFocus';
 import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability, DayDuration } from './Coach';
 import { useStartScreen } from './StartScreen';
 import { unlockAudio } from './RestTimer';
@@ -412,8 +413,9 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
             </div>
             {planned.home && (
               <div className="-mt-2 flex flex-col gap-1.5">
-                <div className="text-[12px] text-muted">Ohne Gym – Schwerpunkt wählen:</div>
-                <HomeFocusChips value={s.planOptions.homeFocus?.[day] ?? 'all'} onChange={(f) => s.mutate((d) => void (d.planOptions.homeFocus = { ...(d.planOptions.homeFocus ?? {}), [day]: f }))} />
+                <div className="text-[12px] text-muted">Ohne Gym – was willst du trainieren?</div>
+                <HomeFocusPicker value={s.planOptions.homeFocus?.[day]} onChange={(g) => s.mutate((d) => void (d.planOptions.homeFocus = { ...(d.planOptions.homeFocus ?? {}), [day]: g }))} />
+                {!isAllGroups(focusGroups(s.planOptions.homeFocus?.[day])) && <FocusStatusList plan={planned} groups={focusGroups(s.planOptions.homeFocus?.[day])} />}
               </div>
             )}
             <DayDuration date={planned.date} plan={planned} />
