@@ -314,30 +314,6 @@ export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; 
     s.startSession(p ?? planToday(data));
     go('training');
   };
-  const setAvail = (a: Availability) => {
-    s.setAvailability(day, a);
-    toast(a === 'yes' ? `${relDayLabel(day)}: Zeit – Plan wird neu berechnet` : a === 'no' ? `${relDayLabel(day)}: keine Zeit` : `${relDayLabel(day)}: vielleicht`);
-  };
-
-  const availBar = (
-    <div className="grid grid-cols-3 gap-1 rounded-full bg-black/30 p-1 backdrop-blur">
-      {(
-        [
-          ['yes', 'Zeit'],
-          ['maybe', 'Vielleicht'],
-          ['no', 'Keine Zeit'],
-        ] as const
-      ).map(([v, l]) => (
-        <button
-          key={v}
-          onClick={() => setAvail(v)}
-          className={cn('h-10 rounded-full px-3 text-[13.5px] font-semibold transition', avail === v ? (v === 'no' ? 'bg-rec-red text-bg shadow-[0_0_14px_rgb(var(--rec-red)/0.55)]' : v === 'maybe' ? 'bg-rec-yellow text-bg shadow-[0_0_14px_rgb(var(--rec-yellow)/0.5)]' : 'bg-rec-green text-bg shadow-[0_0_14px_rgb(var(--rec-green)/0.55)]') : 'text-fg/70')}
-        >
-          {l}
-        </button>
-      ))}
-    </div>
-  );
 
   return (
     <section className="relative flex flex-col overflow-hidden rounded-[28px] border border-line/[0.08] bg-[linear-gradient(160deg,rgb(var(--raised)),rgb(var(--surface))_55%)]" style={minH ? { minHeight: minH } : undefined}>
@@ -552,12 +528,6 @@ export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; 
           </>
         )}
 
-        {!(active && isToday) && !doneHere.length && (
-          <div className="mt-auto flex flex-col gap-2 border-t border-line/[0.07] pt-3">
-            <span className="text-[12px] text-muted">{isToday ? 'Hast du heute Zeit?' : `Hast du ${relDayLabel(day).split(',')[0]} Zeit?`}</span>
-            {availBar}
-          </div>
-        )}
       </div>
       {info && exMap.get(info.exerciseId) && <ExerciseInfoSheet ex={exMap.get(info.exerciseId)!} plan={info} onClose={() => setInfo(null)} />}
     </section>
