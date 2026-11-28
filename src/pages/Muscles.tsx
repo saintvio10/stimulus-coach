@@ -6,6 +6,7 @@ import { useMuscleStates, usePlan } from '../lib/hooks';
 import { Badge, Bar, Card, PageHeader, SectionTitle, Segmented } from '../components/ui';
 import { FigureFrame, MuscleFigure } from '../components/MuscleFigure';
 import { RecoveryBars } from '../components/RecoveryBars';
+import { GrowthCard } from '../components/GrowthCard';
 import { MUSCLE, MUSCLES, RECOVERY_COLORS, RECOVERY_LABEL, minDose14, priorityWeight, weeklyTarget, type RecoveryColor } from '../lib/muscles';
 import type { AppData, MuscleId } from '../lib/types';
 import { personalTarget } from '../engine/planner';
@@ -137,6 +138,8 @@ export default function MusclesPage() {
           </p>
         </Card>
       </div>
+
+      <GrowthCard />
 
       <Card>
         <SectionTitle>Muskelregeneration</SectionTitle>

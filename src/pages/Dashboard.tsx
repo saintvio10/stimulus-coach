@@ -16,6 +16,7 @@ import { WeightCard } from '../components/Extras';
 import { BackupReminder } from '../components/Backup';
 import { RecentWorkouts } from '../components/RecentWorkouts';
 import { RecoveryBars } from '../components/RecoveryBars';
+import { GrowthSummary } from '../components/GrowthCard';
 import { WeekReviewCard } from './WeekReview';
 
 export default function Dashboard() {
@@ -79,6 +80,7 @@ export default function Dashboard() {
       <BackupReminder />
       <WeightCard />
       <WeeklyNeed plan={plan} />
+      <GrowthSummary onOpen={() => go('muskeln')} />
       <WeekReviewCard onOpen={() => go('rueckblick')} />
       <QuickStart />
 
