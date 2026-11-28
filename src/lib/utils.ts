@@ -117,14 +117,18 @@ export function weightSteps(ex: Exercise, s: Settings): { list?: number[]; step:
   if (ex.location === 'home') {
     const b = s.homeBottle || 1;
     const h = s.homeDumbbell || 10;
-    // Körpergewicht: ohne Zusatzlast oder mit deiner Hantel (auf dem Schoß, in der Hand, im Rucksack) – 1-kg-Flaschen
+    const nb = s.homeBottleCount ?? 2;
+    const nd = s.homeDumbbellCount ?? 1;
+    const uniq = (xs: number[]) => [...new Set(xs.map(r2))].sort((x, y) => x - y);
+    // Körpergewicht: ohne Zusatzlast oder mit deiner Hantel (auf dem Schoß, in der Hand, im Rucksack) – Flaschen
     // machen bei Körpergewicht keinen spürbaren Unterschied; manche Übungen lassen sich gar nicht sinnvoll beschweren
-    if (ex.equipment === 'bodyweight') return { list: ex.homeLoad === 'none' ? [0] : [0, h], step: 0 };
-    // je eine Flasche pro Hand: schwerer geht pro Hand nicht (2 Flaschen in einer Hand fehlen dann der anderen)
-    if (ex.homeLoad === 'bottles') return { list: [b], step: 0 };
-    // beide Hände an der einen Hantel
-    if (ex.homeLoad === 'oneDumbbell') return { list: [h], step: 0 };
-    return { list: [...new Set([b, 2 * b, h])].sort((x, y) => x - y), step: 0 };
+    if (ex.equipment === 'bodyweight') return { list: ex.homeLoad === 'none' ? [0] : uniq([0, ...(nd >= 1 ? [h] : []), ...(nd >= 2 ? [2 * h] : [])]), step: 0 };
+    // je ein Gewicht pro Hand: zwei Flaschen und/oder zwei Hanteln
+    if (ex.homeLoad === 'bottles') return { list: uniq([...(nb >= 2 ? [b] : []), ...(nd >= 2 ? [h] : [])]), step: 0 };
+    // beide Hände an einem Gewicht (Goblet): eine Hantel, mit zwei Hanteln auch beide
+    if (ex.homeLoad === 'oneDumbbell') return { list: uniq([...(nd >= 1 ? [h] : []), ...(nd >= 2 ? [2 * h] : [])]), step: 0 };
+    // einarmig: Flasche(n) oder Hantel in einer Hand
+    return { list: uniq([...(nb >= 1 ? [b] : []), ...(nb >= 2 ? [2 * b] : []), ...(nd >= 1 ? [h] : [])]), step: 0 };
   }
   if (ex.increment) return { step: ex.increment };
   switch (ex.equipment) {
@@ -162,9 +166,15 @@ export function prevWeight(current: number, ex: Exercise, s: Settings): number {
   return v > 0 ? v : current;
 }
 
+/** Mit deiner Ausrüstung unterwegs machbar? (keine passende Last → Übung nicht einplanen) */
+export function homeFeasible(ex: Exercise, s: Settings): boolean {
+  if (ex.location !== 'home' || ex.equipment === 'bodyweight') return true;
+  return (weightSteps(ex, s).list ?? []).length > 0;
+}
+
 /** Wofür das Gewicht gilt – bei Kurzhanteln/Flaschen „pro Hand“ */
 export function loadHint(ex: Exercise): string {
-  if (ex.homeLoad === 'bottles') return 'pro Hand (Flasche)';
+  if (ex.homeLoad === 'bottles') return 'pro Hand';
   if (ex.homeLoad === 'oneDumbbell') return 'eine Hantel, beidhändig';
   if (ex.equipment === 'dumbbell') return 'pro Hand';
   return '';

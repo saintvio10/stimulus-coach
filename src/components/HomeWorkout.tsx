@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, Check, House, Minus } from 'lucide-react';
 import { useStore } from '../lib/store';
 import { useRouter } from '../lib/hooks';
-import type { AppData, HomeFocusValue, HomeGroup } from '../lib/types';
+import type { AppData, HomeFocusValue, HomeGroup, Settings } from '../lib/types';
 import { planHome, planHomeWithNext, type HomeMode, type PlannedSession } from '../engine/planner';
 import { HOME_GROUP_IDS, HOME_GROUPS, HOME_PRESETS, focusGroups, focusLabel, focusStatus, isAllGroups } from '../engine/homeFocus';
 import { MUSCLE } from '../lib/muscles';
@@ -10,6 +10,78 @@ import { Button, Chip, Sheet } from './ui';
 import { SessionPreview } from './Coach';
 import { unlockAudio } from './RestTimer';
 import { cn, dateKey, fmtMin, fmtNum, relDayLabel } from '../lib/utils';
+
+/** Kurzbeschreibung deiner Ausrüstung, z. B. „1 Hantel 7,5 kg · 2 Flaschen à 1 l“ */
+export function equipmentText(st: Settings): string {
+  const nd = st.homeDumbbellCount ?? 1;
+  const nb = st.homeBottleCount ?? 2;
+  const parts = [
+    nd ? `${nd} ${nd === 1 ? 'Hantel' : 'Hanteln'} ${fmtNum(st.homeDumbbell ?? 7.5)} kg` : '',
+    nb ? `${nb} ${nb === 1 ? 'Flasche' : 'Flaschen'} à ${fmtNum(st.homeBottle ?? 1)} l` : '',
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'nichts eingetragen';
+}
+
+function Count({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  return (
+    <div className="grid grid-cols-3 gap-1 rounded-full bg-bg p-1" role="group" aria-label={label}>
+      {[0, 1, 2].map((n) => (
+        <button key={n} onClick={() => onChange(n)} aria-pressed={value === n} className={cn('h-8 rounded-full px-2.5 text-[12.5px] font-semibold transition', value === n ? 'bg-fg text-bg' : 'text-fg/70')}>
+          {n === 0 ? 'keine' : n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Ausrüstung unterwegs: Anzahl Hanteln + Gewicht, Anzahl Wasserflaschen + Liter (1 l ≈ 1 kg) */
+export function HomeEquipment() {
+  const s = useStore();
+  const st = s.settings;
+  const nd = st.homeDumbbellCount ?? 1;
+  const nb = st.homeBottleCount ?? 2;
+  const set = (patch: Partial<Settings>) => s.mutate((d) => void Object.assign(d.settings, patch));
+  return (
+    <div className="flex flex-col gap-2 rounded-2xl bg-raised p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] font-medium">Hanteln</span>
+        <Count label="Anzahl Hanteln" value={nd} onChange={(n) => set({ homeDumbbellCount: n })} />
+      </div>
+      {nd > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12.5px] text-muted">Gewicht {nd === 2 ? 'je Hantel' : 'der Hantel'}</span>
+          <div className="flex items-center gap-2">
+            <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel leichter" onClick={() => set({ homeDumbbell: Math.max(0.5, (st.homeDumbbell ?? 7.5) - 0.5) })}>
+              −
+            </button>
+            <span className="tnum w-14 text-center text-[15px] font-semibold">{fmtNum(st.homeDumbbell ?? 7.5)} kg</span>
+            <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel schwerer" onClick={() => set({ homeDumbbell: (st.homeDumbbell ?? 7.5) + 0.5 })}>
+              +
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="my-0.5 h-px bg-line/[0.07]" />
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] font-medium">Wasserflaschen</span>
+        <Count label="Anzahl Wasserflaschen" value={nb} onChange={(n) => set({ homeBottleCount: n })} />
+      </div>
+      {nb > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[12.5px] text-muted">Größe {nb === 2 ? 'je Flasche' : ''}</span>
+          <div className="flex gap-1">
+            {[0.5, 1, 1.5, 2].map((l) => (
+              <Chip key={l} active={(st.homeBottle ?? 1) === l} onClick={() => set({ homeBottle: l })} className="h-8 px-2.5">
+                {fmtNum(l)} l
+              </Chip>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="text-[11px] text-muted">1 l Wasser ≈ 1 kg. Übungen, für die deine Ausrüstung nicht reicht (z. B. Seitheben mit 2 Gewichten bei nur einer Flasche), plant der Coach nicht ein.</p>
+    </div>
+  );
+}
 
 /** Schwerpunkt beim Training ohne Gym: Muskelgruppen einzeln an-/abwählen, darüber Schnellauswahl */
 export function HomeFocusPicker({ value, onChange }: { value: HomeFocusValue | undefined; onChange: (g: HomeGroup[]) => void }) {
@@ -118,7 +190,7 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
             {(
               [
                 ['bw', 'Nur Körpergewicht', 'Liegestütze, Dips, Split Squats …'],
-                ['weights', 'Hantel & Flaschen', `Hantel ${fmtNum(s.settings.homeDumbbell ?? 10)} kg · Flaschen à ${fmtNum(s.settings.homeBottle ?? 1)} kg`],
+                ['weights', 'Hantel & Flaschen', equipmentText(s.settings)],
               ] as const
             ).map(([v, t, sub]) => (
               <button
@@ -137,20 +209,7 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
           <HomeFocusPicker value={focusRaw} onChange={setFocus} />
         </div>
         {plan && !all && <FocusStatusList plan={plan} groups={groups} />}
-        {mode === 'weights' && (
-          <div className="flex items-center justify-between rounded-xl bg-raised px-3 py-2">
-            <span className="text-[13px]">Gewicht deiner Hantel</span>
-            <div className="flex items-center gap-2">
-              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel leichter" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = Math.max(1, (d.settings.homeDumbbell ?? 10) - 0.5)))}>
-                −
-              </button>
-              <span className="tnum w-14 text-center text-[15px] font-semibold">{fmtNum(s.settings.homeDumbbell ?? 10)} kg</span>
-              <button className="grid h-8 w-8 place-items-center rounded-full bg-bg text-[16px]" aria-label="Hantel schwerer" onClick={() => s.mutate((d) => void (d.settings.homeDumbbell = (d.settings.homeDumbbell ?? 10) + 0.5))}>
-                +
-              </button>
-            </div>
-          </div>
-        )}
+        {mode === 'weights' && <HomeEquipment />}
         <div className="flex flex-wrap gap-1.5">
           {[20, 30, 45, 60, 75].map((m) => (
             <Chip key={m} active={minutes === m} onClick={() => setMinutes(m)} className="h-8">
@@ -186,7 +245,7 @@ export function HomeWorkoutSheet({ open, onClose }: { open: boolean; onClose: ()
           </p>
         )}
         <p className="text-[11.5px] text-muted">
-          Gewichtsauswahl unterwegs: 1 Flasche, 2 Flaschen oder deine Hantel. Bei Körpergewicht-Übungen ist das Zusatzgewicht (leer = ohne). Tage ohne Gym kannst du auch vorab markieren:
+          Gewichtsauswahl unterwegs: nur was du oben eingetragen hast (Flaschen, Hantel). Bei Körpergewicht-Übungen ist das Zusatzgewicht (leer = ohne). Tage ohne Gym kannst du auch vorab markieren:
           in der Tagesleiste zweimal antippen (🏠) – dann plant der Coach diese Tage automatisch so und der Studio-Plan läuft danach weiter.
         </p>
       </div>

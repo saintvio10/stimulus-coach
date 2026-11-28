@@ -3,7 +3,7 @@ import { REGION_LABEL } from '../data/exercises';
 import { MUSCLE, MUSCLE_IDS, priorityWeight, weeklyTarget, GROUP_LABEL, frequencyFactor } from '../lib/muscles';
 import type { AppData, Exercise, HomeFocusValue, MuscleId, ProgressionAdvice, Session } from '../lib/types';
 import { focusLabel, focusMuscles } from './homeFocus';
-import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor, fmtMin } from '../lib/utils';
+import { DAY, HOUR, addDays, clamp, dateKey, diffDays, endOfWeek, fmtDate, fmtNum, parseKey, relDayLabel, startOfWeek, weekdayOf, minutesFor, fmtMin, homeFeasible } from '../lib/utils';
 import { computeAllStates, eventsFromSessions, F_GREEN, type MuscleState, type StimulusEvent, recoveryInfo } from './fatigue';
 import { ACTIVITY_TYPES, activityLoad, activityMuscles, allEvents } from './activities';
 import { adviseExercise, exposures, bestE1rm, maxedOut } from './progression';
@@ -267,7 +267,9 @@ export function buildSession(o: BuildOpts): PlannedSession {
   const painSkipped: string[] = [];
   const upgraded: { from: Exercise; to: Exercise }[] = [];
   const usable = (e: Exercise) =>
-    !e.locked && !(e.pausedUntil && e.pausedUntil >= o.date) && (o.home ? e.location === 'home' && (o.home === 'weights' || e.equipment === 'bodyweight') : e.location !== 'home');
+    !e.locked &&
+    !(e.pausedUntil && e.pausedUntil >= o.date) &&
+    (o.home ? e.location === 'home' && (o.home === 'weights' ? homeFeasible(e, data.settings) : e.equipment === 'bodyweight') : e.location !== 'home');
   const candidates = data.exercises.filter((e) => {
     if (!usable(e)) return false;
     if (o.focusMuscles && !o.focusMuscles.includes(e.primary)) return false;

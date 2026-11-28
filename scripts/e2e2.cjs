@@ -13,7 +13,7 @@ const OUT = '/tmp/claude-0/-home-user/77587700-1482-5af7-9d38-099b28ee21ee/scrat
   await p.getByRole('button', { name: /Mit Beispieldaten/ }).click(); await p.waitForTimeout(800);
   // Heute: Zeit, morgen: Keine Zeit
   await p.getByRole('button', { name: /^Heute \d/ }).click();
-  await p.getByRole('button', { name: /^Sonntag \d/ }).first().click();
+  await p.getByRole('button', { name: /^(Morgen|Sonntag|Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag) \d/ }).first().click();
   await p.waitForTimeout(400);
   await p.screenshot({ path: OUT + 'a2-avail.png' });
   await p.getByRole('button', { name: /Zum heutigen Plan/ }).click(); await p.waitForTimeout(800);

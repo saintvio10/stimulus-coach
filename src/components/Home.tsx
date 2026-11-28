@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { exerciseImage } from '../data/exerciseImages';
 import { CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Dumbbell, Info, Layers, Moon, Play, Search, SlidersHorizontal, TrendingUp, Trophy, House } from 'lucide-react';
 import { quick, useStore } from '../lib/store';
@@ -27,6 +27,8 @@ import { useStartScreen } from './StartScreen';
 import { unlockAudio } from './RestTimer';
 import { RECOVERY_COLORS } from '../lib/muscles';
 import { sessionSets } from '../engine/stats';
+import { recPct, recoveryBarColor } from './RecoveryBars';
+import { recoveryInfo } from '../engine/fatigue';
 
 function greeting() {
   const h = new Date().getHours();
@@ -275,7 +277,7 @@ export function DayPicker({ plan, selected, onSelect }: { plan: Plan; selected: 
   );
 }
 
-export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext: (d: string) => void }) {
+export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; onNext: (d: string) => void; /** gleiche Höhe für alle Tageskarten (beim Wischen) */ minH?: number }) {
   const s = useStore();
   const data = s as unknown as AppData;
   const go = useRouter((r) => r.go);
@@ -337,7 +339,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
   );
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-line/[0.08] bg-[linear-gradient(160deg,rgb(var(--raised)),rgb(var(--surface))_55%)]">
+    <section className="relative flex flex-col overflow-hidden rounded-[28px] border border-line/[0.08] bg-[linear-gradient(160deg,rgb(var(--raised)),rgb(var(--surface))_55%)]" style={minH ? { minHeight: minH } : undefined}>
       {/* Hintergrundmotiv */}
       {lead && exerciseImage(lead.id) ? (
         <img
@@ -351,7 +353,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
         </div>
       ) : null}
       <div className="pointer-events-none absolute -left-16 -top-20 h-56 w-56 rounded-full bg-accent/15 blur-3xl" />
-      <div className="relative flex flex-col gap-5 p-5 sm:p-6">
+      <div className="relative flex flex-1 flex-col gap-5 p-5 sm:p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="flex items-center gap-2 text-[15px] font-medium text-fg/80">
             {isToday ? 'Heute' : `${WEEKDAYS_LONG[weekdayOf(day)]}, ${Number(day.slice(8))}.`}
@@ -446,16 +448,7 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
               <Pill icon={<Dumbbell size={14} />}>{planned.exercises.length} Übungen</Pill>
               <Pill icon={<Layers size={14} />}>{planned.exercises.reduce((a, p) => a + p.sets, 0)} Sätze</Pill>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {planned.decisions
-                .filter((d) => d.sets >= 1)
-                .sort((a, b) => b.sets - a.sets)
-                .map((d) => (
-                  <span key={d.muscle} className={cn('rounded-full px-2.5 py-1 text-[11.5px] font-medium', d.status === 'focus' ? 'bg-[rgb(var(--hl)/0.15)] text-[rgb(var(--hl))]' : 'bg-fg/[0.07] text-fg/75')}>
-                    {MUSCLE[d.muscle].short} <span className="tnum opacity-70">{fmtNum(d.sets)}</span>
-                  </span>
-                ))}
-            </div>
+            <MuscleWeekBars decisions={planned.decisions} />
             <ul className="flex flex-col gap-1">
               {(all ? planned.exercises : planned.exercises.slice(0, 4)).map((p, i) => {
                 const ex = exMap.get(p.exerciseId);
@@ -547,17 +540,13 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
                   Heute trotzdem trainieren
                 </Button>
               )}
-              {nextPlanned && (
-                <Button variant="secondary" onClick={() => onNext(nextPlanned.date)}>
-                  Nächste Einheit <ChevronRight size={15} />
-                </Button>
-              )}
             </div>
+            <RestDayFill next={nextPlanned ?? null} onNext={onNext} />
           </>
         )}
 
         {!(active && isToday) && !doneHere.length && (
-          <div className="flex flex-col gap-2 border-t border-line/[0.07] pt-3">
+          <div className="mt-auto flex flex-col gap-2 border-t border-line/[0.07] pt-3">
             <span className="text-[12px] text-muted">{isToday ? 'Hast du heute Zeit?' : `Hast du ${relDayLabel(day).split(',')[0]} Zeit?`}</span>
             {availBar}
           </div>
@@ -565,6 +554,114 @@ export function DayHero({ plan, day, onNext }: { plan: Plan; day: string; onNext
       </div>
       {info && exMap.get(info.exerciseId) && <ExerciseInfoSheet ex={exMap.get(info.exerciseId)!} plan={info} onClose={() => setInfo(null)} />}
     </section>
+  );
+}
+
+/**
+ * Muskeln dieser Einheit mit Wochenfortschritt (rollierende 7 Tage, wie überall in der App):
+ * kräftig = schon gemacht, heller = kommt mit dieser Einheit dazu, ✓ = Wochenziel danach erreicht.
+ */
+function MuscleWeekBars({ decisions }: { decisions: PlannedSession['decisions'] }) {
+  const list = decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets);
+  if (!list.length) return null;
+  return (
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between text-[11.5px] text-muted">
+        <span>Wochenfortschritt je Muskel</span>
+        <span className="flex items-center gap-2">
+          <span className="flex items-center gap-1"><span className="h-1.5 w-2.5 rounded-full bg-fg/60" />erledigt</span>
+          <span className="flex items-center gap-1"><span className="h-1.5 w-2.5 rounded-full bg-accent" />heute</span>
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {list.map((d) => {
+          const tgt = Math.max(0.5, d.target);
+          const doneP = Math.min(100, (d.vol7 / tgt) * 100);
+          const todayP = Math.min(100 - doneP, (d.sets / tgt) * 100);
+          const full = d.vol7 + d.sets >= tgt * 0.95;
+          return (
+            <div key={d.muscle} className={cn('rounded-xl px-2.5 py-1.5', d.status === 'focus' ? 'bg-[rgb(var(--hl)/0.1)]' : 'bg-fg/[0.05]')}>
+              <div className="flex items-baseline justify-between gap-1 text-[11.5px]">
+                <span className={cn('truncate font-medium', d.status === 'focus' ? 'text-[rgb(var(--hl))]' : 'text-fg/85')}>{MUSCLE[d.muscle].short}</span>
+                <span className={cn('tnum shrink-0', full ? 'font-semibold text-rec-green' : 'text-muted')}>
+                  {full ? '✓ ' : ''}
+                  {fmtNum(Math.round((d.vol7 + d.sets) * 2) / 2)}/{fmtNum(d.target)}
+                </span>
+              </div>
+              <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-fg/10" aria-label={`${MUSCLE[d.muscle].label}: ${fmtNum(d.vol7)} erledigt + ${fmtNum(d.sets)} heute von ${fmtNum(d.target)} Wochensätzen`}>
+                <span className="h-full bg-fg/55" style={{ width: `${doneP}%` }} />
+                <span className={cn('h-full', full ? 'bg-rec-green' : 'bg-accent')} style={{ width: `${todayP}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Ruhetag-/Pausenkarte füllen: nächstes Training als Vorschau + Muskeln, die sich gerade erholen */
+function RestDayFill({ next, onNext }: { next: PlannedSession | null; onNext: (d: string) => void }) {
+  const s = useStore();
+  const { states } = useMuscleStates();
+  const lead = next ? s.exercises.find((e) => e.id === next.exercises[0]?.exerciseId) : undefined;
+  const img = lead ? exerciseImage(lead.id) : undefined;
+  const recovering = MUSCLES.filter((m) => !m.indirectOnly)
+    .map((m) => ({ m, pct: recPct(states[m.id]) }))
+    .filter((x) => x.pct < 90)
+    .sort((a, b) => a.pct - b.pct)
+    .slice(0, 4);
+  const muscles = next ? next.decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets).slice(0, 4) : [];
+  const t = s.settings.targets;
+  return (
+    <div className="flex flex-1 flex-col justify-center gap-3">
+      {next && (
+        <button onClick={() => onNext(next.date)} className="relative overflow-hidden rounded-[22px] border border-line/[0.08] p-4 text-left transition active:scale-[0.99]" style={{ background: '#262628' }}>
+          {img && <img src={img} alt="" className="absolute -right-4 top-1/2 h-36 w-36 -translate-y-1/2 object-cover opacity-80" />}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#262628] via-[#262628]/80 to-transparent" />
+          <div className="relative flex flex-col gap-1.5">
+            <div className="text-[12px] font-medium text-white/60">Nächstes Training · {relDayLabel(next.date).split(',')[0]}</div>
+            <div className="max-w-[65%] text-[18px] font-semibold leading-tight text-white">{next.label.split(' (')[0]}</div>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85">~{fmtMin(next.estMinutes)}</span>
+              <span className="tnum rounded-full bg-black/40 px-2 py-0.5 text-[11px] font-medium text-white/85">{next.exercises.length} Übungen</span>
+            </div>
+            {muscles.length > 0 && <div className="max-w-[65%] text-[11.5px] text-white/60">{muscles.map((d) => MUSCLE[d.muscle].short).join(' · ')}</div>}
+            <span className="mt-1 inline-flex items-center gap-1 text-[12.5px] font-semibold text-white/85">
+              Ansehen <ChevronRight size={14} />
+            </span>
+          </div>
+        </button>
+      )}
+      <div className="rounded-[22px] bg-fg/[0.04] p-4">
+        <div className="mb-2.5 text-[12px] font-medium text-muted">{recovering.length ? 'Erholt sich gerade' : 'Erholung'}</div>
+        {recovering.length ? (
+          <ul className="flex flex-col gap-2">
+            {recovering.map(({ m, pct }) => (
+              <li key={m.id} className="flex flex-col gap-1">
+                <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
+                  <span>{m.label}</span>
+                  <span className="tnum text-[11.5px] text-muted">{recoveryInfo(states[m.id]).short}</span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-raised">
+                  <div className="h-full rounded-full" style={{ width: `${Math.max(4, pct)}%`, background: recoveryBarColor(pct) }} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[13px] text-fg/80">Alle Muskeln sind erholt – gute Voraussetzungen fürs nächste Training.</p>
+        )}
+      </div>
+      <div className="rounded-[22px] bg-fg/[0.04] p-4">
+        <div className="mb-2 text-[12px] font-medium text-muted">Heute fürs Wachstum</div>
+        <ul className="flex flex-col gap-1.5 text-[13px] text-fg/85">
+          <li className="flex gap-2"><span>😴</span>{t.sleepMin}–{t.sleepMax} h Schlaf – Muskeln wachsen in der Erholung</li>
+          <li className="flex gap-2"><span>🥩</span>~{t.protein} g Protein über den Tag verteilt</li>
+          <li className="flex gap-2"><span>🚶</span>Lockere Bewegung (Spaziergang) fördert die Erholung</li>
+        </ul>
+      </div>
+    </div>
   );
 }
 
@@ -1017,6 +1114,24 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
   const start = useRef<{ x: number; y: number; t: number } | null>(null);
   const [dx, setDx] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
+  // Alle Tageskarten gleich hoch: größte Höhe merken, die ein Tag beim Anzeigen hatte (Aufklappen zählt nicht)
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [maxH, setMaxH] = useState(0);
+  const shownAt = useRef(Date.now());
+  useEffect(() => {
+    shownAt.current = Date.now();
+  }, [day]);
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([e]) => {
+      if (Date.now() - shownAt.current > 900) return;
+      const h = Math.round(e.contentRect.height);
+      setMaxH((m) => (h > m ? h : m));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const go = (i: number) => {
     if (i < 0 || i >= days.length || i === idx) return;
     setDir(i > idx ? 1 : -1);
@@ -1052,8 +1167,10 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
             className="relative mr-[22px]"
             style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dx ? 'none' : 'transform .25s ease-out' }}
           >
-            <div key={day} className={dir > 0 ? 'animate-slide-in-r' : 'animate-slide-in-l'}>
-              <DayHero plan={plan} day={day} onNext={onDay} />
+            <div ref={cardRef}>
+              <div key={day} className={dir > 0 ? 'animate-slide-in-r' : 'animate-slide-in-l'}>
+                <DayHero plan={plan} day={day} onNext={onDay} minH={Math.max(maxH, 600)} />
+              </div>
             </div>
           </div>
         </div>

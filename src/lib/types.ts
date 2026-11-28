@@ -284,6 +284,10 @@ export interface Settings {
   dumbbellWeights: number[];
   /** Unterwegs dabei: Gewicht deiner Hantel (kg) */
   homeDumbbell: number;
+  /** Anzahl Hanteln unterwegs/zu Hause (0–2, Standard 1) */
+  homeDumbbellCount?: number;
+  /** Anzahl Wasserflaschen (0–2, Standard 2); homeBottle = Liter je Flasche ≈ kg */
+  homeBottleCount?: number;
   /** Hantelgewicht für zu Hause bestätigt (einmalige Korrektur des alten Standards 10 kg → 7,5 kg) */
   homeDumbbellSet?: boolean;
   /** Annahme: Wochenziel-Faktor bei 1 bzw. 2 Einheiten pro Woche (Standard 0,55 / 0,8) – einstellbar */

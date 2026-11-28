@@ -39,6 +39,8 @@ export function defaultData(): AppData {
       autoSuperset: true,
       homeDumbbell: 7.5,
       homeDumbbellSet: true,
+      homeDumbbellCount: 1,
+      homeBottleCount: 2,
       homeBottle: 1,
       dumbbellWeights: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42.5, 45, 47.5, 50],
       cableStep: 2.5,

@@ -3,13 +3,14 @@ import { defaultData, migrate } from '../src/lib/store';
 import { adviseExercise, maxedOut } from '../src/engine/progression';
 import { buildPlan, planHome, sessionFocus } from '../src/engine/planner';
 import { liveAdjust } from '../src/engine/liveAdjust';
-import { loadHint, nextWeight, weightSteps } from '../src/lib/utils';
+import { homeFeasible, loadHint, nextWeight, weightSteps } from '../src/lib/utils';
 import type { Session, SetLog } from '../src/lib/types';
 let fails = 0;
 const ok = (c: boolean, m: string) => {
   if (!c) fails++;
   console.log(`${c ? '✓' : '✗'} ${m}`);
 };
+const at = (day: string, h = 17) => Date.parse(`${day}T${h}:00:00+01:00`);
 const d = defaultData();
 d.settings.homeBottle = 1;
 d.settings.homeDumbbell = 10;
@@ -21,8 +22,29 @@ ok(!!ex('home-oh-ext').unilateral && steps('home-oh-ext') === '[1,2,10]' && /ein
 ok(steps('home-lateral-db') === '[1,2,10]', 'einarmig: Flasche(n) oder Hantel in einer Hand');
 ok(steps('bench-dip') === '[0,10]' && steps('pullup') === '[0,10]', 'Körpergewicht: ohne oder mit Hantel als Zusatzlast – keine 1-kg-Flaschen');
 ok(steps('pike-pushup') === '[0]' && steps('nordic-curl') === '[0]' && steps('leg-raise') === '[0]', 'Pike, Nordic Curls, Beinheben: keine Zusatzlast');
+// Ausrüstung: Anzahl Hanteln/Flaschen und Flaschengröße
+{
+  const st = (o: Partial<typeof d.settings>) => ({ ...d.settings, ...o });
+  const L = (id: string, o: Partial<typeof d.settings>) => JSON.stringify(weightSteps(ex(id), st(o)).list);
+  ok(L('home-lateral', { homeBottleCount: 2, homeDumbbellCount: 2 }) === '[1,10]', 'Seitheben: 2 Flaschen oder 2 Hanteln (je eins pro Hand)');
+  ok(L('home-lateral', { homeBottleCount: 1, homeDumbbellCount: 1 }) === '[]' && !homeFeasible(ex('home-lateral'), st({ homeBottleCount: 1, homeDumbbellCount: 1 })), 'nur 1 Flasche + 1 Hantel: Seitheben mit 2 Gewichten nicht machbar');
+  ok(L('home-lateral', { homeBottleCount: 2, homeBottle: 1.5 }) === '[1.5]', 'Flaschengröße 1,5 l → 1,5 kg pro Hand');
+  ok(L('home-goblet', { homeDumbbellCount: 2 }) === '[10,20]', 'Goblet mit 2 Hanteln: 10 oder 20 kg');
+  ok(L('bench-dip', { homeDumbbellCount: 0 }) === '[0]' && L('bench-dip', { homeDumbbellCount: 2 }) === '[0,10,20]', 'Körpergewicht: Zusatzlast nur mit vorhandenen Hanteln');
+  ok(L('home-curl', { homeBottleCount: 1, homeDumbbellCount: 1 }) === '[1,10]' && L('home-curl', { homeBottleCount: 0, homeDumbbellCount: 0 }) === '[]', 'einarmig: Flasche oder Hantel; ohne Ausrüstung nicht machbar');
+  const dd = defaultData();
+  dd.settings = { ...dd.settings, homeDumbbellCount: 0, homeBottleCount: 0 };
+  const hp0 = planHome(dd, 45, 'weights', at('2026-12-02', 17));
+  ok(!!hp0 && hp0.exercises.every((e) => dd.exercises.find((x) => x.id === e.exerciseId)!.equipment === 'bodyweight'), 'ohne Hanteln und Flaschen: nur Körpergewichtsübungen');
+  const dd1 = defaultData();
+  dd1.settings = { ...dd1.settings, homeDumbbellCount: 1, homeBottleCount: 1 };
+  dd1.profile.priorities = ['sideDelts', 'rearDelts', 'biceps', 'triceps', 'chest', 'back', 'legs', 'absCalves'];
+  const hp1 = planHome(dd1, 60, 'weights', at('2026-12-02', 17));
+  ok(!!hp1 && !hp1.exercises.some((e) => ['home-lateral', 'home-reverse-fly'].includes(e.exerciseId)), 'nur 1 Flasche: keine 2-Flaschen-Übungen im Plan');
+  ok(defaultData().settings.homeBottle === 1 && defaultData().settings.homeBottleCount === 2 && defaultData().settings.homeDumbbellCount === 1, 'Standard: 1 Hantel, 2 Flaschen à 1 l');
+}
 ok(nextWeight(1, ex('home-lateral'), d.settings) === 1, 'keine Steigerung über 1 kg pro Hand hinaus');
-ok(loadHint(ex('home-lateral')) === 'pro Hand (Flasche)' && loadHint(ex('db-lateral')) === 'pro Hand' && loadHint(ex('home-goblet')) === 'eine Hantel, beidhändig' && loadHint(ex('preacher-curl')) === '', 'Anzeige: „pro Hand“ bei Kurzhanteln/Flaschen');
+ok(loadHint(ex('home-lateral')) === 'pro Hand' && loadHint(ex('db-lateral')) === 'pro Hand' && loadHint(ex('home-goblet')) === 'eine Hantel, beidhändig' && loadHint(ex('preacher-curl')) === '', 'Anzeige: „pro Hand“ bei Kurzhanteln/Flaschen');
 // Hantel 7,5 kg: alter Standard 10 kg wird einmalig korrigiert, eigene Werte bleiben
 {
   const a = defaultData(); (a.settings as any).homeDumbbell = 10; delete (a.settings as any).homeDumbbellSet;
@@ -40,7 +62,6 @@ const mig = migrate(JSON.parse(JSON.stringify(old)));
 ok(mig.exercises.find((e) => e.id === 'home-lateral')!.homeLoad === 'bottles', 'Migration: bestehende Daten bekommen homeLoad');
 
 // Mehrere Heimeinheiten mit Flaschen: nie > 1 kg, am oberen Ende → Wechsel auf einarmig mit Hantel
-const at = (day: string, h = 17) => Date.parse(`${day}T${h}:00:00+01:00`);
 const days = ['2026-12-01', '2026-12-05', '2026-12-09', '2026-12-13', '2026-12-17', '2026-12-21'];
 let reps = 18;
 const recs: (number | null)[] = [];
