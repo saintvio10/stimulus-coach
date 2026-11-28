@@ -21,7 +21,7 @@ import { ExerciseAnimation, ExerciseIcon } from './ExerciseAnimation';
 import { SwipeToStart } from './SwipeToStart';
 import { ExerciseInfoSheet } from './ExerciseInfo';
 import { FocusStatusList, HomeFocusPicker } from './HomeWorkout';
-import { focusGroups, isAllGroups } from '../engine/homeFocus';
+import { focusGroups, focusLabel, isAllGroups } from '../engine/homeFocus';
 import { PlanReasons, SessionPreview, CheckInSheet, QuickAvailability, DayDuration } from './Coach';
 import { useStartScreen } from './StartScreen';
 import { unlockAudio } from './RestTimer';
@@ -286,6 +286,7 @@ export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; 
   const [all, setAll] = useState(false);
   const [whyOpen, setWhyOpen] = useState<string | null>(null);
   const [info, setInfo] = useState<PlannedExercise | null>(null);
+  const [focusOpen, setFocusOpen] = useState(false);
   const today = dateKey();
   const isToday = day === today;
   const active = s.sessions.find((x) => x.status === 'active');
@@ -415,8 +416,14 @@ export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; 
             </div>
             {planned.home && (
               <div className="-mt-2 flex flex-col gap-1.5">
-                <div className="text-[12px] text-muted">Ohne Gym – was willst du trainieren?</div>
-                <HomeFocusPicker value={s.planOptions.homeFocus?.[day]} onChange={(g) => s.mutate((d) => void (d.planOptions.homeFocus = { ...(d.planOptions.homeFocus ?? {}), [day]: g }))} />
+                <button data-noswipe onClick={() => setFocusOpen(!focusOpen)} className="flex items-center justify-between gap-2 rounded-2xl bg-sky-400/[0.09] px-3.5 py-2.5 text-left text-[13px]" aria-expanded={focusOpen}>
+                  <span>
+                    <span className="text-muted">Ohne Gym · </span>
+                    <span className="font-medium">{focusLabel(s.planOptions.homeFocus?.[day])}</span>
+                  </span>
+                  <span className="text-[12.5px] font-semibold text-accent">{focusOpen ? 'Fertig' : 'Ändern'}</span>
+                </button>
+                {focusOpen && <HomeFocusPicker value={s.planOptions.homeFocus?.[day]} onChange={(g) => s.mutate((d) => void (d.planOptions.homeFocus = { ...(d.planOptions.homeFocus ?? {}), [day]: g }))} />}
                 {!isAllGroups(focusGroups(s.planOptions.homeFocus?.[day])) && <FocusStatusList plan={planned} groups={focusGroups(s.planOptions.homeFocus?.[day])} />}
               </div>
             )}
@@ -678,9 +685,8 @@ function RestDayFill({ next, onNext }: { next: PlannedSession | null; onNext: (d
     .map((m) => ({ m, pct: recPct(states[m.id]) }))
     .filter((x) => x.pct < 90)
     .sort((a, b) => a.pct - b.pct)
-    .slice(0, 4);
+    .slice(0, 3);
   const muscles = next ? next.decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets).slice(0, 4) : [];
-  const t = s.settings.targets;
   return (
     <div className="flex flex-1 flex-col justify-center gap-3">
       {next && (
@@ -720,14 +726,6 @@ function RestDayFill({ next, onNext }: { next: PlannedSession | null; onNext: (d
         ) : (
           <p className="text-[13px] text-fg/80">Alle Muskeln sind erholt – gute Voraussetzungen fürs nächste Training.</p>
         )}
-      </div>
-      <div className="rounded-[22px] bg-fg/[0.04] p-4">
-        <div className="mb-2 text-[12px] font-medium text-muted">Heute fürs Wachstum</div>
-        <ul className="flex flex-col gap-1.5 text-[13px] text-fg/85">
-          <li className="flex gap-2"><span>😴</span>{t.sleepMin}–{t.sleepMax} h Schlaf – Muskeln wachsen in der Erholung</li>
-          <li className="flex gap-2"><span>🥩</span>~{t.protein} g Protein über den Tag verteilt</li>
-          <li className="flex gap-2"><span>🚶</span>Lockere Bewegung (Spaziergang) fördert die Erholung</li>
-        </ul>
       </div>
     </div>
   );
@@ -1182,10 +1180,12 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
   const start = useRef<{ x: number; y: number; t: number } | null>(null);
   const [dx, setDx] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
-  // Alle Tageskarten gleich hoch: größte Höhe merken, die ein Tag beim Anzeigen hatte (Aufklappen zählt nicht)
+  // Tage ohne Training so hoch wie die Trainingskarte (beim Wischen kein Sprung); Trainingskarten nie strecken
   const cardRef = useRef<HTMLDivElement>(null);
   const [maxH, setMaxH] = useState(0);
   const shownAt = useRef(Date.now());
+  const isTrainingDay = useRef(false);
+  isTrainingDay.current = plan.sessions.some((x) => x.date === day && !x.rest);
   useEffect(() => {
     shownAt.current = Date.now();
   }, [day]);
@@ -1193,9 +1193,10 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
     const el = cardRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(([e]) => {
-      if (Date.now() - shownAt.current > 900) return;
+      // nur Trainingskarten geben die Höhe vor – Ruhetag-/Pausenkarten passen sich an, ziehen aber nie eine Trainingskarte in die Länge
+      if (Date.now() - shownAt.current > 900 || !isTrainingDay.current) return;
       const h = Math.round(e.contentRect.height);
-      setMaxH((m) => (h > m ? h : m));
+      setMaxH(h); // Höhe der zuletzt gezeigten Trainingskarte
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -1237,7 +1238,7 @@ export function SwipeDays({ plan, day, onDay }: { plan: Plan; day: string; onDay
           >
             <div ref={cardRef}>
               <div key={day} className={dir > 0 ? 'animate-slide-in-r' : 'animate-slide-in-l'}>
-                <DayHero plan={plan} day={day} onNext={onDay} minH={Math.max(maxH, 600)} />
+                <DayHero plan={plan} day={day} onNext={onDay} minH={!isTrainingDay.current && maxH ? maxH : undefined} />
               </div>
             </div>
           </div>
