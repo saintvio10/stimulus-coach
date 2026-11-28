@@ -448,7 +448,7 @@ export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; 
               <Pill icon={<Dumbbell size={14} />}>{planned.exercises.length} Übungen</Pill>
               <Pill icon={<Layers size={14} />}>{planned.exercises.reduce((a, p) => a + p.sets, 0)} Sätze</Pill>
             </div>
-            <MuscleWeekBars decisions={planned.decisions} />
+            <MuscleWeekRings session={planned} />
             <ul className="flex flex-col gap-1">
               {(all ? planned.exercises : planned.exercises.slice(0, 4)).map((p, i) => {
                 const ex = exMap.get(p.exerciseId);
@@ -558,44 +558,112 @@ export function DayHero({ plan, day, onNext, minH }: { plan: Plan; day: string; 
 }
 
 /**
- * Muskeln dieser Einheit mit Wochenfortschritt (rollierende 7 Tage, wie überall in der App):
- * kräftig = schon gemacht, heller = kommt mit dieser Einheit dazu, ✓ = Wochenziel danach erreicht.
+ * Muskeln dieser Einheit mit Wochenfortschritt als kleine Ringe (rollierende 7 Tage, wie überall in der App):
+ * blasser Bogen = schon erledigt, kräftiger Bogen = kommt mit dieser Einheit dazu, grün mit ✓ = Wochenziel danach erreicht.
+ * Antippen öffnet eine kurze Erklärung.
  */
-function MuscleWeekBars({ decisions }: { decisions: PlannedSession['decisions'] }) {
-  const list = decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets);
+function MuscleWeekRings({ session }: { session: PlannedSession }) {
+  const exercises = useStore((x) => x.exercises);
+  const [open, setOpen] = useState<MuscleId | null>(null);
+  const list = session.decisions.filter((d) => d.sets >= 1).sort((a, b) => b.sets - a.sets);
   if (!list.length) return null;
+  const parts = (d: PlannedSession['decisions'][number]) => {
+    const tgt = Math.max(0.5, d.target);
+    const done = Math.min(1, d.vol7 / tgt);
+    const today = Math.min(1 - done, d.sets / tgt);
+    return { done, today, full: d.vol7 + d.sets >= tgt * 0.95 };
+  };
+  const sel = open ? list.find((d) => d.muscle === open) : undefined;
+  const R = 15;
+  const C = 2 * Math.PI * R;
   return (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between text-[11.5px] text-muted">
-        <span>Wochenfortschritt je Muskel</span>
-        <span className="flex items-center gap-2">
-          <span className="flex items-center gap-1"><span className="h-1.5 w-2.5 rounded-full bg-fg/60" />erledigt</span>
-          <span className="flex items-center gap-1"><span className="h-1.5 w-2.5 rounded-full bg-accent" />heute</span>
-        </span>
+        <span>Wochenfortschritt · antippen für Details</span>
+        {list.length > 5 && <span>wischen →</span>}
       </div>
-      <div className="grid grid-cols-2 gap-1.5">
+      <div data-noswipe className="scroll-x -mx-1 flex gap-1 px-1 pb-0.5">
         {list.map((d) => {
-          const tgt = Math.max(0.5, d.target);
-          const doneP = Math.min(100, (d.vol7 / tgt) * 100);
-          const todayP = Math.min(100 - doneP, (d.sets / tgt) * 100);
-          const full = d.vol7 + d.sets >= tgt * 0.95;
+          const { done, today, full } = parts(d);
+          const col = full ? 'var(--rec-green)' : 'var(--accent)';
           return (
-            <div key={d.muscle} className={cn('rounded-xl px-2.5 py-1.5', d.status === 'focus' ? 'bg-[rgb(var(--hl)/0.1)]' : 'bg-fg/[0.05]')}>
-              <div className="flex items-baseline justify-between gap-1 text-[11.5px]">
-                <span className={cn('truncate font-medium', d.status === 'focus' ? 'text-[rgb(var(--hl))]' : 'text-fg/85')}>{MUSCLE[d.muscle].short}</span>
-                <span className={cn('tnum shrink-0', full ? 'font-semibold text-rec-green' : 'text-muted')}>
-                  {full ? '✓ ' : ''}
-                  {fmtNum(Math.round((d.vol7 + d.sets) * 2) / 2)}/{fmtNum(d.target)}
+            <button
+              key={d.muscle}
+              onClick={() => setOpen(d.muscle)}
+              className="flex w-[58px] shrink-0 flex-col items-center gap-1 rounded-xl py-0.5 transition active:scale-95"
+              aria-label={`${MUSCLE[d.muscle].label}: ${fmtNum(d.vol7)} erledigt + ${fmtNum(d.sets)} heute von ${fmtNum(d.target)} Wochensätzen – Details`}
+            >
+              <div className="relative h-10 w-10">
+                <svg viewBox="0 0 40 40" className="h-10 w-10 -rotate-90">
+                  <circle cx="20" cy="20" r={R} fill="none" stroke="rgb(var(--fg) / 0.1)" strokeWidth="3.5" />
+                  <circle cx="20" cy="20" r={R} fill="none" stroke={`rgb(${col} / 0.38)`} strokeWidth="3.5" strokeDasharray={`${done * C} ${C}`} strokeLinecap="round" />
+                  <circle cx="20" cy="20" r={R} fill="none" stroke={`rgb(${col})`} strokeWidth="3.5" strokeDasharray={`${today * C} ${C}`} strokeDashoffset={-done * C} strokeLinecap="round" />
+                </svg>
+                <span className="tnum absolute inset-0 grid place-items-center text-[11px] font-semibold">
+                  {full ? <Check size={15} strokeWidth={3} className="text-rec-green" /> : fmtNum(d.sets)}
                 </span>
               </div>
-              <div className="mt-1 flex h-1.5 overflow-hidden rounded-full bg-fg/10" aria-label={`${MUSCLE[d.muscle].label}: ${fmtNum(d.vol7)} erledigt + ${fmtNum(d.sets)} heute von ${fmtNum(d.target)} Wochensätzen`}>
-                <span className="h-full bg-fg/55" style={{ width: `${doneP}%` }} />
-                <span className={cn('h-full', full ? 'bg-rec-green' : 'bg-accent')} style={{ width: `${todayP}%` }} />
-              </div>
-            </div>
+              <span className={cn('w-full truncate text-center text-[10.5px]', full ? 'text-rec-green' : 'text-fg/75')}>{MUSCLE[d.muscle].short}</span>
+            </button>
           );
         })}
       </div>
+      <Sheet open={!!sel} onClose={() => setOpen(null)} title={sel ? `${MUSCLE[sel.muscle].label} diese Woche` : ''}>
+        {sel &&
+          (() => {
+            const { full } = parts(sel);
+            const after = sel.vol7 + sel.sets;
+            const rest = Math.max(0, sel.target - after);
+            const exs = session.exercises
+              .map((pe) => ({ pe, ex: exercises.find((e) => e.id === pe.exerciseId) }))
+              .filter((x) => x.ex && (x.ex.muscles[sel.muscle] ?? 0) > 0);
+            const n = (x: number) => fmtNum(Math.round(x * 2) / 2);
+            return (
+              <div className="flex flex-col gap-3 text-[14px]">
+                <div className={cn('rounded-2xl px-3.5 py-3', full ? 'bg-rec-green/10' : 'bg-accent/10')}>
+                  <div className={cn('text-[15px] font-semibold', full ? 'text-rec-green' : 'text-accent')}>
+                    {full ? '✓ Mit diesem Training ist das Wochenziel erreicht' : `Danach fehlen noch ~${n(rest)} Sätze`}
+                  </div>
+                  <div className="mt-0.5 text-[13px] text-muted">
+                    {full ? 'Mehr Sätze würden diese Woche kaum zusätzlichen Reiz bringen – der Plan setzt danach andere Schwerpunkte.' : 'Die kommen bei den nächsten Einheiten dazu – der Plan rechnet das automatisch ein.'}
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-xl bg-raised px-2 py-2">
+                    <div className="text-[11px] text-muted">Erledigt</div>
+                    <div className="tnum text-[17px] font-semibold">{n(sel.vol7)}</div>
+                  </div>
+                  <div className="rounded-xl bg-raised px-2 py-2">
+                    <div className="text-[11px] text-muted">Heute</div>
+                    <div className="tnum text-[17px] font-semibold">+{n(sel.sets)}</div>
+                  </div>
+                  <div className="rounded-xl bg-raised px-2 py-2">
+                    <div className="text-[11px] text-muted">Wochenziel</div>
+                    <div className="tnum text-[17px] font-semibold">{n(sel.target)}</div>
+                  </div>
+                </div>
+                {exs.length > 0 && (
+                  <div>
+                    <div className="label mb-1.5">Heute dafür</div>
+                    <ul className="flex flex-col gap-1 text-[13px]">
+                      {exs.map(({ pe, ex }) => (
+                        <li key={pe.exerciseId} className="flex justify-between gap-2">
+                          <span className="truncate">{ex!.name}</span>
+                          <span className="tnum shrink-0 text-muted">
+                            {pe.sets} Sätze{(ex!.muscles[sel.muscle] ?? 0) < 0.75 ? ' · zählt halb (indirekt)' : ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <p className="text-[12px] leading-relaxed text-muted">
+                  Gezählt werden die letzten 7 Tage (nicht Mo–So), wie überall in der App. Sätze, in denen der Muskel nur mithilft (z. B. Bizeps beim Rudern), zählen halb. Das Wochenziel richtet sich nach deiner Priorität und wie oft du trainierst. Ring: blass = erledigt, kräftig = heute, grün = Ziel erreicht.
+                </p>
+              </div>
+            );
+          })()}
+      </Sheet>
     </div>
   );
 }
